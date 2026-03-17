@@ -1,0 +1,16 @@
+{
+    "projectName": "PlanningSpec",
+    "languages": [
+        {
+            "id": "planning-spec",
+            "grammar": "src/planning-spec.langium",
+            "fileExtensions": [
+                "planning"
+            ],
+            "textMate": {
+                "out": "syntaxes/planning-spec.tmLanguage.json"
+            }
+        }
+    ],
+    "out": "src/generated"
+}

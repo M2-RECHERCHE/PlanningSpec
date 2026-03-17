@@ -1,0 +1,30 @@
+{
+  "name": "planning-spec-workspace",
+  "description": "Monorepo pnpm pour le langage Langium, le serveur Express et le front React",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.31.0+sha512.e3927388bfaa8078ceb79b748ffc1e8274e84d75163e67bc22e06c0d3aed43dd153151cbf11d7f8301ff4acb98c68bdc5cadf6989532801ffafe3b3e4a63c268",
+  "engines": {
+    "node": ">=20.10.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "clean": "pnpm --filter planning-spec-backend clean && pnpm --filter planning-spec-frontend clean",
+    "build": "pnpm --filter planning-spec-backend build && pnpm --filter planning-spec-frontend build",
+    "build:backend": "pnpm --filter planning-spec-backend build",
+    "build:frontend": "pnpm --filter planning-spec-frontend build",
+    "dev:backend": "pnpm --filter planning-spec-backend dev:server",
+    "dev:frontend": "pnpm --filter planning-spec-frontend start",
+    "dev": "concurrently -n backend,frontend \"pnpm dev:backend\" \"pnpm dev:frontend\"",
+    "start:backend": "pnpm --filter planning-spec-backend start:server",
+    "langium:generate": "pnpm --filter planning-spec-backend langium:generate",
+    "test": "pnpm --filter planning-spec-backend test"
+  },
+  "devDependencies": {
+    "@types/node": "~20.17.48",
+    "concurrently": "~8.2.1",
+    "shx": "~0.4.0",
+    "typescript": "~5.8.3"
+  }
+}

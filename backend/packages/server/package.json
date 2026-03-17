@@ -1,0 +1,28 @@
+{
+  "name": "planning-spec-server",
+  "description": "Serveur Express pour ex\u00e9cuter le pipeline Langium -> MiniZinc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.10.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "clean": "shx rm -rf dist *.tsbuildinfo",
+    "build": "tsc -b tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "langium": "~4.2.0",
+    "planning-spec-language": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "tsx": "^4.21.0"
+  }
+}

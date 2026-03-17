@@ -1,0 +1,15 @@
+{
+  "name": "planning-spec-backend",
+  "description": "Package utilitaire pour orchestrer les paquets backend (Langium, CLI, extension, serveur Express)",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "clean": "pnpm --filter planning-spec-language clean && pnpm --filter planning-spec-server clean && pnpm --filter planning-spec-cli clean && pnpm --filter vscode-research-work clean",
+    "build": "pnpm --filter planning-spec-language build && pnpm --filter planning-spec-server build && pnpm --filter planning-spec-cli build && pnpm --filter vscode-research-work build",
+    "dev:server": "pnpm --filter planning-spec-server dev",
+    "start:server": "pnpm --filter planning-spec-server start",
+    "langium:generate": "pnpm --filter planning-spec-language langium:generate",
+    "test": "pnpm --filter planning-spec-language test"
+  }
+}

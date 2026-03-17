@@ -1,0 +1,111 @@
+{
+  "time": {
+    "days": [
+      "Lund",
+      "Mardi",
+      "Mercredi"
+    ],
+    "slotsPerDay": 8
+  },
+  "activities": {
+    "Soutenance": {
+      "count": 30,
+      "duration": 1
+    },
+    "Reunion": {
+      "count": 2,
+      "duration": 3
+    }
+  },
+  "resources": {
+    "Room": [
+      "Salle 1",
+      "Salle 2",
+      "Salle 3",
+      "Salle 4"
+    ],
+    "Teacher": [
+      "Teacher 1",
+      "Teacher2",
+      "Teacher 3"
+    ],
+    "Student": [
+      "Student 1",
+      "Student 2",
+      "Student 3"
+    ]
+  },
+  "roles": {
+    "Soutenance": {
+      "President": "Teacher",
+      "Reporter": "Teacher",
+      "Member": "Teacher"
+    }
+  },
+  "constraints": [
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance",
+      "target": "slot",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance",
+      "target": "Room",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance",
+      "role": "President",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance",
+      "role": "Reporter",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance",
+      "role": "Member",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Reunion",
+      "target": "slot",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Reunion",
+      "target": "Room",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Teacher",
+      "activity": "Soutenance",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Room",
+      "activity": "Soutenance",
+      "scope": "slot",
+      "max": 1
+    }
+  ],
+  "preferences": []
+}

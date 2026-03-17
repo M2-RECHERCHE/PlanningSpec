@@ -1,0 +1,29 @@
+{
+  "name": "planning-spec-cli",
+  "description": "The cli specific package",
+  "version": "0.0.1",
+  "type": "module",
+  "engines": {
+    "node": ">=20.10.0",
+    "pnpm": ">=10.0.0"
+  },
+  "files": [
+    "bin",
+    "out",
+    "src"
+  ],
+  "bin": {
+    "planning-spec-cli": "./bin/cli.js"
+  },
+  "scripts": {
+    "clean": "shx rm -fr *.tsbuildinfo out",
+    "build": "tsc -p tsconfig.json",
+    "build:clean": "pnpm run clean && pnpm run build"
+  },
+  "dependencies": {
+    "chalk": "~5.3.0",
+    "commander": "~11.1.0",
+    "langium": "~4.2.1",
+    "planning-spec-language": "workspace:*"
+  }
+}

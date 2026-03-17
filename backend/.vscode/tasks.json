@@ -1,0 +1,27 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build planning-spec",
+            "command": "npm run langium:generate && npm run build",
+            "type": "shell",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Langium: Generate grammar and build the planning-spec language",
+            "icon": {
+                "color": "terminal.ansiGreen",
+                "id": "server-process"
+            }
+        },
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "npm run --workspace=packages/cli build && npm run --workspace=packages/language build",
+            "problemMatcher": []
+        }
+    ]
+}

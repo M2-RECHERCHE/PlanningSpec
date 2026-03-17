@@ -1,0 +1,48 @@
+# Node / package managers
+node_modules/
+.pnpm/
+.pnpm-store/
+.yarn/
+.yarnrc.yml
+.npm/
+package-lock.json
+yarn.lock
+
+# Langium / TypeScript build outputs
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+**/node_modules/
+**/dist/
+**/out/
+**/build/
+**/*.tsbuildinfo
+**/*.vsix
+coverage/
+.nyc_output/
+
+# Temporary files
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+tmp/
+temp/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Editors / OS
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

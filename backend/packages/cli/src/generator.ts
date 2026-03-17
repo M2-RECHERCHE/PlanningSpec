@@ -1,0 +1,34 @@
+import type { Planification } from 'planning-spec-language';
+import { expandToNode, toString } from 'langium/generate';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { extractDestinationAndName } from './util.js';
+
+export function generateJavaScript(
+    model: Planification,
+    filePath: string,
+    destination: string | undefined
+): string {
+
+    const data = extractDestinationAndName(filePath, destination);
+    const generatedFilePath = `${path.join(data.destination, data.name)}.js`;
+
+    const fileNode = expandToNode`
+        "use strict";
+
+        // Generated Planning Specification
+        module.exports = {
+            time: {
+                days: ${JSON.stringify(model.time.days.days)},
+                slotsPerDay: ${model.time.slotsPerDay}
+            }
+        };
+    `.appendNewLineIfNotEmpty();
+
+    if (!fs.existsSync(data.destination)) {
+        fs.mkdirSync(data.destination, { recursive: true });
+    }
+
+    fs.writeFileSync(generatedFilePath, toString(fileNode));
+    return generatedFilePath;
+}

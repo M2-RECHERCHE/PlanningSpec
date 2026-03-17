@@ -1,0 +1,86 @@
+{
+  "name": "vscode-research-work",
+  "description": "The extension specific package",
+  "version": "0.0.1",
+  "displayName": "research-work",
+  "type": "module",
+  "engines": {
+    "vscode": "^1.67.0",
+    "pnpm": ">=10.0.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "planning-spec",
+        "aliases": [
+          "PlanningSpec",
+          "planning-spec"
+        ],
+        "extensions": [
+          ".planning"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "planning-spec",
+        "scopeName": "source.planning-spec",
+        "path": "syntaxes/planning-spec.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "planning-spec.generateMiniZinc",
+        "title": "Generate MiniZinc"
+      },
+      {
+        "command": "planning-spec.run",
+        "title": "Run Code"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "planning-spec.generateMiniZinc",
+          "when": "resourceLangId == planning-spec",
+          "group": "navigation"
+        },
+        {
+          "command": "planning-spec.run",
+          "when": "resourceLangId == planning-spec",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "activationEvents": [
+    "onLanguage:planning-spec"
+  ],
+  "main": "./out/extension/main.cjs",
+  "scripts": {
+    "clean": "shx rm -fr *.tsbuildinfo out syntaxes",
+    "vscode:prepublish": "pnpm run build",
+    "build:prepare": "shx mkdir -p ./syntaxes/ && shx cp -f ../language/syntaxes/planning-spec.tmLanguage.json ./syntaxes/planning-spec.tmLanguage.json",
+    "build": "pnpm run build:prepare && tsc -p tsconfig.json && node esbuild.mjs",
+    "build:clean": "pnpm run clean && pnpm run build",
+    "watch": "pnpm run build:prepare && concurrently -n tsc,esbuild -c blue,yellow \"tsc -p tsconfig.json --watch\" \"node esbuild.mjs --watch\""
+  },
+  "dependencies": {
+    "langium": "~4.2.1",
+    "planning-spec-language": "workspace:*",
+    "vscode-languageclient": "~9.0.1",
+    "vscode-languageserver": "~9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "~1.67.0",
+    "concurrently": "~8.2.1",
+    "esbuild": "~0.25.5"
+  },
+  "vsce": {
+    "dependencies": false
+  }
+}
