@@ -103,7 +103,6 @@ AvoidParticipationOnDate:
 MaxPerScope:
     '{'
         '"type"' ':' '"max_per_scope"' ','
-        '"resourceType"' ':' resourceType=STRING ','
         '"activity"' ':' activity=STRING ','
         '"scope"' ':' scope=STRING ','
         '"max"' ':' max=INT ','

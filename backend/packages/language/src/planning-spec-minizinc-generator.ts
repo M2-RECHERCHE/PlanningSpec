@@ -6,7 +6,7 @@ import {
   Planification,
   ResourceEntry,
 } from './generated/ast.js';
-import { join, dirname } from 'path';
+import { join, dirname, isAbsolute } from 'path';
 import { writeFileSync } from 'fs';
 import * as fs from 'fs';
 
@@ -150,7 +150,7 @@ export class PlanningSpecMiniZincGenerator {
     code += `array[ACT_INST] of var 1..TOTAL_SLOTS: start_time;\n`;
     code += `array[ACT_INST, RESOURCE] of var bool: assignment;\n`;
     if (hasRoles) {
-      code += `array[ACT_INST, ROLE] of var RESOURCE: role_assign;\n`;
+      code += `array[ACT_INST, ROLE, RESOURCE] of var bool: role_assignment;\n`;
     }
     code += '\n';
 
@@ -176,37 +176,42 @@ export class PlanningSpecMiniZincGenerator {
 
     // ------------------------------------------------
     // 8) LINK roles -> assignment (when role applicable)
-    // role_assign must belong to the role's resourceType set, and implies assignment true
+    // A resource assigned to a role must be compatible with that role's resource type
+    // and also counted as participating in the activity.
     // ------------------------------------------------
     if (hasRoles) {
-      code += `% Link role_assign to assignment (only if applicable)\n`;
-      code += `constraint forall(a in ACT_INST, ro in ROLE) (\n`;
-      code += `  if role_applicable[a, ro] then (\n`;
+      code += `% Non-applicable roles cannot receive any resource\n`;
+      code += `constraint forall(a in ACT_INST, ro in ROLE, r in RESOURCE) (\n`;
+      code += `  if not role_applicable[a, ro] then role_assignment[a, ro, r] = false else true endif\n`;
+      code += `);\n\n`;
 
-      // We must generate an "allowed set" depending on (activity instance, role)
-      // We'll emit a big disjunction by activity type.
-      const roleLinkCases: string[] = [];
+      code += `% Applicable roles only use compatible resource types and imply assignment\n`;
       for (const act of activityTypes) {
         const rm = rolesPerAct.get(act);
-        if (!rm) continue;
-        // For each role in allRoles, if defined for this act => link to RES_type
+        if (!rm) {
+          continue;
+        }
+
         for (const role of allRoles) {
           const rt = rm.get(role);
-          if (!rt) continue;
-          roleLinkCases.push(
-            `(act_type[a] == ${this.id(act)} /\\ ro == ${this.id(role)}) -> (role_assign[a,ro] in RES_${this.id(rt)} /\\ assignment[a, role_assign[a,ro]] = true)`
-          );
+          if (!rt) {
+            continue;
+          }
+
+          code += `constraint forall(a in ACT_INST where act_type[a] == ${this.id(act)}, r in RESOURCE where not (r in RES_${this.id(rt)})) (\n`;
+          code += `  role_assignment[a, ${this.id(role)}, r] = false\n`;
+          code += `);\n`;
+
+          code += `constraint forall(a in ACT_INST where act_type[a] == ${this.id(act)}, r in RES_${this.id(rt)}) (\n`;
+          code += `  role_assignment[a, ${this.id(role)}, r] -> assignment[a, r]\n`;
+          code += `);\n`;
         }
       }
+      code += `\n`;
 
-      if (roleLinkCases.length === 0) {
-        // nothing to link
-        code += `    true\n`;
-      } else {
-        code += `    (${roleLinkCases.join(' /\\\n     ')})\n`;
-      }
-
-      code += `  ) else true endif\n`;
+      code += `% A concrete resource cannot carry two different roles in the same activity instance\n`;
+      code += `constraint forall(a in ACT_INST, r in RESOURCE) (\n`;
+      code += `  sum(ro in ROLE where role_applicable[a, ro]) (bool2int(role_assignment[a, ro, r])) <= 1\n`;
       code += `);\n\n`;
     }
 
@@ -222,16 +227,6 @@ export class PlanningSpecMiniZincGenerator {
         .map(ai => ai.enumName);
       return this.mznSetOfEnum(list);
     };
-
-    // Determine if a role has a strict 1..1 cardinality (so role_assign is meaningful)
-    const roleIsExactlyOne = new Map<string, boolean>(); // key "Activity|Role"
-    model.constraints.constraints.forEach((c: any) => {
-      if (c.$type === 'CardinalityPerActivity' && c.role) {
-        const act = this.s(c.activity);
-        const role = this.s(c.role);
-        roleIsExactlyOne.set(`${act}|${role}`, c.min === 1 && c.max === 1);
-      }
-    });
 
     model.constraints.constraints.forEach((c: any) => {
       // ---------------------------
@@ -270,24 +265,10 @@ export class PlanningSpecMiniZincGenerator {
           if (!rt) {
             code += `% WARNING: role ${roleName} not defined for activity ${actName}\n\n`;
           } else {
-            const key = `${actName}|${roleName}`;
-            const exactOne = roleIsExactlyOne.get(key) === true;
-
-            // Always enforce via assignment count on allowed set
             code += `constraint forall(a in ACT_INST where a in ${actSet}) (\n`;
-            code += `  sum(r in RES_${this.id(rt)}) (bool2int(assignment[a,r])) >= ${c.min} /\\\n`;
-            code += `  sum(r in RES_${this.id(rt)}) (bool2int(assignment[a,r])) <= ${c.max}\n`;
+            code += `  sum(r in RES_${this.id(rt)}) (bool2int(role_assignment[a, ${this.id(roleName)}, r])) >= ${c.min} /\\\n`;
+            code += `  sum(r in RES_${this.id(rt)}) (bool2int(role_assignment[a, ${this.id(roleName)}, r])) <= ${c.max}\n`;
             code += `);\n`;
-
-            // If role is exactly one and role_assign exists, bind role_assign uniqueness
-            if (hasRoles && exactOne) {
-              code += `% Bind role_assign for exact-1 role\n`;
-              code += `constraint forall(a in ACT_INST where a in ${actSet}) (\n`;
-              code += `  role_assign[a, ${this.id(roleName)}] in RES_${this.id(rt)} /\\\n`;
-              code += `  sum(r in RES_${this.id(rt)}) (bool2int(assignment[a,r])) = 1 /\\\n`;
-              code += `  assignment[a, role_assign[a, ${this.id(roleName)}]] = true\n`;
-              code += `);\n`;
-            }
             code += `\n`;
           }
         }
@@ -304,8 +285,7 @@ export class PlanningSpecMiniZincGenerator {
         code += `% FixedAssignment: ${ai} role ${roleName} -> ${res}\n`;
         code += `constraint assignment[${ai}, ${res}] = true;\n`;
         if (hasRoles) {
-          // Only safe if role exists in enum ROLE
-          code += `constraint role_assign[${ai}, ${this.id(roleName)}] = ${res};\n`;
+          code += `constraint role_assignment[${ai}, ${this.id(roleName)}, ${res}] = true;\n`;
         }
         code += `\n`;
       }
@@ -319,9 +299,8 @@ export class PlanningSpecMiniZincGenerator {
         const res = this.id(c.resource);
 
         code += `% ForbiddenAssignment: ${ai} role ${roleName} != ${res}\n`;
-        code += `constraint assignment[${ai}, ${res}] = false;\n`;
         if (hasRoles) {
-          code += `constraint role_assign[${ai}, ${this.id(roleName)}] != ${res};\n`;
+          code += `constraint role_assignment[${ai}, ${this.id(roleName)}, ${res}] = false;\n`;
         }
         code += `\n`;
       }
@@ -414,11 +393,19 @@ export class PlanningSpecMiniZincGenerator {
     code += `\nsolve minimize penalty;\n\n`;
 
     // ------------------------------------------------
-    // 11) OUTPUT
+    // 11) OUTPUT — format structuré parseable par le module de rapport
+    // Chaque ligne suit un préfixe : ACTIVITY | ASSIGNMENT | ROLE
     // ------------------------------------------------
-    code += `output [ "Results:\\n" ] ++\n`;
-    code += `[ show(i) ++ " starts=" ++ show(start_time[i]) ++ " day=" ++ show(dayOf(start_time[i])) ++ "\\n"\n`;
-    code += `  | i in ACT_INST ];\n`;
+    code += `output\n`;
+    code += `  [ "ACTIVITY: " ++ show(i) ++ " slot=" ++ show(start_time[i]) ++ " day=" ++ show(dayOf(start_time[i])) ++ "\\n" | i in ACT_INST ] ++\n`;
+    code += `  [ if fix(assignment[i, r]) then "ASSIGNMENT: " ++ show(i) ++ " resource=" ++ show(r) ++ "\\n" else "" endif\n`;
+    code += `    | i in ACT_INST, r in RESOURCE ] ++\n`;
+    if (hasRoles) {
+      code += `  [ if fix(role_assignment[i, ro, r]) then "ROLE: " ++ show(i) ++ " role=" ++ show(ro) ++ " resource=" ++ show(r) ++ "\\n" else "" endif\n`;
+      code += `    | i in ACT_INST, ro in ROLE, r in RESOURCE where role_applicable[i, ro] ];\n`;
+    } else {
+      code += `  [];\n`;
+    }
 
     return code;
   }
@@ -427,7 +414,9 @@ export class PlanningSpecMiniZincGenerator {
     const code = this.generateToMiniZinc(document);
     const uri = document.uri;
     const baseName = uri.path.split('/').pop()?.replace(/\.[^.]+$/, '') || 'plan';
-    const outPath = join(process.cwd(), outDir, `${baseName}.mzn`);
+    const outPath = isAbsolute(outDir)
+      ? join(outDir, `${baseName}.mzn`)
+      : join(process.cwd(), outDir, `${baseName}.mzn`);
 
     const dir = dirname(outPath);
     if (!fs.existsSync(dir)) {

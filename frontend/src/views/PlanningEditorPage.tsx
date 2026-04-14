@@ -1,0 +1,3052 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import MonacoEditor from '@monaco-editor/react';
+import { useApp } from '../context/AppContext';
+import { api } from '../lib/api';
+import { AppLayout, Topbar } from '../components/layout/AppLayout';
+import { StatusBadge, ProgressBar, Button, Input, Textarea, NumberInput, Modal, Select, Card } from '../components/ui';
+import { useResponsive } from '../hooks/useResponsive';
+import { Planning } from '../types';
+
+const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+
+const STEPS = [
+  { id: 1, label: 'Informations générales', icon: '◎', description: 'Nom, projet et paramètres de base' },
+  { id: 2, label: 'Horizon temporel', icon: '◷', description: 'Jours et créneaux horaires' },
+  { id: 3, label: 'Activités', icon: '▤', description: 'Définir les activités à planifier' },
+  { id: 4, label: 'Ressources', icon: '◫', description: 'Ressources humaines et matérielles' },
+  { id: 5, label: 'Rôles', icon: '⊚', description: 'Associer les activités aux types de ressources' },
+  { id: 6, label: 'Contraintes', icon: '⊗', description: 'Définir des contraintes compatibles avec le solveur' },
+  { id: 7, label: 'Récapitulatif', icon: '✓', description: 'Vérifier toutes les correspondances puis lancer la résolution' },
+];
+
+const CONSTRAINT_TYPES = [
+  { value: 'cardinality_per_activity', label: 'Cardinalité par activité' },
+  { value: 'resource_exclusivity', label: 'Exclusivité ressource' },
+  { value: 'fixed_assignment', label: 'Affectation imposée' },
+  { value: 'forbidden_assignment', label: 'Affectation interdite' },
+] as const;
+
+type ConstraintType = typeof CONSTRAINT_TYPES[number]['value'];
+
+const PREFERENCE_TYPES = [
+  { value: 'avoid_participation_on_date', label: 'Éviter une date' },
+  { value: 'max_per_scope', label: 'Maximum par portée' },
+] as const;
+
+type PreferenceType = typeof PREFERENCE_TYPES[number]['value'];
+
+interface EditorActivity {
+  id: string;
+  name: string;
+  count: number;
+  duration: number;
+}
+
+interface EditorResourceGroup {
+  id: string;
+  type: string;
+  quantity: number;
+  names: string[];
+}
+
+interface EditorRole {
+  id: string;
+  activityName: string;
+  roleName: string;
+  resourceType: string;
+}
+
+interface EditorConstraint {
+  id: string;
+  type: ConstraintType;
+  enabled: boolean;
+  activity?: string;
+  role?: string;
+  target?: string;
+  min?: number;
+  max?: number;
+  resourceType?: string;
+  scope?: string;
+  activityInstance?: string;
+  resource?: string;
+}
+
+interface EditorPreference {
+  id: string;
+  type: PreferenceType;
+  enabled: boolean;
+  resource?: string;
+  date?: string;
+  activity?: string;
+  scope?: string;
+  max?: number;
+  weight?: number;
+}
+
+interface EditorFormData {
+  title: string;
+  projectId: string;
+  description: string;
+  priority: string;
+  days: string[];
+  slotsPerDay: number;
+  startTime: string;
+  endTime: string;
+  slotDuration: number;
+  activities: EditorActivity[];
+  resourceGroups: EditorResourceGroup[];
+  roles: EditorRole[];
+  constraints: EditorConstraint[];
+  preferences: EditorPreference[];
+}
+
+const defaultFormData = (planning?: Planning | null): EditorFormData => ({
+  title: planning?.title || '',
+  projectId: planning?.projectId || '',
+  description: '',
+  priority: 'medium',
+  days: [],
+  slotsPerDay: 4,
+  startTime: '08:00',
+  endTime: '18:00',
+  slotDuration: 60,
+  activities: [],
+  resourceGroups: [],
+  roles: [],
+  constraints: [],
+  preferences: [],
+});
+
+const createId = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+
+const isRecord = (value: unknown): value is Record<string, any> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const isConstraintType = (value: unknown): value is ConstraintType =>
+  value === 'cardinality_per_activity' ||
+  value === 'resource_exclusivity' ||
+  value === 'fixed_assignment' ||
+  value === 'forbidden_assignment';
+
+const normalizeIdentifier = (value: string) =>
+  value.trim().replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]/g, '_');
+
+const buildActivityInstanceName = (activityName: string, index: number) => `${normalizeIdentifier(activityName)}_${index}`;
+
+const buildResourceBaseName = (resourceType: string) => normalizeIdentifier(resourceType) || 'resource';
+
+const buildResourceInstanceName = (resourceType: string, index: number) => `${buildResourceBaseName(resourceType)}_${index}`;
+
+const buildResourceInstanceNames = (resourceType: string, quantity: number) =>
+  Array.from({ length: Math.max(0, Math.trunc(quantity)) }, (_, index) => buildResourceInstanceName(resourceType, index + 1));
+
+const syncResourceNames = (resourceType: string, quantity: number, names: string[], previousType?: string) => {
+  const safeQuantity = Math.max(0, Math.trunc(quantity));
+  const nextGenerated = buildResourceInstanceNames(resourceType, safeQuantity);
+  const previousGenerated = previousType ? buildResourceInstanceNames(previousType, names.length) : [];
+
+  return Array.from({ length: safeQuantity }, (_, index) => {
+    const current = names[index]?.trim() || '';
+    if (!current) {
+      return nextGenerated[index];
+    }
+
+    if (previousType && current === previousGenerated[index]) {
+      return nextGenerated[index];
+    }
+
+    return current;
+  });
+};
+
+const buildResolvedResourceNames = (group: Pick<EditorResourceGroup, 'type' | 'quantity' | 'names'>) =>
+  syncResourceNames(group.type, group.quantity, group.names);
+
+const getSafeSlotDuration = (slotDuration: number) => Math.max(1, Math.trunc(Number(slotDuration) || 1));
+
+const normalizeStoredActivityDuration = (
+  rawDuration: unknown,
+  activityName: string,
+  activities: Record<string, unknown>,
+  slotDuration: number,
+  slotsPerDay: number,
+) => {
+  const duration = Number(rawDuration);
+  if (!Number.isInteger(duration) || duration <= 0) {
+    return 1;
+  }
+
+  const storedActivity = activities[activityName];
+  const storedSlots = isRecord(storedActivity) ? Number(storedActivity.duration) : null;
+  if (Number.isInteger(storedSlots) && storedSlots && duration === storedSlots) {
+    return storedSlots;
+  }
+
+  const safeSlotDuration = getSafeSlotDuration(slotDuration);
+  if (Number.isInteger(storedSlots) && storedSlots && duration === storedSlots * safeSlotDuration) {
+    return storedSlots;
+  }
+
+  if (duration > Math.max(1, slotsPerDay) && duration % safeSlotDuration === 0) {
+    return Math.max(1, Math.trunc(duration / safeSlotDuration));
+  }
+
+  return duration;
+};
+
+const emptyConstraint = (): EditorConstraint => ({
+  id: createId(),
+  type: 'cardinality_per_activity',
+  enabled: true,
+  activity: '',
+  role: '',
+  target: 'slot',
+  min: 1,
+  max: 1,
+  resourceType: '',
+  scope: 'slot',
+  activityInstance: '',
+  resource: '',
+});
+
+const emptyPreference = (): EditorPreference => ({
+  id: createId(),
+  type: 'avoid_participation_on_date',
+  enabled: true,
+  resource: '',
+  date: DAYS[0],
+  activity: '',
+  scope: 'day',
+  max: 1,
+  weight: 10,
+});
+
+const normalizeConstraint = (constraint: Record<string, any>): EditorConstraint => ({
+  ...emptyConstraint(),
+  id: typeof constraint.id === 'string' ? constraint.id : createId(),
+  type: isConstraintType(constraint.type) ? constraint.type : 'cardinality_per_activity',
+  enabled: constraint.enabled !== false,
+  activity: typeof constraint.activity === 'string' ? constraint.activity : '',
+  role: typeof constraint.role === 'string' ? constraint.role : '',
+  target: typeof constraint.target === 'string' ? constraint.target : 'slot',
+  min: Number.isFinite(Number(constraint.min)) ? Number(constraint.min) : 1,
+  max: Number.isFinite(Number(constraint.max)) ? Number(constraint.max) : 1,
+  resourceType: typeof constraint.resourceType === 'string' ? constraint.resourceType : '',
+  scope: typeof constraint.scope === 'string' ? constraint.scope : 'slot',
+  activityInstance: typeof constraint.activityInstance === 'string' ? constraint.activityInstance : '',
+  resource: typeof constraint.resource === 'string' ? constraint.resource : '',
+});
+
+const isPreferenceType = (value: unknown): value is PreferenceType =>
+  value === 'avoid_participation_on_date' || value === 'max_per_scope';
+
+const normalizePreference = (preference: Record<string, any>): EditorPreference => ({
+  ...emptyPreference(),
+  id: typeof preference.id === 'string' ? preference.id : createId(),
+  type: isPreferenceType(preference.type) ? preference.type : 'avoid_participation_on_date',
+  enabled: preference.enabled !== false,
+  resource: typeof preference.resource === 'string' ? preference.resource : '',
+  date: typeof preference.date === 'string' ? preference.date : DAYS[0],
+  activity: typeof preference.activity === 'string' ? preference.activity : '',
+  scope: typeof preference.scope === 'string' ? preference.scope : 'day',
+  max: Number.isFinite(Number(preference.max)) ? Number(preference.max) : 1,
+  weight: Number.isFinite(Number(preference.weight)) ? Number(preference.weight) : 10,
+});
+
+const describeConstraint = (constraint: EditorConstraint) => {
+  if (constraint.type === 'cardinality_per_activity') {
+    const target = constraint.role?.trim() ? `rôle ${constraint.role}` : `cible ${constraint.target || 'slot'}`;
+    return `${constraint.activity || 'Activité'} : ${target} entre ${constraint.min ?? 0} et ${constraint.max ?? 0}`;
+  }
+  if (constraint.type === 'resource_exclusivity') {
+    return `${constraint.resourceType || 'Ressource'} sur ${constraint.activity || 'activité'} (${constraint.scope || 'scope'}) max ${constraint.max ?? 0}`;
+  }
+  if (constraint.type === 'fixed_assignment') {
+    return `${constraint.activityInstance || 'Instance'} / ${constraint.role || 'Rôle'} -> ${constraint.resource || 'Ressource'}`;
+  }
+  return `${constraint.activityInstance || 'Instance'} / ${constraint.role || 'Rôle'} interdit pour ${constraint.resource || 'Ressource'}`;
+};
+
+const deriveFormData = (planning: Planning): EditorFormData => {
+  const base = defaultFormData(planning);
+  const planningData = isRecord(planning.data) ? planning.data : {};
+  const editorState = isRecord(planningData.editorState) ? planningData.editorState : {};
+
+  const time = isRecord(planningData.time) ? planningData.time : {};
+  const activities = isRecord(planningData.activities) ? planningData.activities : {};
+  const resources = isRecord(planningData.resources) ? planningData.resources : {};
+  const roles = isRecord(planningData.roles) ? planningData.roles : {};
+  const constraints = Array.isArray(planningData.constraints) ? planningData.constraints : [];
+
+  return {
+    ...base,
+    title: typeof editorState.title === 'string' ? editorState.title : planning.title,
+    projectId: typeof editorState.projectId === 'string' ? editorState.projectId : planning.projectId,
+    description: typeof editorState.description === 'string' ? editorState.description : '',
+    priority: typeof editorState.priority === 'string' ? editorState.priority : 'medium',
+    days: Array.isArray(editorState.days)
+      ? editorState.days.filter((day: unknown): day is string => typeof day === 'string')
+      : Array.isArray(time.days)
+        ? time.days.filter((day: unknown): day is string => typeof day === 'string')
+        : [],
+    slotsPerDay: Number(editorState.slotsPerDay ?? time.slotsPerDay ?? 4) || 4,
+    startTime: typeof editorState.startTime === 'string' ? editorState.startTime : '08:00',
+    endTime: typeof editorState.endTime === 'string' ? editorState.endTime : '18:00',
+    slotDuration: Number(editorState.slotDuration ?? 60) || 60,
+    activities: Array.isArray(editorState.activities)
+      ? editorState.activities.map((activity: any) => ({
+          id: typeof activity.id === 'string' ? activity.id : createId(),
+          name: typeof activity.name === 'string' ? activity.name : '',
+          count: Number(activity.count ?? 1) || 1,
+          duration: normalizeStoredActivityDuration(
+            activity.duration ?? 1,
+            typeof activity.name === 'string' ? activity.name : '',
+            activities,
+            Number(editorState.slotDuration ?? 60) || 60,
+            Number(editorState.slotsPerDay ?? time.slotsPerDay ?? 4) || 4,
+          ),
+        }))
+      : Object.entries(activities).map(([name, config]) => ({
+          id: createId(),
+          name,
+          count: Number(isRecord(config) ? config.count : 1) || 1,
+          duration: Number(isRecord(config) ? config.duration : 1) || 1,
+        })),
+    resourceGroups: Array.isArray(editorState.resourceGroups)
+      ? editorState.resourceGroups.map((group: any) => ({
+          id: typeof group.id === 'string' ? group.id : createId(),
+          type: typeof group.type === 'string' ? group.type : '',
+          quantity: Number(group.quantity ?? (Array.isArray(group.members) ? group.members.length : 0)) || 0,
+          names: syncResourceNames(
+            typeof group.type === 'string' ? group.type : '',
+            Number(group.quantity ?? (Array.isArray(group.members) ? group.members.length : 0)) || 0,
+            Array.isArray(group.names)
+              ? group.names.filter((name: unknown): name is string => typeof name === 'string')
+              : Array.isArray(group.members)
+                ? group.members.filter((name: unknown): name is string => typeof name === 'string')
+                : []
+          ),
+        }))
+      : Object.entries(resources).map(([type, members]) => ({
+          id: createId(),
+          type,
+          quantity: Array.isArray(members) ? members.filter((member: unknown): member is string => typeof member === 'string').length : 0,
+          names: Array.isArray(members) ? members.filter((member: unknown): member is string => typeof member === 'string') : [],
+        })),
+    roles: Array.isArray(editorState.roles)
+      ? editorState.roles.map((role: any) => ({
+          id: typeof role.id === 'string' ? role.id : createId(),
+          activityName: typeof role.activityName === 'string' ? role.activityName : '',
+          roleName: typeof role.roleName === 'string' ? role.roleName : '',
+          resourceType: typeof role.resourceType === 'string' ? role.resourceType : '',
+        }))
+      : Object.entries(roles).flatMap(([activityName, roleMap]) => (
+          isRecord(roleMap)
+            ? Object.entries(roleMap).map(([roleName, resourceType]) => ({
+                id: createId(),
+                activityName,
+                roleName,
+                resourceType: typeof resourceType === 'string' ? resourceType : '',
+              }))
+            : []
+        )),
+    constraints: Array.isArray(editorState.constraints)
+      ? editorState.constraints.map((constraint: any) => normalizeConstraint(constraint))
+      : constraints.filter(isRecord).map((constraint) => normalizeConstraint(constraint)),
+    preferences: Array.isArray(editorState.preferences)
+      ? editorState.preferences.filter(isRecord).map((preference: Record<string, any>) => normalizePreference(preference))
+      : Array.isArray(planningData.preferences)
+        ? planningData.preferences.filter(isRecord).map((preference: Record<string, any>) => normalizePreference(preference))
+        : [],
+  };
+};
+
+const buildSolvePayload = (formData: EditorFormData) => {
+  const activities = Object.fromEntries(
+    formData.activities
+      .map(activity => ({
+        ...activity,
+        name: activity.name.trim(),
+      }))
+      .filter(activity => activity.name)
+      .map(activity => [activity.name, {
+        count: Math.max(1, Number(activity.count) || 1),
+        duration: Math.max(1, Number(activity.duration) || 1),
+      }])
+  );
+
+  const resources = Object.fromEntries(
+    formData.resourceGroups
+      .map(group => ({
+        ...group,
+        type: group.type.trim(),
+        quantity: Math.max(0, Math.trunc(Number(group.quantity) || 0)),
+        names: buildResolvedResourceNames(group),
+      }))
+      .filter(group => group.type && group.quantity > 0)
+      .map(group => [group.type, group.names])
+  );
+
+  const roles: Record<string, Record<string, string>> = {};
+  formData.roles
+    .map(role => ({
+      activityName: role.activityName.trim(),
+      roleName: role.roleName.trim(),
+      resourceType: role.resourceType.trim(),
+    }))
+    .filter(role => role.activityName && role.roleName && role.resourceType)
+    .forEach(role => {
+      if (!roles[role.activityName]) {
+        roles[role.activityName] = {};
+      }
+      roles[role.activityName][role.roleName] = role.resourceType;
+    });
+
+  const constraints = formData.constraints
+    .filter(constraint => constraint.enabled)
+    .map(constraint => {
+      if (constraint.type === 'cardinality_per_activity') {
+        const payload: Record<string, any> = {
+          type: constraint.type,
+          activity: constraint.activity?.trim() || '',
+          min: Math.max(0, Number(constraint.min) || 0),
+          max: Math.max(0, Number(constraint.max) || 0),
+        };
+        if (constraint.role?.trim()) {
+          payload.role = constraint.role.trim();
+        } else {
+          payload.target = constraint.target?.trim() || 'slot';
+        }
+        return payload;
+      }
+
+      if (constraint.type === 'resource_exclusivity') {
+        return {
+          type: constraint.type,
+          resourceType: constraint.resourceType?.trim() || '',
+          activity: constraint.activity?.trim() || '',
+          scope: constraint.scope?.trim() || 'slot',
+          max: Math.max(0, Number(constraint.max) || 0),
+        };
+      }
+
+      return {
+        type: constraint.type,
+        activityInstance: constraint.activityInstance?.trim() || '',
+        role: constraint.role?.trim() || '',
+        resource: constraint.resource?.trim() || '',
+      };
+    });
+
+  const preferences = formData.preferences
+    .filter(preference => preference.enabled)
+    .map(preference => {
+      if (preference.type === 'avoid_participation_on_date') {
+        return {
+          type: preference.type,
+          resource: preference.resource?.trim() || '',
+          date: preference.date?.trim() || '',
+          weight: Math.max(1, Number(preference.weight) || 1),
+        };
+      }
+
+      return {
+        type: preference.type,
+        activity: preference.activity?.trim() || '',
+        scope: preference.scope?.trim() || 'day',
+        max: Math.max(1, Number(preference.max) || 1),
+        weight: Math.max(1, Number(preference.weight) || 1),
+      };
+    });
+
+  return {
+    time: {
+      days: formData.days,
+      slotsPerDay: Math.max(1, Number(formData.slotsPerDay) || 1),
+    },
+    activities,
+    resources,
+    roles,
+    constraints,
+    preferences,
+  };
+};
+
+const buildPlanningPayload = (formData: EditorFormData) => ({
+  editorState: formData,
+  ...buildSolvePayload(formData),
+});
+
+const stringifyDslValue = (value: unknown) => JSON.stringify(value);
+
+const stringifyDslObject = (entries: Array<[string, string]>, indent = 0) => {
+  const padding = ' '.repeat(indent);
+  const childPadding = ' '.repeat(indent + 2);
+  if (entries.length === 0) {
+    return '{}';
+  }
+
+  return `{\n${entries.map(([key, val]) => `${childPadding}${stringifyDslValue(key)}: ${val}`).join(',\n')}\n${padding}}`;
+};
+
+const stringifyDslArray = (values: string[], indent = 0) => {
+  const padding = ' '.repeat(indent);
+  const childPadding = ' '.repeat(indent + 2);
+  if (values.length === 0) {
+    return '[]';
+  }
+
+  return `[\n${values.map(value => `${childPadding}${value}`).join(',\n')}\n${padding}]`;
+};
+
+const serializeConstraintToDsl = (constraint: Record<string, unknown>) => {
+  const type = typeof constraint.type === 'string' ? constraint.type : '';
+
+  if (type === 'cardinality_per_activity') {
+    const entries: Array<[string, string]> = [
+      ['type', stringifyDslValue(type)],
+      ['activity', stringifyDslValue(constraint.activity)],
+    ];
+
+    if (typeof constraint.role === 'string' && constraint.role.trim()) {
+      entries.push(['role', stringifyDslValue(constraint.role)]);
+    } else {
+      entries.push(['target', stringifyDslValue(constraint.target)]);
+    }
+
+    entries.push(['min', String(constraint.min)]);
+    entries.push(['max', String(constraint.max)]);
+    return stringifyDslObject(entries, 4);
+  }
+
+  if (type === 'resource_exclusivity') {
+    return stringifyDslObject([
+      ['type', stringifyDslValue(type)],
+      ['resourceType', stringifyDslValue(constraint.resourceType)],
+      ['activity', stringifyDslValue(constraint.activity)],
+      ['scope', stringifyDslValue(constraint.scope)],
+      ['max', String(constraint.max)],
+    ], 4);
+  }
+
+  if (type === 'fixed_assignment' || type === 'forbidden_assignment') {
+    return stringifyDslObject([
+      ['type', stringifyDslValue(type)],
+      ['activityInstance', stringifyDslValue(constraint.activityInstance)],
+      ['role', stringifyDslValue(constraint.role)],
+      ['resource', stringifyDslValue(constraint.resource)],
+    ], 4);
+  }
+
+  const fallbackEntries = Object.entries(constraint)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => [key, typeof value === 'number' ? String(value) : stringifyDslValue(value)] as [string, string]);
+  return stringifyDslObject(fallbackEntries, 4);
+};
+
+const serializePreferenceToDsl = (preference: Record<string, unknown>) => {
+  const type = typeof preference.type === 'string' ? preference.type : '';
+
+  if (type === 'avoid_participation_on_date') {
+    return stringifyDslObject([
+      ['type', stringifyDslValue(type)],
+      ['resource', stringifyDslValue(preference.resource)],
+      ['date', stringifyDslValue(preference.date)],
+      ['weight', String(preference.weight)],
+    ], 4);
+  }
+
+  if (type === 'max_per_scope') {
+    return stringifyDslObject([
+      ['type', stringifyDslValue(type)],
+      ['activity', stringifyDslValue(preference.activity)],
+      ['scope', stringifyDslValue(preference.scope)],
+      ['max', String(preference.max)],
+      ['weight', String(preference.weight)],
+    ], 4);
+  }
+
+  const fallbackEntries = Object.entries(preference)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => [key, typeof value === 'number' ? String(value) : stringifyDslValue(value)] as [string, string]);
+  return stringifyDslObject(fallbackEntries, 4);
+};
+
+const buildPlanningDslSource = (formData: EditorFormData) => {
+  const model = buildSolvePayload(formData);
+
+  const timeBlock = stringifyDslObject([
+    ['days', stringifyDslArray(model.time.days.map(day => stringifyDslValue(day)), 4)],
+    ['slotsPerDay', String(model.time.slotsPerDay)],
+  ], 2);
+
+  const activitiesBlock = stringifyDslObject(
+    Object.entries(model.activities).map(([activityName, config]) => ([
+      activityName,
+      stringifyDslObject([
+        ['count', String(config.count)],
+        ['duration', String(config.duration)],
+      ], 4),
+    ])),
+    2
+  );
+
+  const resourcesBlock = stringifyDslObject(
+    Object.entries(model.resources).map(([resourceType, instances]) => ([
+      resourceType,
+      stringifyDslArray(instances.map(instance => stringifyDslValue(instance)), 4),
+    ])),
+    2
+  );
+
+  const rolesBlock = stringifyDslObject(
+    Object.entries(model.roles).map(([activityName, roleMap]) => ([
+      activityName,
+      stringifyDslObject(
+        Object.entries(roleMap).map(([roleName, resourceType]) => [roleName, stringifyDslValue(resourceType)]),
+        4
+      ),
+    ])),
+    2
+  );
+
+  const constraintsBlock = stringifyDslArray(model.constraints.map(constraint => serializeConstraintToDsl(constraint)), 2);
+  const preferencesBlock = stringifyDslArray(model.preferences.map(preference => serializePreferenceToDsl(preference)), 2);
+
+  return stringifyDslObject([
+    ['time', timeBlock],
+    ['activities', activitiesBlock],
+    ['resources', resourcesBlock],
+    ['roles', rolesBlock],
+    ['constraints', constraintsBlock],
+    ['preferences', preferencesBlock],
+  ], 0);
+};
+
+const getStoredDslSource = (planning: Planning | null, formData: EditorFormData) => {
+  if (planning?.data && isRecord(planning.data) && typeof planning.data.dslSource === 'string' && planning.data.dslSource.trim()) {
+    return planning.data.dslSource;
+  }
+
+  return buildPlanningDslSource(formData);
+};
+
+const buildFormDataFromDslModel = (model: unknown, base: EditorFormData): EditorFormData | null => {
+  if (!isRecord(model)) {
+    return null;
+  }
+
+  const time = isRecord(model.time) ? model.time : {};
+  const activities = isRecord(model.activities) ? model.activities : {};
+  const resources = isRecord(model.resources) ? model.resources : {};
+  const roles = isRecord(model.roles) ? model.roles : {};
+  const constraints = Array.isArray(model.constraints) ? model.constraints : [];
+  const preferences = Array.isArray(model.preferences) ? model.preferences.filter(isRecord) : [];
+
+  return {
+    ...base,
+    days: Array.isArray(time.days) ? time.days.filter((day: unknown): day is string => typeof day === 'string') : [],
+    slotsPerDay: Number(time.slotsPerDay ?? base.slotsPerDay) || base.slotsPerDay,
+    activities: Object.entries(activities).map(([name, config]) => ({
+      id: createId(),
+      name,
+      count: Number(isRecord(config) ? config.count : 1) || 1,
+      duration: Number(isRecord(config) ? config.duration : 1) || 1,
+    })),
+    resourceGroups: Object.entries(resources).map(([type, members]) => ({
+      id: createId(),
+      type,
+      quantity: Array.isArray(members) ? members.filter((member: unknown): member is string => typeof member === 'string').length : 0,
+      names: Array.isArray(members) ? members.filter((member: unknown): member is string => typeof member === 'string') : [],
+    })),
+    roles: Object.entries(roles).flatMap(([activityName, roleMap]) => (
+      isRecord(roleMap)
+        ? Object.entries(roleMap).map(([roleName, resourceType]) => ({
+            id: createId(),
+            activityName,
+            roleName,
+            resourceType: typeof resourceType === 'string' ? resourceType : '',
+          }))
+        : []
+    )),
+    constraints: constraints.filter(isRecord).map(constraint => normalizeConstraint(constraint)),
+    preferences: preferences.map(preference => normalizePreference(preference)),
+  };
+};
+
+const getJsonErrorPosition = (source: string, errorMessage: string) => {
+  const match = /position\s+(\d+)/i.exec(errorMessage);
+  if (!match) {
+    return { line: 1, column: 1 };
+  }
+
+  const offset = Number(match[1]);
+  const slice = source.slice(0, offset);
+  const lines = slice.split('\n');
+  return {
+    line: lines.length,
+    column: (lines[lines.length - 1]?.length ?? 0) + 1,
+  };
+};
+
+const canonicalizePlanningSource = (source: string, base: EditorFormData): { canonicalSource: string; formData: EditorFormData } | null => {
+  try {
+    const parsedModel = JSON.parse(source);
+    const nextFormData = buildFormDataFromDslModel(parsedModel, base);
+    if (!nextFormData) {
+      return null;
+    }
+
+    return {
+      formData: nextFormData,
+      canonicalSource: buildPlanningDslSource(nextFormData),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const buildPlanningSchema = (formData: EditorFormData) => {
+  const activityNames = formData.activities.map(activity => activity.name.trim()).filter(Boolean);
+  const resourceTypes = formData.resourceGroups.map(group => group.type.trim()).filter(Boolean);
+  const roleNames = formData.roles.map(role => role.roleName.trim()).filter(Boolean);
+  const resourceNames = formData.resourceGroups.flatMap(group => buildResolvedResourceNames(group)).filter(Boolean);
+  const activityInstances = formData.activities.flatMap(activity =>
+    Array.from({ length: Math.max(0, Number(activity.count) || 0) }, (_, index) => buildActivityInstanceName(activity.name, index + 1))
+  ).filter(Boolean);
+
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['time', 'activities', 'resources', 'roles', 'constraints', 'preferences'],
+    defaultSnippets: [
+      {
+        label: 'Squelette complet',
+        body: JSON.parse(buildPlanningDslSource(formData)),
+      },
+    ],
+    properties: {
+      time: {
+        type: 'object',
+        required: ['days', 'slotsPerDay'],
+        additionalProperties: false,
+        defaultSnippets: [{
+          label: 'Bloc time',
+          body: { days: ['Lundi', 'Mardi'], slotsPerDay: 4 },
+        }],
+        properties: {
+          days: {
+            type: 'array',
+            minItems: 1,
+            items: { type: 'string', enum: DAYS },
+          },
+          slotsPerDay: {
+            type: 'integer',
+            minimum: 1,
+          },
+        },
+      },
+      activities: {
+        type: 'object',
+        additionalProperties: {
+          type: 'object',
+          required: ['count', 'duration'],
+          additionalProperties: false,
+          properties: {
+            count: { type: 'integer', minimum: 1 },
+            duration: { type: 'integer', minimum: 1 },
+          },
+        },
+      },
+      resources: {
+        type: 'object',
+        additionalProperties: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+      roles: {
+        type: 'object',
+        additionalProperties: {
+          type: 'object',
+          additionalProperties: {
+            type: 'string',
+            enum: resourceTypes.length > 0 ? resourceTypes : undefined,
+          },
+        },
+      },
+      constraints: {
+        type: 'array',
+        defaultSnippets: [
+          {
+            label: 'Cardinalité par activité',
+            body: [{
+              type: 'cardinality_per_activity',
+              activity: activityNames[0] ?? 'Activite',
+              role: roleNames[0] ?? 'Role',
+              min: 1,
+              max: 1,
+            }],
+          },
+          {
+            label: 'Exclusivité ressource',
+            body: [{
+              type: 'resource_exclusivity',
+              resourceType: resourceTypes[0] ?? 'Teacher',
+              activity: activityNames[0] ?? 'Activite',
+              scope: 'slot',
+              max: 1,
+            }],
+          },
+          {
+            label: 'Affectation imposée',
+            body: [{
+              type: 'fixed_assignment',
+              activityInstance: activityInstances[0] ?? 'Activite_1',
+              role: roleNames[0] ?? 'Role',
+              resource: resourceNames[0] ?? 'Teacher_1',
+            }],
+          },
+          {
+            label: 'Affectation interdite',
+            body: [{
+              type: 'forbidden_assignment',
+              activityInstance: activityInstances[0] ?? 'Activite_1',
+              role: roleNames[0] ?? 'Role',
+              resource: resourceNames[0] ?? 'Teacher_1',
+            }],
+          },
+        ],
+        items: {
+          oneOf: [
+            {
+              type: 'object',
+              required: ['type', 'activity', 'min', 'max'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'cardinality_per_activity' },
+                activity: { type: 'string', enum: activityNames.length > 0 ? activityNames : undefined },
+                role: { type: 'string', enum: roleNames.length > 0 ? roleNames : undefined },
+                target: { type: 'string', enum: ['slot', ...resourceTypes] },
+                min: { type: 'integer', minimum: 0 },
+                max: { type: 'integer', minimum: 0 },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'resourceType', 'activity', 'scope', 'max'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'resource_exclusivity' },
+                resourceType: { type: 'string', enum: resourceTypes.length > 0 ? resourceTypes : undefined },
+                activity: { type: 'string', enum: activityNames.length > 0 ? activityNames : undefined },
+                scope: { type: 'string', enum: ['slot', 'day'] },
+                max: { type: 'integer', minimum: 0 },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'activityInstance', 'role', 'resource'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'fixed_assignment' },
+                activityInstance: { type: 'string', enum: activityInstances.length > 0 ? activityInstances : undefined },
+                role: { type: 'string', enum: roleNames.length > 0 ? roleNames : undefined },
+                resource: { type: 'string', enum: resourceNames.length > 0 ? resourceNames : undefined },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'activityInstance', 'role', 'resource'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'forbidden_assignment' },
+                activityInstance: { type: 'string', enum: activityInstances.length > 0 ? activityInstances : undefined },
+                role: { type: 'string', enum: roleNames.length > 0 ? roleNames : undefined },
+                resource: { type: 'string', enum: resourceNames.length > 0 ? resourceNames : undefined },
+              },
+            },
+          ],
+        },
+      },
+      preferences: {
+        type: 'array',
+        defaultSnippets: [
+          {
+            label: 'Éviter une date',
+            body: [{
+              type: 'avoid_participation_on_date',
+              resource: resourceNames[0] ?? 'Teacher_1',
+              date: DAYS[0],
+              weight: 10,
+            }],
+          },
+          {
+            label: 'Maximum par portée',
+            body: [{
+              type: 'max_per_scope',
+              activity: activityNames[0] ?? 'Activite',
+              scope: 'day',
+              max: 1,
+              weight: 5,
+            }],
+          },
+        ],
+        items: {
+          oneOf: [
+            {
+              type: 'object',
+              required: ['type', 'resource', 'date', 'weight'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'avoid_participation_on_date' },
+                resource: { type: 'string', enum: resourceNames.length > 0 ? resourceNames : undefined },
+                date: { type: 'string', enum: DAYS },
+                weight: { type: 'integer', minimum: 1 },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'activity', 'scope', 'max', 'weight'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'max_per_scope' },
+                activity: { type: 'string', enum: activityNames.length > 0 ? activityNames : undefined },
+                scope: { type: 'string', enum: ['slot', 'day'] },
+                max: { type: 'integer', minimum: 1 },
+                weight: { type: 'integer', minimum: 1 },
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+};
+
+const getStepError = (step: number, data: EditorFormData): string | null => {
+  if (step === 1) {
+    if (!data.title.trim()) return 'Le titre de la planification est requis.';
+    if (!data.projectId) return 'Choisissez un projet.';
+  }
+
+  if (step === 2) {
+    if (data.days.length === 0) return 'Sélectionne au moins un jour.';
+    if (!Number.isInteger(data.slotsPerDay) || data.slotsPerDay <= 0) return 'Le nombre de créneaux doit être strictement positif.';
+  }
+
+  if (step === 3) {
+    if (data.activities.length === 0) return 'Ajoute au moins une activité.';
+    if (data.activities.some(activity => !activity.name.trim())) return 'Chaque activité doit avoir un nom.';
+    if (data.activities.some(activity => !Number.isInteger(activity.count) || activity.count <= 0)) {
+      return 'Chaque activité doit avoir un nombre d’occurrences strictement positif.';
+    }
+    if (data.activities.some(activity => !Number.isInteger(activity.duration) || activity.duration <= 0)) {
+      return 'Chaque activité doit avoir une durée strictement positive.';
+    }
+    if (data.activities.some(activity => activity.duration > data.slotsPerDay)) {
+      return `La durée d’une activité ne peut pas dépasser ${data.slotsPerDay} créneau(x) par jour.`;
+    }
+  }
+
+  if (step === 4) {
+    if (data.resourceGroups.length === 0) return 'Ajoute au moins un type de ressource.';
+    if (data.resourceGroups.some(group => !group.type.trim() || !Number.isInteger(group.quantity) || group.quantity <= 0)) {
+      return 'Chaque type de ressource doit avoir un nom et une quantité strictement positive.';
+    }
+    if (data.resourceGroups.some(group => {
+      const names = buildResolvedResourceNames(group);
+      return names.length !== group.quantity ||
+        names.some(name => !name.trim()) ||
+        new Set(names.map(name => name.trim())).size !== names.length;
+    })) {
+      return 'Les noms de ressources doivent être non vides, uniques et correspondre à la quantité demandée.';
+    }
+  }
+
+  if (step === 5) {
+    if (data.roles.length === 0) return 'Définis au moins un rôle.';
+    if (data.roles.some(role => !role.activityName || !role.roleName.trim() || !role.resourceType)) {
+      return 'Chaque rôle doit être relié à une activité et à un type de ressource.';
+    }
+
+    const coveredActivities = new Set(data.roles.map(role => role.activityName.trim()).filter(Boolean));
+    const missingActivity = data.activities.find(activity => activity.name.trim() && !coveredActivities.has(activity.name.trim()));
+    if (missingActivity) {
+      return `Ajoute au moins un rôle pour l’activité "${missingActivity.name}".`;
+    }
+  }
+
+  if (step === 6) {
+    const resourceTypes = new Set(data.resourceGroups.map(group => group.type.trim()).filter(Boolean));
+    const resourceInstances = new Set(
+      data.resourceGroups.flatMap(group => buildResolvedResourceNames(group))
+    );
+    const rolesByActivity = new Map<string, Set<string>>();
+
+    data.roles.forEach(role => {
+      const activityName = role.activityName.trim();
+      const roleName = role.roleName.trim();
+      if (!activityName || !roleName) {
+        return;
+      }
+
+      if (!rolesByActivity.has(activityName)) {
+        rolesByActivity.set(activityName, new Set());
+      }
+      rolesByActivity.get(activityName)?.add(roleName);
+    });
+
+    const activityInstanceToName = new Map<string, string>();
+    data.activities.forEach(activity => {
+      const name = activity.name.trim();
+      if (!name) {
+        return;
+      }
+
+      Array.from({ length: Math.max(0, activity.count) }, (_, index) => {
+        activityInstanceToName.set(buildActivityInstanceName(name, index + 1), name);
+        return null;
+      });
+    });
+
+    const invalidConstraint = data.constraints.find(constraint => {
+      if (!constraint.enabled) {
+        return false;
+      }
+
+      if (constraint.type === 'cardinality_per_activity') {
+        const activityRoles = rolesByActivity.get(constraint.activity?.trim() || '') || new Set<string>();
+        return !constraint.activity?.trim() ||
+          ((!constraint.role?.trim()) && (!constraint.target?.trim())) ||
+          !Number.isInteger(constraint.min) ||
+          !Number.isInteger(constraint.max) ||
+          (constraint.role?.trim() ? !activityRoles.has(constraint.role.trim()) : !resourceTypes.has((constraint.target || '').trim()) && (constraint.target || '').trim() !== 'slot') ||
+          Number(constraint.max) < Number(constraint.min);
+      }
+
+      if (constraint.type === 'resource_exclusivity') {
+        return !constraint.resourceType?.trim() ||
+          !constraint.activity?.trim() ||
+          !constraint.scope?.trim() ||
+          !Number.isInteger(constraint.max) ||
+          !resourceTypes.has(constraint.resourceType.trim());
+      }
+
+      const activityName = activityInstanceToName.get(constraint.activityInstance?.trim() || '') || '';
+      const activityRoles = rolesByActivity.get(activityName) || new Set<string>();
+      return !constraint.activityInstance?.trim() ||
+        !constraint.role?.trim() ||
+        !constraint.resource?.trim() ||
+        !activityName ||
+        !activityRoles.has(constraint.role.trim()) ||
+        !resourceInstances.has(constraint.resource.trim());
+    });
+
+    if (data.constraints.length === 0) {
+      return 'Ajoute au moins une contrainte.';
+    }
+
+    if (invalidConstraint) {
+      return 'Complète tous les champs de la contrainte sélectionnée.';
+    }
+
+    const activityNames = new Set(data.activities.map(activity => activity.name.trim()).filter(Boolean));
+    const invalidPreference = data.preferences.find(preference => {
+      if (!preference.enabled) {
+        return false;
+      }
+
+      if (preference.type === 'avoid_participation_on_date') {
+        return !preference.resource?.trim() ||
+          !resourceInstances.has(preference.resource.trim()) ||
+          !preference.date?.trim() ||
+          !data.days.includes(preference.date.trim()) ||
+          !Number.isInteger(preference.weight) ||
+          Number(preference.weight) < 1;
+      }
+
+      return !preference.activity?.trim() ||
+        !activityNames.has(preference.activity.trim()) ||
+        !preference.scope?.trim() ||
+        !Number.isInteger(preference.max) ||
+        Number(preference.max) < 1 ||
+        !Number.isInteger(preference.weight) ||
+        Number(preference.weight) < 1;
+    });
+
+    if (invalidPreference) {
+      return 'Complète tous les champs de la préférence sélectionnée.';
+    }
+  }
+
+  return null;
+};
+
+const Step1: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => void }> = ({ data, onChange }) => {
+  const { projects } = useApp();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '16px', background: 'rgba(56,189,248,0.05)', borderRadius: '12px', border: '1px solid rgba(56,189,248,0.1)', fontSize: '13px', color: 'var(--text-secondary)' }}>
+        Donnez un nom clair à votre planification et rattachez-la à votre projet sécurisé.
+      </div>
+      <Input label="Titre de la planification" placeholder="Ex : Planning Semestre 1 — Informatique" value={data.title} onChange={value => onChange({ ...data, title: value })} required />
+      <Select label="Projet associé" value={data.projectId} onChange={value => onChange({ ...data, projectId: value })} required
+        options={[{ value: '', label: '— Sélectionner un projet —' }, ...projects.map(project => ({ value: project.id, label: project.name }))]}
+      />
+      <Textarea label="Description (optionnelle)" placeholder="Décrivez l'objectif de cette planification..." value={data.description} onChange={value => onChange({ ...data, description: value })} rows={3} />
+      <Select label="Priorité" value={data.priority} onChange={value => onChange({ ...data, priority: value })}
+        options={[{ value: 'low', label: 'Basse' }, { value: 'medium', label: 'Normale' }, { value: 'high', label: 'Haute' }]}
+      />
+    </div>
+  );
+};
+
+const Step2: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => void }> = ({ data, onChange }) => {
+  const { isMobile } = useResponsive();
+
+  const toggleDay = (day: string) => {
+    const next = data.days.includes(day)
+      ? data.days.filter(value => value !== day)
+      : [...data.days, day];
+    onChange({ ...data, days: next });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div>
+        <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '10px' }}>
+          Jours actifs <span style={{ color: 'var(--accent)' }}>*</span>
+        </label>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {DAYS.map(day => (
+            <button key={day} onClick={() => toggleDay(day)} style={{
+              padding: '8px 14px',
+              borderRadius: '10px',
+              border: `1px solid ${data.days.includes(day) ? 'rgba(56,189,248,0.4)' : 'var(--border-default)'}`,
+              background: data.days.includes(day) ? 'rgba(56,189,248,0.12)' : 'var(--bg-card)',
+              color: data.days.includes(day) ? 'var(--accent)' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: data.days.includes(day) ? 600 : 400,
+              fontFamily: 'Inter, sans-serif',
+              transition: 'all 0.15s',
+            }}>{day.slice(0, 3)}</button>
+          ))}
+        </div>
+      </div>
+
+      <NumberInput label="Créneaux par jour" value={data.slotsPerDay} onChange={value => onChange({ ...data, slotsPerDay: value })} min={1} max={24} />
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '14px' }}>
+        <Input label="Heure de début" type="time" value={data.startTime} onChange={value => onChange({ ...data, startTime: value })} />
+        <Input label="Heure de fin" type="time" value={data.endTime} onChange={value => onChange({ ...data, endTime: value })} />
+      </div>
+      <Input label="Durée d'un créneau (minutes)" type="number" placeholder="60" value={String(data.slotDuration)} onChange={value => onChange({ ...data, slotDuration: parseInt(value, 10) || 60 })} />
+    </div>
+  );
+};
+
+const Step3: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => void }> = ({ data, onChange }) => {
+  const { isMobile } = useResponsive();
+  const [newName, setNewName] = useState('');
+
+  const addActivity = () => {
+    if (!newName.trim()) {
+      return;
+    }
+
+    onChange({
+      ...data,
+      activities: [...data.activities, { id: createId(), name: newName.trim(), count: 1, duration: 1 }],
+    });
+    setNewName('');
+  };
+
+  const updateActivity = (id: string, patch: Partial<EditorActivity>) => {
+    onChange({
+      ...data,
+      activities: data.activities.map(activity => activity.id === id ? { ...activity, ...patch } : activity),
+    });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '14px', background: 'rgba(56,189,248,0.05)', borderRadius: '12px', border: '1px solid rgba(56,189,248,0.1)', fontSize: '13px', color: 'var(--text-secondary)' }}>
+        Renseignez ici la durée de chaque activité directement en nombre de créneaux. Une activité de durée <strong>2</strong> occupera deux créneaux consécutifs.
+      </div>
+
+      {data.activities.map(activity => (
+        <div key={activity.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px', padding: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: '12px', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
+            <div style={{ flex: 1 }}>
+              <Input label="Nom de l'activité" value={activity.name} onChange={value => updateActivity(activity.id, { name: value })} />
+            </div>
+            <button onClick={() => onChange({ ...data, activities: data.activities.filter(item => item.id !== activity.id) })} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '16px', marginLeft: isMobile ? 0 : '12px', alignSelf: isMobile ? 'flex-end' : 'center' }}>✕</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+            <NumberInput label="Occurrences" value={activity.count} onChange={value => updateActivity(activity.id, { count: value })} min={1} max={99} />
+            <NumberInput label="Durée (créneaux)" value={activity.duration} onChange={value => updateActivity(activity.id, { duration: value })} min={1} max={Math.max(1, data.slotsPerDay)} />
+          </div>
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', gap: '10px', flexDirection: isMobile ? 'column' : 'row' }}>
+        <div style={{ flex: 1 }}>
+          <Input placeholder="Nom de l'activité (ex: Cours de maths)" value={newName} onChange={setNewName} />
+        </div>
+        <button onClick={addActivity} style={{
+          padding: '10px 18px',
+          borderRadius: '10px',
+          border: '1px solid rgba(56,189,248,0.3)',
+          background: 'rgba(56,189,248,0.1)',
+          color: 'var(--accent)',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: 500,
+          fontFamily: 'Inter, sans-serif',
+          whiteSpace: 'nowrap',
+        }}>+ Ajouter</button>
+      </div>
+    </div>
+  );
+};
+
+const Step4: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => void }> = ({ data, onChange }) => {
+  const { isMobile } = useResponsive();
+  const [newType, setNewType] = useState('');
+
+  const addGroup = () => {
+    if (!newType.trim()) {
+      return;
+    }
+
+    const type = newType.trim();
+    onChange({
+      ...data,
+      resourceGroups: [...data.resourceGroups, { id: createId(), type, quantity: 1, names: buildResourceInstanceNames(type, 1) }],
+    });
+    setNewType('');
+  };
+
+  const updateGroup = (id: string, patch: Partial<EditorResourceGroup>) => {
+    onChange({
+      ...data,
+      resourceGroups: data.resourceGroups.map(group => {
+        if (group.id !== id) {
+          return group;
+        }
+
+        const nextType = typeof patch.type === 'string' ? patch.type : group.type;
+        const nextQuantity = typeof patch.quantity === 'number' ? patch.quantity : group.quantity;
+        const nextNames = Array.isArray(patch.names) ? patch.names : group.names;
+
+        return {
+          ...group,
+          ...patch,
+          type: nextType,
+          quantity: nextQuantity,
+          names: syncResourceNames(nextType, nextQuantity, nextNames, group.type),
+        };
+      }),
+    });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '14px', background: 'rgba(56,189,248,0.05)', borderRadius: '12px', border: '1px solid rgba(56,189,248,0.1)', fontSize: '13px', color: 'var(--text-secondary)' }}>
+        Indiquez le type et la quantité. Les noms sont générés automatiquement, puis vous pouvez les renommer si vous voulez avant l’envoi au solveur.
+      </div>
+
+      {data.resourceGroups.map(group => (
+        <div key={group.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px', padding: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 180px auto', gap: '12px', alignItems: 'end' }}>
+            <Input label="Type de ressource" value={group.type} onChange={value => updateGroup(group.id, { type: value })} />
+            <NumberInput label="Quantité" value={group.quantity} onChange={value => updateGroup(group.id, { quantity: value })} min={1} max={999} />
+            <button onClick={() => onChange({ ...data, resourceGroups: data.resourceGroups.filter(item => item.id !== group.id) })} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '16px', marginBottom: '8px', justifySelf: isMobile ? 'flex-end' : 'auto' }}>✕</button>
+          </div>
+          <Textarea
+            label={`Noms des ressources pour "${group.type || 'ce type'}"`}
+            value={buildResolvedResourceNames(group).join('\n')}
+            onChange={value => updateGroup(group.id, { names: value.split('\n').map(line => line.trim()).filter(Boolean) })}
+            rows={Math.min(Math.max(group.quantity, 2), 8)}
+          />
+          <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            <strong>Payload envoyé :</strong>{' '}
+            {buildResolvedResourceNames(group).join(', ') || 'Aucune'}
+          </div>
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', gap: '10px', flexDirection: isMobile ? 'column' : 'row' }}>
+        <div style={{ flex: 1 }}>
+          <Input placeholder="Type de ressource (ex: Enseignants)" value={newType} onChange={setNewType} />
+        </div>
+        <button onClick={addGroup} style={{
+          padding: '10px 18px',
+          borderRadius: '10px',
+          border: '1px solid rgba(167,139,250,0.3)',
+          background: 'rgba(167,139,250,0.1)',
+          color: 'var(--violet)',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: 500,
+          fontFamily: 'Inter, sans-serif',
+          whiteSpace: 'nowrap',
+        }}>+ Ajouter</button>
+      </div>
+    </div>
+  );
+};
+
+const Step5: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => void }> = ({ data, onChange }) => {
+  const { isMobile, isCompact } = useResponsive();
+  const resourceOptions = data.resourceGroups
+    .filter(group => group.type.trim())
+    .map(group => ({ value: group.type.trim(), label: group.type.trim() }));
+  const activityOptions = data.activities
+    .filter(activity => activity.name.trim())
+    .map(activity => ({ value: activity.name.trim(), label: activity.name.trim() }));
+
+  const updateRole = (id: string, patch: Partial<EditorRole>) => {
+    onChange({
+      ...data,
+      roles: data.roles.map(role => role.id === id ? { ...role, ...patch } : role),
+    });
+  };
+
+  const addRole = () => {
+    onChange({
+      ...data,
+      roles: [...data.roles, {
+        id: createId(),
+        activityName: activityOptions[0]?.value || '',
+        roleName: '',
+        resourceType: resourceOptions[0]?.value || '',
+      }],
+    });
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+      <div style={{ padding: '14px', background: 'rgba(56,189,248,0.05)', borderRadius: '12px', border: '1px solid rgba(56,189,248,0.1)', fontSize: '13px', color: 'var(--text-secondary)' }}>
+        Définissez les rôles métier nécessaires pour chaque activité, puis associez-les à un type de ressource.
+      </div>
+
+      {data.roles.map(role => (
+        <div key={role.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px', padding: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
+            <Select label="Activité" value={role.activityName} onChange={value => updateRole(role.id, { activityName: value })}
+              options={[{ value: '', label: '— Choisir une activité —' }, ...activityOptions]}
+            />
+            <Input label="Rôle" placeholder="Ex : Enseignant titulaire" value={role.roleName} onChange={value => updateRole(role.id, { roleName: value })} />
+            <Select label="Type de ressource" value={role.resourceType} onChange={value => updateRole(role.id, { resourceType: value })}
+              options={[{ value: '', label: '— Choisir une ressource —' }, ...resourceOptions]}
+            />
+            <button onClick={() => onChange({ ...data, roles: data.roles.filter(item => item.id !== role.id) })} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '16px', marginBottom: '8px', justifySelf: isMobile ? 'flex-end' : 'auto' }}>✕</button>
+          </div>
+        </div>
+      ))}
+
+      <div>
+        <Button variant="secondary" onClick={addRole} disabled={activityOptions.length === 0 || resourceOptions.length === 0}>
+          Ajouter un rôle
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const Step6: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => void }> = ({ data, onChange }) => {
+  const { isMobile, isCompact } = useResponsive();
+  const activityOptions = data.activities
+    .filter(activity => activity.name.trim())
+    .map(activity => ({ value: activity.name.trim(), label: activity.name.trim() }));
+  const resourceTypeOptions = data.resourceGroups
+    .filter(group => group.type.trim())
+    .map(group => ({ value: group.type.trim(), label: group.type.trim() }));
+  const targetOptions = [{ value: 'slot', label: 'slot' }, ...resourceTypeOptions];
+  const resourceInstanceOptions = data.resourceGroups.flatMap(group =>
+    buildResolvedResourceNames(group)
+      .map(instanceName => ({ value: instanceName, label: `${instanceName} (${group.type})` }))
+  );
+  const activityInstanceOptions = data.activities.flatMap(activity =>
+    Array.from({ length: Math.max(0, activity.count) }, (_, index) => ({
+      value: buildActivityInstanceName(activity.name, index + 1),
+      label: `${activity.name} #${index + 1}`,
+    }))
+  );
+  const activityNameByInstance = Object.fromEntries(
+    data.activities.flatMap(activity =>
+      Array.from({ length: Math.max(0, activity.count) }, (_, index) => [
+        buildActivityInstanceName(activity.name, index + 1),
+        activity.name.trim(),
+      ])
+    )
+  );
+
+  const getRoleOptionsForActivity = (activityName: string) => Array.from(new Set(
+    data.roles
+      .filter(role => role.activityName.trim() === activityName.trim())
+      .map(role => role.roleName.trim())
+      .filter(Boolean)
+  )).map(roleName => ({ value: roleName, label: roleName }));
+
+  const getDefaultConstraintPatch = (type: ConstraintType): Partial<EditorConstraint> => {
+    const defaultActivity = activityOptions[0]?.value || '';
+    const defaultInstance = activityInstanceOptions[0]?.value || '';
+    const defaultRoleForActivity = getRoleOptionsForActivity(defaultActivity)[0]?.value || '';
+    const defaultRoleForInstance = getRoleOptionsForActivity(activityNameByInstance[defaultInstance] || '')[0]?.value || '';
+
+    if (type === 'cardinality_per_activity') {
+      return {
+        type,
+        activity: defaultActivity,
+        role: defaultRoleForActivity,
+        target: '',
+        min: 1,
+        max: 1,
+        resourceType: '',
+        scope: 'slot',
+        activityInstance: '',
+        resource: '',
+      };
+    }
+
+    if (type === 'resource_exclusivity') {
+      return {
+        type,
+        activity: defaultActivity,
+        role: '',
+        target: 'slot',
+        min: 1,
+        max: 1,
+        resourceType: resourceTypeOptions[0]?.value || '',
+        scope: 'slot',
+        activityInstance: '',
+        resource: '',
+      };
+    }
+
+    return {
+      type,
+      activity: '',
+      role: defaultRoleForInstance,
+      target: 'slot',
+      min: 1,
+      max: 1,
+      resourceType: '',
+      scope: 'slot',
+      activityInstance: defaultInstance,
+      resource: resourceInstanceOptions[0]?.value || '',
+    };
+  };
+
+  const updateConstraint = (id: string, patch: Partial<EditorConstraint>) => {
+    onChange({
+      ...data,
+      constraints: data.constraints.map(constraint => constraint.id === id ? { ...constraint, ...patch } : constraint),
+    });
+  };
+
+  const addConstraint = (type: ConstraintType) => {
+    onChange({
+      ...data,
+      constraints: [...data.constraints, {
+        ...emptyConstraint(),
+        id: createId(),
+        ...getDefaultConstraintPatch(type),
+      }],
+    });
+  };
+
+  const getDefaultPreferencePatch = (type: PreferenceType): Partial<EditorPreference> => {
+    if (type === 'avoid_participation_on_date') {
+      return {
+        type,
+        resource: resourceInstanceOptions[0]?.value || '',
+        date: data.days[0] || DAYS[0],
+        activity: '',
+        scope: 'day',
+        max: 1,
+        weight: 10,
+      };
+    }
+
+    return {
+      type,
+      resource: '',
+      date: data.days[0] || DAYS[0],
+      activity: activityOptions[0]?.value || '',
+      scope: 'day',
+      max: 1,
+      weight: 5,
+    };
+  };
+
+  const updatePreference = (id: string, patch: Partial<EditorPreference>) => {
+    onChange({
+      ...data,
+      preferences: data.preferences.map(preference => preference.id === id ? { ...preference, ...patch } : preference),
+    });
+  };
+
+  const addPreference = (type: PreferenceType) => {
+    onChange({
+      ...data,
+      preferences: [...data.preferences, {
+        ...emptyPreference(),
+        id: createId(),
+        ...getDefaultPreferencePatch(type),
+      }],
+    });
+  };
+
+  const renderPreferenceFields = (preference: EditorPreference) => {
+    if (preference.type === 'avoid_participation_on_date') {
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 0.8fr', gap: '12px', alignItems: 'end' }}>
+          <Select label="Ressource" value={preference.resource || ''} onChange={value => updatePreference(preference.id, { resource: value })}
+            options={[{ value: '', label: '— Ressource —' }, ...resourceInstanceOptions]}
+          />
+          <Select label="Jour" value={preference.date || ''} onChange={value => updatePreference(preference.id, { date: value })}
+            options={(data.days.length > 0 ? data.days : DAYS).map(day => ({ value: day, label: day }))}
+          />
+          <NumberInput label="Poids" value={preference.weight ?? 10} onChange={value => updatePreference(preference.id, { weight: value })} min={1} max={999} />
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 0.8fr 0.8fr', gap: '12px', alignItems: 'end' }}>
+        <Select label="Activité" value={preference.activity || ''} onChange={value => updatePreference(preference.id, { activity: value })}
+          options={[{ value: '', label: '— Activité —' }, ...activityOptions]}
+        />
+        <Select label="Scope" value={preference.scope || 'day'} onChange={value => updatePreference(preference.id, { scope: value })}
+          options={[{ value: 'slot', label: 'slot' }, { value: 'day', label: 'day' }]}
+        />
+        <NumberInput label="Max" value={preference.max ?? 1} onChange={value => updatePreference(preference.id, { max: value })} min={1} max={99} />
+        <NumberInput label="Poids" value={preference.weight ?? 5} onChange={value => updatePreference(preference.id, { weight: value })} min={1} max={999} />
+      </div>
+    );
+  };
+
+  const renderConstraintFields = (constraint: EditorConstraint) => {
+    if (constraint.type === 'cardinality_per_activity') {
+      const activityRoleOptions = getRoleOptionsForActivity(constraint.activity || '');
+
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1.2fr 1fr 1fr 0.8fr 0.8fr', gap: '12px', alignItems: 'end' }}>
+          <Select label="Activité" value={constraint.activity || ''} onChange={value => updateConstraint(constraint.id, { activity: value })}
+            options={[{ value: '', label: '— Activité —' }, ...activityOptions]}
+          />
+          <Select label="Mode" value={constraint.role?.trim() ? 'role' : 'target'} onChange={value => updateConstraint(constraint.id, value === 'role' ? { role: activityRoleOptions[0]?.value || '', target: '' } : { target: targetOptions[0]?.value || 'slot', role: '' })}
+            options={[{ value: 'target', label: 'Cible' }, { value: 'role', label: 'Rôle' }]}
+          />
+          {constraint.role?.trim() ? (
+            <Select label="Rôle" value={constraint.role || ''} onChange={value => updateConstraint(constraint.id, { role: value })}
+              options={[{ value: '', label: '— Rôle —' }, ...activityRoleOptions]}
+            />
+          ) : (
+            <Select label="Cible" value={constraint.target || 'slot'} onChange={value => updateConstraint(constraint.id, { target: value })}
+              options={targetOptions}
+            />
+          )}
+          <NumberInput label="Min" value={constraint.min ?? 1} onChange={value => updateConstraint(constraint.id, { min: value })} min={0} max={99} />
+          <NumberInput label="Max" value={constraint.max ?? 1} onChange={value => updateConstraint(constraint.id, { max: value })} min={0} max={99} />
+        </div>
+      );
+    }
+
+    if (constraint.type === 'resource_exclusivity') {
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 1fr 0.8fr', gap: '12px', alignItems: 'end' }}>
+          <Select label="Type de ressource" value={constraint.resourceType || ''} onChange={value => updateConstraint(constraint.id, { resourceType: value })}
+            options={[{ value: '', label: '— Ressource —' }, ...resourceTypeOptions]}
+          />
+          <Select label="Activité" value={constraint.activity || ''} onChange={value => updateConstraint(constraint.id, { activity: value })}
+            options={[{ value: '', label: '— Activité —' }, ...activityOptions]}
+          />
+          <Select label="Scope" value={constraint.scope || 'slot'} onChange={value => updateConstraint(constraint.id, { scope: value })}
+            options={[{ value: 'slot', label: 'slot' }, { value: 'day', label: 'day' }]}
+          />
+          <NumberInput label="Max" value={constraint.max ?? 1} onChange={value => updateConstraint(constraint.id, { max: value })} min={0} max={99} />
+        </div>
+      );
+    }
+
+    const instanceRoleOptions = getRoleOptionsForActivity(activityNameByInstance[constraint.activityInstance || ''] || '');
+
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px', alignItems: 'end' }}>
+        <Select label="Instance d’activité" value={constraint.activityInstance || ''} onChange={value => updateConstraint(constraint.id, { activityInstance: value })}
+          options={[{ value: '', label: '— Instance —' }, ...activityInstanceOptions]}
+        />
+        <Select label="Rôle" value={constraint.role || ''} onChange={value => updateConstraint(constraint.id, { role: value })}
+          options={[{ value: '', label: '— Rôle —' }, ...instanceRoleOptions]}
+        />
+        <Select label="Ressource" value={constraint.resource || ''} onChange={value => updateConstraint(constraint.id, { resource: value })}
+          options={[{ value: '', label: '— Ressource —' }, ...resourceInstanceOptions]}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '14px', background: 'rgba(56,189,248,0.05)', borderRadius: '12px', border: '1px solid rgba(56,189,248,0.1)', fontSize: '13px', color: 'var(--text-secondary)' }}>
+        Les contraintes ci-dessous sont compatibles avec le DSL backend et le solveur. Chaque correspondance doit être complète pour éviter les erreurs de validation.
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {CONSTRAINT_TYPES.map(template => (
+          <Button key={template.value} variant="secondary" onClick={() => addConstraint(template.value)}>
+            + {template.label}
+          </Button>
+        ))}
+      </div>
+
+      {data.constraints.map(constraint => (
+        <div key={constraint.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: isMobile ? 'flex-start' : 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <input type="checkbox" checked={constraint.enabled} onChange={event => updateConstraint(constraint.id, { enabled: event.target.checked })} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+              <span style={{ fontSize: '14px', fontWeight: 600 }}>{CONSTRAINT_TYPES.find(item => item.value === constraint.type)?.label}</span>
+            </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
+              <Select value={constraint.type} onChange={value => updateConstraint(constraint.id, { ...emptyConstraint(), id: constraint.id, enabled: constraint.enabled, ...getDefaultConstraintPatch(value as ConstraintType) })}
+                options={CONSTRAINT_TYPES.map(item => ({ value: item.value, label: item.label }))}
+              />
+              <button onClick={() => onChange({ ...data, constraints: data.constraints.filter(item => item.id !== constraint.id) })} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+            </div>
+          </div>
+          {renderConstraintFields(constraint)}
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{describeConstraint(constraint)}</div>
+        </div>
+      ))}
+
+      <div style={{ padding: '14px', background: 'rgba(167,139,250,0.06)', borderRadius: '12px', border: '1px solid rgba(167,139,250,0.15)', fontSize: '13px', color: 'var(--text-secondary)' }}>
+        Les préférences sont des contraintes souples. Elles guident le solveur sans bloquer toute la résolution.
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {PREFERENCE_TYPES.map(template => (
+          <Button key={template.value} variant="secondary" onClick={() => addPreference(template.value)}>
+            + {template.label}
+          </Button>
+        ))}
+      </div>
+
+      {data.preferences.map(preference => (
+        <div key={preference.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: isMobile ? 'flex-start' : 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <input type="checkbox" checked={preference.enabled} onChange={event => updatePreference(preference.id, { enabled: event.target.checked })} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+              <span style={{ fontSize: '14px', fontWeight: 600 }}>{PREFERENCE_TYPES.find(item => item.value === preference.type)?.label}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
+              <Select value={preference.type} onChange={value => updatePreference(preference.id, { ...emptyPreference(), id: preference.id, enabled: preference.enabled, ...getDefaultPreferencePatch(value as PreferenceType) })}
+                options={PREFERENCE_TYPES.map(item => ({ value: item.value, label: item.label }))}
+              />
+              <button onClick={() => onChange({ ...data, preferences: data.preferences.filter(item => item.id !== preference.id) })} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+            </div>
+          </div>
+          {renderPreferenceFields(preference)}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+interface Step7Props {
+  data: EditorFormData;
+  planning: Planning | null;
+  selectedSolver: string;
+  onSolverChange: (solver: string) => void;
+  solvers: AvailableSolver[];
+  loadingSolvers: boolean;
+  onGenerateReport: () => void;
+}
+
+interface AvailableSolver { id: string; label: string; isDefault: boolean; }
+
+const Step7: React.FC<Step7Props> = ({ data, planning, selectedSolver, onSolverChange, solvers, loadingSolvers, onGenerateReport }) => {
+  const { isMobile } = useResponsive();
+  const { projects } = useApp();
+  const project = projects.find(item => item.id === data.projectId);
+
+  const roleGroups = data.activities.map(activity => ({
+    activityName: activity.name,
+    roles: data.roles.filter(role => role.activityName.trim() === activity.name.trim()),
+  }));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <Card>
+        <h3 style={{ marginTop: 0, marginBottom: '12px' }}>Résumé général</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+          <div><strong>Titre :</strong> {data.title || '—'}</div>
+          <div><strong>Projet :</strong> {project?.name || '—'}</div>
+          <div><strong>Description :</strong> {data.description || '—'}</div>
+          <div><strong>Priorité :</strong> {data.priority || '—'}</div>
+          <div><strong>Jours :</strong> {data.days.join(', ') || '—'}</div>
+          <div><strong>Créneaux/jour :</strong> {data.slotsPerDay || '—'}</div>
+          <div><strong>Heures :</strong> {data.startTime} - {data.endTime}</div>
+          <div><strong>Durée créneau :</strong> {data.slotDuration} min</div>
+        </div>
+      </Card>
+
+      <Card>
+        <h3 style={{ marginTop: 0, marginBottom: '12px' }}>Activités</h3>
+        {data.activities.length === 0 ? (
+          <div style={{ color: 'var(--text-secondary)' }}>Aucune activité.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {data.activities.map(activity => (
+              <div key={activity.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', paddingBottom: '10px', borderBottom: '1px solid var(--border-subtle)', flexDirection: isMobile ? 'column' : 'row' }}>
+                <strong>{activity.name}</strong>
+                <span style={{ color: 'var(--text-secondary)' }}>
+                  {activity.count} occurrence(s) • {activity.duration} créneau(x)
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <h3 style={{ marginTop: 0, marginBottom: '12px' }}>Ressources</h3>
+        {data.resourceGroups.length === 0 ? (
+          <div style={{ color: 'var(--text-secondary)' }}>Aucune ressource.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {data.resourceGroups.map(group => (
+              <div key={group.id}>
+                <strong>{group.type}</strong>
+                <div style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  {group.quantity} ressource(s): {buildResolvedResourceNames(group).join(', ') || 'Aucune'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <h3 style={{ marginTop: 0, marginBottom: '12px' }}>Correspondances activité / rôle / ressource</h3>
+        {roleGroups.every(group => group.roles.length === 0) ? (
+          <div style={{ color: 'var(--text-secondary)' }}>Aucune correspondance définie.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {roleGroups.map(group => (
+              <div key={group.activityName}>
+                <strong>{group.activityName || 'Activité sans nom'}</strong>
+                {group.roles.length === 0 ? (
+                  <div style={{ color: '#f87171', marginTop: '4px' }}>Aucun rôle associé.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                    {group.roles.map(role => (
+                      <div key={role.id} style={{ color: 'var(--text-secondary)' }}>
+                        {role.roleName} → {role.resourceType}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <h3 style={{ marginTop: 0, marginBottom: '12px' }}>Contraintes actives</h3>
+        {data.constraints.filter(constraint => constraint.enabled).length === 0 ? (
+          <div style={{ color: 'var(--text-secondary)' }}>Aucune contrainte active.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {data.constraints.filter(constraint => constraint.enabled).map(constraint => (
+              <div key={constraint.id} style={{ color: 'var(--text-secondary)' }}>
+                {describeConstraint(constraint)}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* ── Solveur + lancement ── */}
+      <div style={{
+        border: '1px solid var(--border-default)',
+        borderRadius: '14px',
+        overflow: 'hidden',
+      }}>
+        {/* Titre de section */}
+        <div style={{
+          padding: '14px 20px',
+          background: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', flexShrink: 0 }} />
+          <span style={{ fontWeight: 700, fontSize: '14px' }}>Lancement de la résolution</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 4 }}>
+            Tout est prêt — choisissez un solveur et cliquez sur <em>Planifier / Résoudre</em>
+          </span>
+        </div>
+
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Solveur selector */}
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+              Solveur
+            </div>
+            {loadingSolvers ? (
+              <div style={{ color: 'var(--text-secondary)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 14, height: 14, border: '2px solid var(--border-default)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                Détection des solveurs disponibles…
+              </div>
+            ) : solvers.length === 0 ? (
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
+                Aucun solveur détecté — Highs sera utilisé par défaut.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {solvers.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => onSolverChange(s.id)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      border: selectedSolver === s.id
+                        ? '2px solid var(--accent)'
+                        : '1px solid var(--border-default)',
+                      background: selectedSolver === s.id
+                        ? 'rgba(var(--accent-rgb, 59,130,246), 0.08)'
+                        : 'var(--bg-elevated)',
+                      color: selectedSolver === s.id ? 'var(--accent)' : 'var(--text-primary)',
+                      fontSize: '13px',
+                      fontWeight: selectedSolver === s.id ? 700 : 400,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    {selectedSolver === s.id && (
+                      <span style={{ fontSize: '10px', lineHeight: 1 }}>✓</span>
+                    )}
+                    {s.label}
+                    {s.isDefault && (
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)', background: 'var(--bg-surface)', padding: '1px 6px', borderRadius: '999px', border: '1px solid var(--border-subtle)' }}>
+                        défaut
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 8 }}>
+              Highs est recommandé pour la planification. Gecode et Chuffed sont adaptés aux contraintes combinatoires.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {planning?.lastErrorMessage && (
+        <Card style={{ borderColor: 'rgba(248,113,113,0.2)', background: 'rgba(248,113,113,0.04)' }}>
+          <h4 style={{ marginTop: 0, color: '#f87171' }}>Dernière erreur backend</h4>
+          <p style={{ marginBottom: planning.errorDetails?.length ? '12px' : 0 }}>{planning.lastErrorMessage}</p>
+          {planning.errorDetails && planning.errorDetails.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)' }}>
+              {planning.errorDetails.map(detail => <li key={detail}>{detail}</li>)}
+            </ul>
+          )}
+          {planning.errorHint && (
+            <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              <strong>Piste :</strong> {planning.errorHint}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {planning?.solutionOutput && (
+        <div style={{
+          border: '1px solid #10b981',
+          borderRadius: 14,
+          padding: '20px 24px',
+          background: 'rgba(16, 185, 129, 0.06)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 14,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40, height: 40,
+              borderRadius: '50%',
+              background: 'rgba(16, 185, 129, 0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <span style={{ fontSize: 20 }}>✓</span>
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '15px', color: '#10b981' }}>Planification résolue avec succès</div>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 2 }}>
+                Le solveur a trouvé une solution optimale. Générez le rapport pour visualiser le résultat.
+              </div>
+            </div>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={onGenerateReport}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}
+          >
+            <span style={{ fontSize: 15 }}>📄</span>
+            Générer le rapport
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const PlanningEditorPage: React.FC = () => {
+  const { selectedPlanning, navigate, savePlanningData, solvePlanning, toast } = useApp();
+  const { isMobile, isCompact } = useResponsive();
+  const [currentStep, setCurrentStep] = useState(selectedPlanning?.currentStep || 1);
+  const [formData, setFormData] = useState<EditorFormData>(selectedPlanning ? deriveFormData(selectedPlanning) : defaultFormData());
+  const [saving, setSaving] = useState(false);
+  const [solving, setSolving] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [saveTime, setSaveTime] = useState<string | null>(null);
+  const [exitConfirm, setExitConfirm] = useState(false);
+  const [selectedSolver, setSelectedSolver] = useState<string>('highs');
+  const [solvers, setSolvers] = useState<AvailableSolver[]>([]);
+  const [loadingSolvers, setLoadingSolvers] = useState(true);
+
+  // ── DSL Editor panel state ──────────────────────────────────────────────────
+  const [showEditor, setShowEditor] = useState(true);
+  const [dslSource, setDslSource] = useState(() =>
+    getStoredDslSource(selectedPlanning, selectedPlanning ? deriveFormData(selectedPlanning) : defaultFormData()),
+  );
+  const [dslDirty, setDslDirty] = useState(false);
+  const [editorSolving, setEditorSolving] = useState(false);
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [editorWidth, setEditorWidth] = useState(480);
+  const [editorFullscreen, setEditorFullscreen] = useState(false);
+  const [showConsole, setShowConsole] = useState(false);
+  const [consoleHeight, setConsoleHeight] = useState(180);
+  const [consoleTab, setConsoleTab] = useState<'errors' | 'output'>('errors');
+  const [jsonValidationMarkers, setJsonValidationMarkers] = useState<Array<{
+    severity: number; message: string; startLineNumber: number; startColumn: number;
+  }>>([]);
+  const [semanticValidationMarkers, setSemanticValidationMarkers] = useState<Array<{
+    severity: number; message: string; startLineNumber: number; startColumn: number;
+  }>>([]);
+  const [solverOutput, setSolverOutput] = useState<string | null>(null);
+  const [solverWarnings, setSolverWarnings] = useState<string[]>([]);
+  const [dslAutoSaving, setDslAutoSaving] = useState(false);
+  const [showSolverPicker, setShowSolverPicker] = useState(false);
+  // drag refs
+  const dragPanelStartX = useRef(0);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const dragPanelStartW = useRef(480);
+  const dragConsoleStartY = useRef(0);
+  const dragConsoleStartH = useRef(180);
+  const editorInstanceRef = useRef<any>(null);
+  const monacoRef = useRef<any>(null);
+  const planningHydratedRef = useRef<string | null>(null);
+  const lastSyncedDslRef = useRef<string>('');
+  const lastPersistedDslRef = useRef<string>('');
+  const validationMarkers = useMemo(
+    () => [...jsonValidationMarkers, ...semanticValidationMarkers],
+    [jsonValidationMarkers, semanticValidationMarkers]
+  );
+
+  useEffect(() => {
+    if (!selectedPlanning) {
+      return;
+    }
+
+    if (planningHydratedRef.current === selectedPlanning.id) {
+      return;
+    }
+
+    const nextFormData = deriveFormData(selectedPlanning);
+    setCurrentStep(selectedPlanning.currentStep || 1);
+    setFormData(nextFormData);
+    setDslSource(getStoredDslSource(selectedPlanning, nextFormData));
+    setDslDirty(false);
+    setJsonValidationMarkers([]);
+    setSemanticValidationMarkers([]);
+    setSolverOutput(selectedPlanning.solutionOutput ?? null);
+    setSolverWarnings(selectedPlanning.solutionWarnings ?? []);
+    setEditorError(null);
+    setSaveTime(null);
+    planningHydratedRef.current = selectedPlanning.id;
+    lastSyncedDslRef.current = getStoredDslSource(selectedPlanning, nextFormData);
+    lastPersistedDslRef.current = getStoredDslSource(selectedPlanning, nextFormData);
+  }, [selectedPlanning]);
+
+  useEffect(() => {
+    if (!selectedPlanning) {
+      planningHydratedRef.current = null;
+      return;
+    }
+
+    setSolverOutput(selectedPlanning.solutionOutput ?? null);
+    setSolverWarnings(selectedPlanning.solutionWarnings ?? []);
+  }, [selectedPlanning]);
+
+  // Load solvers once at page level
+  useEffect(() => {
+    api.get<{ data: { solvers: AvailableSolver[] } }>('/api/solvers')
+      .then((res: { data: { data: { solvers: AvailableSolver[] } } }) => {
+        const list = res.data.data.solvers;
+        setSolvers(list);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingSolvers(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync form data → DSL editor (only when user has NOT manually edited the DSL)
+  useEffect(() => {
+    if (!dslDirty) {
+      setDslSource(buildPlanningDslSource(formData));
+    }
+  }, [formData, dslDirty]);
+
+  useEffect(() => {
+    if (!monacoRef.current) {
+      return;
+    }
+
+    (monacoRef.current.languages as any).json.jsonDefaults.setDiagnosticsOptions({
+      validate: true,
+      allowComments: false,
+      enableSchemaRequest: false,
+      schemas: [{
+        uri: 'https://planning-spec/schema.json',
+        fileMatch: ['planning-spec.json', 'planning-spec.planning'],
+        schema: buildPlanningSchema(formData),
+      }],
+    });
+  }, [formData]);
+
+  // Validate DSL source (debounced) using the backend Langium pipeline.
+  useEffect(() => {
+    if (!dslSource.trim()) {
+      const skeleton = buildPlanningDslSource(formData);
+      setDslSource(skeleton);
+      setDslDirty(false);
+      lastSyncedDslRef.current = skeleton;
+      return;
+    }
+
+    if (!selectedPlanning || !dslSource.trim()) {
+      setSemanticValidationMarkers([]);
+      return;
+    }
+
+    const jsonErrorCount = jsonValidationMarkers.filter(marker => marker.severity === 8).length;
+    if (jsonErrorCount > 0) {
+      setSemanticValidationMarkers([]);
+      setEditorError(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      const canonicalized = canonicalizePlanningSource(dslSource, formData);
+      if (!canonicalized) {
+        let parsedModel: unknown;
+        try {
+          parsedModel = JSON.parse(dslSource);
+          void parsedModel;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Source invalide.';
+          const position = getJsonErrorPosition(dslSource, message);
+          setEditorError(message);
+          setSemanticValidationMarkers([{
+            severity: 8,
+            message,
+            startLineNumber: position.line,
+            startColumn: position.column,
+          }]);
+          setShowConsole(true);
+          setConsoleTab('errors');
+          return;
+        }
+      }
+
+      const { canonicalSource, formData: nextFormData } = canonicalized ?? {
+        canonicalSource: dslSource,
+        formData,
+      };
+
+      try {
+        await api.post('/api/validate-source', { source: canonicalSource });
+        setSemanticValidationMarkers([]);
+        setEditorError(null);
+
+        if (canonicalSource !== lastSyncedDslRef.current) {
+          setFormData(nextFormData);
+          lastSyncedDslRef.current = canonicalSource;
+        }
+      } catch (error: any) {
+        const details = Array.isArray(error?.response?.data?.error?.details) ? error.response.data.error.details : [];
+        setEditorError(typeof error?.response?.data?.error?.message === 'string' ? error.response.data.error.message : null);
+        const nextMarkers = details.map((detail: string, index: number) => {
+          const match = /^L(\d+):C(\d+)\s*-\s*(.+)$/.exec(detail);
+          return {
+            severity: 8,
+            message: match ? match[3] : detail,
+            startLineNumber: match ? Number(match[1]) : index + 1,
+            startColumn: match ? Number(match[2]) : 1,
+          };
+        });
+        setSemanticValidationMarkers(nextMarkers);
+        if (nextMarkers.length > 0) {
+          setShowConsole(true);
+          setConsoleTab('errors');
+        }
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [dslSource, selectedPlanning, formData, jsonValidationMarkers]);
+
+  useEffect(() => {
+    if (!editorInstanceRef.current || !monacoRef.current) {
+      return;
+    }
+
+    const model = editorInstanceRef.current.getModel?.();
+    if (!model || model.getLanguageId?.() !== 'json') {
+      return;
+    }
+
+    monacoRef.current.editor.setModelMarkers(
+      model,
+      'planning-spec-semantic',
+      semanticValidationMarkers.map(marker => ({
+        severity: marker.severity === 8 ? monacoRef.current.MarkerSeverity.Error : monacoRef.current.MarkerSeverity.Warning,
+        message: marker.message,
+        startLineNumber: marker.startLineNumber,
+        startColumn: marker.startColumn,
+        endLineNumber: marker.startLineNumber,
+        endColumn: marker.startColumn + 1,
+      }))
+    );
+  }, [semanticValidationMarkers]);
+
+  // Auto-sync DSL → platform when dirty and valid (debounced)
+  useEffect(() => {
+    if (!dslDirty || !selectedPlanning) return;
+    const errorCount = validationMarkers.filter(m => m.severity === 8).length;
+    if (errorCount > 0) return;
+    const timer = setTimeout(async () => {
+      if (dslSource === lastPersistedDslRef.current) {
+        return;
+      }
+
+      const canonicalized = canonicalizePlanningSource(dslSource, formData);
+      const sourceToPersist = canonicalized?.canonicalSource ?? dslSource;
+      const formDataToPersist = canonicalized?.formData ?? formData;
+
+      setDslAutoSaving(true);
+      await savePlanningData(selectedPlanning.id, {
+        title: formDataToPersist.title.trim() || selectedPlanning.title,
+        projectId: formDataToPersist.projectId || selectedPlanning.projectId,
+        data: { ...buildPlanningPayload(formDataToPersist), dslSource: sourceToPersist },
+      });
+      setDslAutoSaving(false);
+      setDslDirty(false);
+      lastPersistedDslRef.current = sourceToPersist;
+      setSaveTime(new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [dslDirty, dslSource, validationMarkers, formData, selectedPlanning, savePlanningData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const resyncDsl = useCallback(() => {
+    const nextSource = buildPlanningDslSource(formData);
+    setDslSource(nextSource);
+    setDslDirty(false);
+    lastSyncedDslRef.current = nextSource;
+    lastPersistedDslRef.current = nextSource;
+    setEditorError(null);
+  }, [formData]);
+
+  // Close solver picker on outside click
+  useEffect(() => {
+    if (!showSolverPicker) return;
+    const handler = () => setShowSolverPicker(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [showSolverPicker]);
+
+  const handleExport = () => {
+    const blob = new Blob([dslSource], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(formData.title || 'planification').replace(/\s+/g, '_')}.planning`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string;
+      setDslSource(content);
+      setDslDirty(true);
+      setEditorError(null);
+      toast('Source .planning importée avec succès.', 'success');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const startResizePanel = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragPanelStartX.current = e.clientX;
+    dragPanelStartW.current = editorWidth;
+    const onMove = (ev: MouseEvent) => {
+      const delta = dragPanelStartX.current - ev.clientX;
+      setEditorWidth(Math.max(320, Math.min(960, dragPanelStartW.current + delta)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const startResizeConsole = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragConsoleStartY.current = e.clientY;
+    dragConsoleStartH.current = consoleHeight;
+    const onMove = (ev: MouseEvent) => {
+      const delta = dragConsoleStartY.current - ev.clientY;
+      setConsoleHeight(Math.max(80, Math.min(500, dragConsoleStartH.current + delta)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const stepError = useMemo(() => getStepError(currentStep, formData), [currentStep, formData]);
+
+  if (!selectedPlanning) {
+    return (
+      <AppLayout>
+        <Topbar title="Editeur de planification" subtitle="Aucune planification selectionnee" actions={<Button variant="secondary" size="sm" onClick={() => navigate('plannings')} style={{ width: isMobile ? '100%' : undefined }}>← Retour</Button>} />
+        <div style={{ flex: 1, padding: isMobile ? '16px' : '24px' }}>
+          <Card style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
+            <h2 style={{ marginTop: 0 }}>Aucune planification chargee</h2>
+            <p style={{ color: 'var(--text-secondary)' }}>
+              Retourne dans la liste des planifications pour en ouvrir une ou en creer une nouvelle.
+            </p>
+            <Button variant="primary" onClick={() => navigate('plannings')}>Voir mes planifications</Button>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const totalSteps = STEPS.length;
+  const progressValue = Math.round(((currentStep - 1) / totalSteps) * 100);
+
+  const persist = async (targetStep = currentStep, silent = false) => {
+    setSaving(true);
+
+    const nextStatus = selectedPlanning.status === 'done'
+      ? 'done'
+      : targetStep <= 1
+        ? 'draft'
+        : 'active';
+
+    const planning = await savePlanningData(selectedPlanning.id, {
+      title: formData.title.trim(),
+      projectId: formData.projectId,
+      currentStep: targetStep,
+      totalSteps,
+      progress: Math.round((targetStep / totalSteps) * 100),
+      status: nextStatus,
+      data: { ...buildPlanningPayload(formData), dslSource },
+    });
+
+    setSaving(false);
+
+    if (!planning) {
+      return false;
+    }
+
+    setCurrentStep(targetStep);
+    setSaveTime(new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+    if (!silent) {
+      toast('Progression sauvegardee.', 'success');
+    }
+    return true;
+  };
+
+  const goToStep = async (step: number) => {
+    if (step > currentStep + 1) {
+      return;
+    }
+
+    if (step > currentStep && stepError) {
+      toast(stepError, 'error');
+      return;
+    }
+
+    await persist(step, true);
+  };
+
+  const handleSolve = async () => {
+    const firstBlockingStep = STEPS.find(step => step.id < totalSteps && getStepError(step.id, formData));
+    if (firstBlockingStep) {
+      setCurrentStep(firstBlockingStep.id);
+      toast(getStepError(firstBlockingStep.id, formData) || 'Des informations sont manquantes.', 'error');
+      return;
+    }
+
+    setSolving(true);
+    const source = buildPlanningDslSource(formData);
+    setDslSource(source);
+    setDslDirty(false);
+    lastSyncedDslRef.current = source;
+    const payload = { ...buildPlanningPayload(formData), dslSource: source };
+    const saved = await savePlanningData(selectedPlanning.id, {
+      title: formData.title.trim(),
+      projectId: formData.projectId,
+      currentStep: totalSteps,
+      totalSteps,
+      progress: 100,
+      status: 'active',
+      data: payload,
+    });
+
+    if (!saved) {
+      setSolving(false);
+      return;
+    }
+
+    lastPersistedDslRef.current = source;
+
+    const result = await solvePlanning(selectedPlanning.id, undefined, source, selectedSolver || undefined);
+    setSolving(false);
+
+    if (result) {
+      toast('Resolution terminee avec succes.', 'success');
+    }
+  };
+
+  const handleGenerateReport = () => {
+    setReportLoading(true);
+    setTimeout(() => {
+      navigate('report', { planning: selectedPlanning });
+      setReportLoading(false);
+    }, 700);
+  };
+
+  const handleEditorSolve = async () => {
+    if (dslErrorCount > 0) {
+      setEditorError('La source .planning contient des erreurs de validation.');
+      setConsoleTab('errors');
+      setShowConsole(true);
+      return;
+    }
+    const canonicalized = canonicalizePlanningSource(dslSource, formData);
+    const sourceToSolve = canonicalized?.canonicalSource ?? dslSource;
+    const formDataToPersist = canonicalized?.formData ?? formData;
+    setEditorError(null);
+    setSolverOutput(null);
+    setSolverWarnings([]);
+    setEditorSolving(true);
+    setConsoleTab('output');
+    setShowConsole(true);
+    const saved = await savePlanningData(selectedPlanning.id, {
+      title: formDataToPersist.title.trim() || selectedPlanning.title,
+      projectId: formDataToPersist.projectId || selectedPlanning.projectId,
+      currentStep: totalSteps,
+      totalSteps,
+      progress: 100,
+      status: 'active',
+      data: { ...buildPlanningPayload(formDataToPersist), dslSource: sourceToSolve },
+    });
+    if (!saved) {
+      setEditorSolving(false);
+      return;
+    }
+    lastPersistedDslRef.current = sourceToSolve;
+    const result = await solvePlanning(selectedPlanning.id, undefined, sourceToSolve, selectedSolver || undefined);
+    setEditorSolving(false);
+    if (result) {
+      setSolverOutput(result.output);
+      setSolverWarnings(result.warnings ?? []);
+      setConsoleTab('output');
+      toast('Résolution terminée avec succès.', 'success');
+    } else {
+      setConsoleTab('errors');
+    }
+  };
+
+  const dslErrorCount = validationMarkers.filter(m => m.severity === 8).length;
+  const dslWarnCount  = validationMarkers.filter(m => m.severity === 4).length;
+
+  const editorPanelStyle: React.CSSProperties = editorFullscreen || isCompact ? {
+    position: 'fixed', inset: 0, zIndex: 9999,
+    display: 'flex', flexDirection: 'column', background: '#1e1e1e',
+  } : {
+    width: editorWidth, flexShrink: 0, position: 'relative',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    background: '#1e1e1e', borderLeft: '1px solid #3c3c3c',
+  };
+
+  const iconBtn = (color = '#cccccc', active = false): React.CSSProperties => ({
+    background: active ? 'rgba(56,189,248,0.15)' : 'rgba(255,255,255,0.05)',
+    border: `1px solid ${active ? 'rgba(56,189,248,0.4)' : 'rgba(255,255,255,0.1)'}`,
+    color: active ? '#38bdf8' : color,
+    borderRadius: 6, padding: '3px 8px',
+    fontSize: 12, cursor: 'pointer', fontWeight: 500,
+    transition: 'all 0.12s',
+  });
+
+  const stepComponents = [
+    <Step1 key="step-1" data={formData} onChange={setFormData} />,
+    <Step2 key="step-2" data={formData} onChange={setFormData} />,
+    <Step3 key="step-3" data={formData} onChange={setFormData} />,
+    <Step4 key="step-4" data={formData} onChange={setFormData} />,
+    <Step5 key="step-5" data={formData} onChange={setFormData} />,
+    <Step6 key="step-6" data={formData} onChange={setFormData} />,
+    <Step7 key="step-7" data={formData} planning={selectedPlanning} selectedSolver={selectedSolver} onSolverChange={setSelectedSolver} solvers={solvers} loadingSolvers={loadingSolvers} onGenerateReport={handleGenerateReport} />,
+  ];
+
+  return (
+    <AppLayout>
+      {/* ── Report generation loader overlay ── */}
+      {reportLoading && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 20,
+        }}>
+          <div style={{
+            width: 56, height: 56,
+            border: '4px solid rgba(255,255,255,0.15)',
+            borderTopColor: '#3b82f6',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          <div style={{ color: '#fff', fontWeight: 600, fontSize: 16 }}>Ouverture de l'atelier de rapport…</div>
+          <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>Préparation des données de planification</div>
+        </div>
+      )}
+
+      <Topbar
+        title={formData.title || selectedPlanning.title}
+        subtitle={`Projet : ${selectedPlanning.projectName}`}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
+            {saveTime && !saving && (
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399', display: 'inline-block' }} />
+                Sauvegardé à {saveTime}
+              </span>
+            )}
+            {saving && (
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: 12, height: 12, border: '2px solid var(--text-muted)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />
+                Sauvegarde...
+              </span>
+            )}
+            <StatusBadge status={selectedPlanning.status} pulse={selectedPlanning.status === 'active'} />
+            <Button
+              variant={showEditor ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setShowEditor(v => !v)}
+              style={{ width: isMobile ? '100%' : undefined }}
+            >
+              {showEditor ? '⊠ Masquer l\'éditeur' : '⌨ Éditeur'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setExitConfirm(true)} style={{ width: isMobile ? '100%' : undefined }}>✕ Quitter</Button>
+            <Button variant="secondary" size="sm" onClick={() => { void persist(currentStep, false); }} loading={saving} style={{ width: isMobile ? '100%' : undefined }}>Sauvegarder</Button>
+          </div>
+        }
+      />
+
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', flexDirection: isCompact ? 'column' : 'row' }}>
+        <div style={{
+          width: isCompact ? '100%' : 260,
+          background: 'var(--bg-surface)',
+          borderRight: isCompact ? 'none' : '1px solid var(--border-subtle)',
+          borderBottom: isCompact ? '1px solid var(--border-subtle)' : 'none',
+          padding: isMobile ? '16px' : '24px 16px',
+          display: 'flex',
+          flexDirection: isCompact ? 'row' : 'column',
+          gap: '4px',
+          overflowY: isCompact ? 'hidden' : 'auto',
+          overflowX: isCompact ? 'auto' : 'hidden',
+        }}>
+          <div style={{ marginBottom: isCompact ? 0 : '20px', marginRight: isCompact ? '12px' : 0, minWidth: isCompact ? 220 : undefined, padding: '14px', background: 'var(--bg-card)', borderRadius: '12px', border: '1px solid var(--border-default)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Progression globale</span>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>{progressValue}%</span>
+            </div>
+            <ProgressBar value={progressValue} height={4} />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: isCompact ? 'row' : 'column', gap: '4px', minWidth: isCompact ? 'max-content' : undefined }}>
+            {STEPS.map(step => {
+              const isCompleted = step.id < currentStep;
+              const isCurrent = step.id === currentStep;
+              const isLocked = step.id > currentStep + 1;
+              return (
+                <button key={step.id}
+                  onClick={() => { void goToStep(step.id); }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    textAlign: 'left',
+                    background: isCurrent ? 'rgba(56,189,248,0.1)' : isCompleted ? 'rgba(52,211,153,0.05)' : 'transparent',
+                    cursor: isLocked ? 'not-allowed' : 'pointer',
+                    width: isCompact ? 220 : '100%',
+                    minWidth: isCompact ? 220 : undefined,
+                    transition: 'all 0.15s',
+                    opacity: isLocked ? 0.4 : 1,
+                    outline: isCurrent ? '1px solid rgba(56,189,248,0.25)' : 'none',
+                  }}>
+                  <div style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '13px',
+                    background: isCompleted ? '#34d399' : isCurrent ? 'var(--accent)' : 'var(--bg-elevated)',
+                    color: isCompleted || isCurrent ? '#fff' : 'var(--text-muted)',
+                    border: `2px solid ${isCompleted ? '#34d399' : isCurrent ? 'var(--accent)' : 'var(--border-default)'}`,
+                    fontWeight: 700,
+                  }}>
+                    {isCompleted ? '✓' : step.id}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: isCurrent ? 600 : 500, color: isCurrent ? 'var(--accent)' : isCompleted ? '#34d399' : 'var(--text-secondary)', lineHeight: 1.3 }}>{step.label}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', lineHeight: 1.4 }}>{step.description}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          <div style={{ padding: isMobile ? '16px' : '20px 28px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: 'var(--accent)' }}>
+                {STEPS[currentStep - 1].icon}
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>Étape {currentStep} sur {totalSteps}</div>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>{STEPS[currentStep - 1].label}</h2>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px' : '28px' }}>
+            <div style={{ maxWidth: 820 }}>   {/* ← maxWidth sur un wrapper intérieur */}
+              {stepError && currentStep < totalSteps && (
+                <div style={{ marginBottom: '18px', padding: '12px 14px', borderRadius: '10px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', fontSize: '13px', color: '#f87171' }}>
+                  ⚠ {stepError}
+                </div>
+              )}
+              <div key={currentStep} className="animate-fade-in">
+                {stepComponents[currentStep - 1]}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: isMobile ? '16px' : '16px 28px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: '12px', background: 'var(--bg-surface)' }}>
+            <Button variant="secondary" onClick={() => { if (currentStep > 1) { void goToStep(currentStep - 1); } }} disabled={currentStep === 1}>
+              Retour
+            </Button>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginRight: isMobile ? 0 : '8px', justifyContent: isMobile ? 'center' : 'flex-start', width: isMobile ? '100%' : 'auto', flexWrap: 'wrap' }}>
+                {STEPS.map(step => (
+                  <div key={step.id} style={{ width: step.id === currentStep ? 20 : 6, height: 6, borderRadius: 999, transition: 'all 0.3s', background: step.id < currentStep ? '#34d399' : step.id === currentStep ? 'var(--accent)' : 'var(--bg-overlay)' }} />
+                ))}
+              </div>
+
+              {currentStep < totalSteps ? (
+                <Button variant="primary" onClick={() => { void goToStep(currentStep + 1); }} disabled={!!stepError} style={{ width: isMobile ? '100%' : undefined }}>
+                  Continuer
+                </Button>
+              ) : (
+                <Button variant="success" onClick={() => { void handleSolve(); }} loading={solving} style={{ width: isMobile ? '100%' : undefined }}>
+                  Résoudre la planification
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── DSL Editor panel ── */}
+        {showEditor && (
+          <div style={editorPanelStyle}>
+
+            {/* ── Drag handle (resize panel width) ── */}
+            {!editorFullscreen && !isCompact && (
+              <div
+                onMouseDown={startResizePanel}
+                title="Redimensionner"
+                style={{
+                  position: 'absolute', left: 0, top: 0, bottom: 0, width: 6,
+                  cursor: 'col-resize', zIndex: 10, transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(56,189,248,0.45)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+              />
+            )}
+
+            {/* ── Header ── */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '9px 14px', gap: 8, flexShrink: 0,
+              background: '#2d2d30', borderBottom: '1px solid #3c3c3c', userSelect: 'none',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#cccccc' }}>⌨ Éditeur</span>
+                {dslAutoSaving && (
+                  <span style={{ fontSize: 11, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 9, height: 9, border: '1.5px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                    sync…
+                  </span>
+                )}
+                {dslDirty && !dslAutoSaving && (
+                  <span style={{ fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 99, padding: '1px 7px' }}>
+                    édité
+                  </span>
+                )}
+                {dslErrorCount > 0 && (
+                  <span
+                    onClick={() => { setConsoleTab('errors'); setShowConsole(true); }}
+                    style={{ fontSize: 11, color: '#f87171', background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 99, padding: '1px 7px', cursor: 'pointer' }}
+                  >
+                    ● {dslErrorCount} erreur{dslErrorCount > 1 ? 's' : ''}
+                  </span>
+                )}
+                {dslWarnCount > 0 && (
+                  <span
+                    onClick={() => { setConsoleTab('errors'); setShowConsole(true); }}
+                    style={{ fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 99, padding: '1px 7px', cursor: 'pointer' }}
+                  >
+                    △ {dslWarnCount}
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                {dslDirty && (
+                  <button onClick={resyncDsl} title="Resync depuis le formulaire" style={iconBtn('#a5b4fc')}>
+                    ↺ Resync
+                  </button>
+                )}
+                <button onClick={() => importInputRef.current?.click()} title="Importer un fichier .planning" style={iconBtn('#a5b4fc')}>
+                  ↑ Import
+                </button>
+                <button onClick={handleExport} title="Exporter en fichier .planning" style={iconBtn('#a5b4fc')}>
+                  ↓ Export
+                </button>
+                <button
+                  onClick={() => setEditorFullscreen(v => !v)}
+                  title={editorFullscreen ? 'Réduire' : 'Plein écran'}
+                  style={iconBtn('#cccccc', editorFullscreen)}
+                >
+                  {editorFullscreen ? '⊡' : '⛶'}
+                </button>
+                <button
+                  onClick={() => { setShowEditor(false); setEditorFullscreen(false); }}
+                  title="Fermer l'éditeur"
+                  style={iconBtn()}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* ── Monaco editor ── */}
+            {/* marginLeft: 5 leaves room for the resize drag handle without overlapping Monaco */}
+            <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, marginLeft: 5 }}>
+              <MonacoEditor
+                height="100%"
+                language="json"
+                path="planning-spec.planning"
+                value={dslSource}
+                onChange={(value) => { setDslSource(value ?? ''); setDslDirty(true); }}
+                beforeMount={(monaco) => {
+                  monacoRef.current = monaco;
+                  (monaco.languages as any).json.jsonDefaults.setDiagnosticsOptions({
+                    validate: true,
+                    allowComments: false,
+                    enableSchemaRequest: false,
+                    schemas: [{
+                      uri: 'https://planning-spec/schema.json',
+                      fileMatch: ['planning-spec.json', 'planning-spec.planning'],
+                      schema: buildPlanningSchema(formData),
+                    }],
+                  });
+                }}
+                onMount={(editor, monaco) => {
+                  editorInstanceRef.current = editor;
+                  monacoRef.current = monaco;
+                }}
+                onValidate={(markers) => {
+                  const relevant = markers.filter((marker) => marker.severity >= 4);
+                  setJsonValidationMarkers(relevant.map(marker => ({
+                    severity: marker.severity,
+                    message: marker.message,
+                    startLineNumber: marker.startLineNumber,
+                    startColumn: marker.startColumn,
+                  })));
+                  if (relevant.some(marker => marker.severity === 8)) {
+                    setShowConsole(true);
+                    setConsoleTab('errors');
+                  }
+                }}
+                theme="vs-dark"
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 13,
+                  lineNumbers: 'on',
+                  scrollBeyondLastLine: false,
+                  wordWrap: 'on',
+                  folding: true,
+                  automaticLayout: true,
+                  padding: { top: 12, bottom: 12 },
+                  tabSize: 2,
+                  renderLineHighlight: 'all',
+                  bracketPairColorization: { enabled: true },
+                  readOnly: false,
+                  domReadOnly: false,
+                  suggest: { showWords: true },
+                  quickSuggestions: { other: true, comments: false, strings: true },
+                  suggestOnTriggerCharacters: true,
+                  hover: { enabled: true, delay: 300 },
+                }}
+              />
+            </div>
+
+            {/* ── Console drag handle ── */}
+            {showConsole && (
+              <div
+                onMouseDown={startResizeConsole}
+                title="Redimensionner la console"
+                style={{
+                  height: 5, flexShrink: 0, cursor: 'row-resize',
+                  background: '#3c3c3c', transition: 'background 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#38bdf8'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = '#3c3c3c'; }}
+              />
+            )}
+
+            {/* ── Console panel ── */}
+            {showConsole && (
+              <div style={{ height: consoleHeight, display: 'flex', flexDirection: 'column', flexShrink: 0, background: '#1e1e1e', borderTop: '1px solid #3c3c3c' }}>
+                {/* Console tabs */}
+                <div style={{ display: 'flex', alignItems: 'center', background: '#2d2d30', borderBottom: '1px solid #3c3c3c', padding: '0 8px', flexShrink: 0 }}>
+                  {(['errors', 'output'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setConsoleTab(tab)}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer', padding: '7px 12px',
+                        fontSize: 12, fontWeight: consoleTab === tab ? 600 : 400,
+                        color: consoleTab === tab ? '#cccccc' : '#888888',
+                        borderBottom: consoleTab === tab ? '2px solid #38bdf8' : '2px solid transparent',
+                      }}
+                    >
+                      {tab === 'errors'
+                        ? `Problèmes${dslErrorCount + dslWarnCount > 0 ? ` (${dslErrorCount + dslWarnCount})` : ''}`
+                        : 'Sortie'}
+                    </button>
+                  ))}
+                  <div style={{ flex: 1 }} />
+                  <button
+                    onClick={() => setShowConsole(false)}
+                    style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 14, padding: '0 6px', lineHeight: 1 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                {/* Console body */}
+                <div style={{
+                  flex: 1, overflowY: 'auto', padding: '10px 14px',
+                  fontFamily: '"Cascadia Code", "Fira Code", "Consolas", monospace', fontSize: 12, lineHeight: 1.6,
+                }}>
+                  {consoleTab === 'errors' && (() => {
+                    type Problem = { sev: 'error' | 'warn'; text: string; line: string | null; origin: string };
+                    const rawProblems: Problem[] = [
+                      ...(editorError ? [{
+                        sev: 'error' as const, origin: 'Parse',
+                        text: editorError, line: null,
+                      }] : []),
+                      ...(selectedPlanning.status === 'error' && selectedPlanning.lastErrorMessage ? [{
+                        sev: 'error' as const, origin: 'Solveur',
+                        text: selectedPlanning.lastErrorMessage, line: null,
+                      }] : []),
+                      ...validationMarkers.map(m => ({
+                        sev: m.severity === 8 ? 'error' as const : 'warn' as const,
+                        origin: m.severity === 8 ? 'Langium' : 'Attention',
+                        text: m.message,
+                        line: `L.${m.startLineNumber}:${m.startColumn}`,
+                      })),
+                    ];
+                    const seenProblems = new Set<string>();
+                    const problems = rawProblems.filter(problem => {
+                      const key = `${problem.sev}|${problem.origin}|${problem.line ?? ''}|${problem.text}`;
+                      if (seenProblems.has(key)) {
+                        return false;
+                      }
+                      seenProblems.add(key);
+                      return true;
+                    });
+                    if (problems.length === 0) {
+                      return (
+                        <div style={{ color: '#34d399', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span>✓</span>
+                          <span>Source .planning valide — aucun problème détecté</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <>
+                        {problems.map((p, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'flex-start' }}>
+                            <span style={{ flexShrink: 0, color: p.sev === 'error' ? '#f87171' : '#f59e0b', marginTop: 1 }}>
+                              {p.sev === 'error' ? '●' : '△'}
+                            </span>
+                            <div style={{ flex: 1 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: p.sev === 'error' ? '#f87171' : '#f59e0b', opacity: 0.7, marginRight: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                [{p.origin}]
+                              </span>
+                              {p.line && (
+                                <span style={{ fontSize: 11, color: '#888', marginRight: 6 }}>{p.line}</span>
+                              )}
+                              <span style={{ color: p.sev === 'error' ? '#fca5a5' : '#fcd34d' }}>{p.text}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {selectedPlanning.status === 'error' && (selectedPlanning.errorDetails ?? []).length > 0 && (
+                          <div style={{ marginTop: 4, paddingLeft: 18, borderLeft: '2px solid rgba(248,113,113,0.3)' }}>
+                            {(selectedPlanning.errorDetails ?? []).map((d, i) => (
+                              <div key={i} style={{ color: '#fca5a5', marginBottom: 2, fontSize: 11 }}>{d}</div>
+                            ))}
+                          </div>
+                        )}
+                        {selectedPlanning.status === 'error' && selectedPlanning.errorHint && (
+                          <div style={{ color: '#fcd34d', marginTop: 8, display: 'flex', gap: 6 }}>
+                            <span>💡</span>
+                            <span>{selectedPlanning.errorHint}</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                  {consoleTab === 'output' && (
+                    <>
+                      {editorSolving && (
+                        <div style={{ color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 12, height: 12, border: '2px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                          Résolution en cours…
+                        </div>
+                      )}
+                      {solverOutput && !editorSolving && (
+                        <pre style={{ margin: 0, color: '#34d399', whiteSpace: 'pre-wrap' }}>{solverOutput}</pre>
+                      )}
+                      {solverWarnings.length > 0 && (
+                        <div style={{ marginTop: 8 }}>
+                          {solverWarnings.map((w, i) => (
+                            <div key={i} style={{ color: '#f59e0b' }}>△ {w}</div>
+                          ))}
+                        </div>
+                      )}
+                      {!solverOutput && !editorSolving && (
+                        <div style={{ color: '#555' }}>Aucune sortie — lancez une résolution via "Compiler et résoudre".</div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Footer ── */}
+            <div style={{ padding: '10px 14px', background: '#252526', borderTop: '1px solid #3c3c3c', display: 'flex', flexDirection: 'column', gap: 7, flexShrink: 0 }}>
+              {/* Status bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {dslErrorCount === 0 && dslWarnCount === 0
+                  ? <span style={{ fontSize: 11, color: '#34d399' }}>✓ JSON valide</span>
+                  : <>
+                      {dslErrorCount > 0 && <span style={{ fontSize: 11, color: '#f87171' }}>● {dslErrorCount} erreur{dslErrorCount > 1 ? 's' : ''}</span>}
+                      {dslWarnCount  > 0 && <span style={{ fontSize: 11, color: '#f59e0b' }}>△ {dslWarnCount} avertissement{dslWarnCount > 1 ? 's' : ''}</span>}
+                    </>
+                }
+                <div style={{ flex: 1 }} />
+                <button
+                  onClick={() => setShowConsole(v => !v)}
+                  style={iconBtn('#888', showConsole)}
+                >
+                  ⊞ Console
+                </button>
+              </div>
+
+              {/* Solver selector */}
+              <div style={{ position: 'relative' }}>
+                <div style={{ fontSize: 11, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Solveur</div>
+                <button
+                  onClick={() => setShowSolverPicker(v => !v)}
+                  style={{
+                    width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid #3c3c3c',
+                    color: '#cccccc', borderRadius: 6, padding: '6px 10px',
+                    fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                    transition: 'border-color 0.12s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#38bdf8'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#3c3c3c'; }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34d399', flexShrink: 0 }} />
+                    {loadingSolvers
+                      ? 'Chargement…'
+                      : (solvers.find(s => s.id === selectedSolver)?.label ?? selectedSolver ?? 'Highs')
+                    }
+                    {(solvers.find(s => s.id === selectedSolver)?.isDefault ?? selectedSolver === 'highs') && (
+                      <span style={{ fontSize: 10, color: '#888', background: '#1e1e1e', padding: '1px 5px', borderRadius: 999, border: '1px solid #3c3c3c' }}>défaut</span>
+                    )}
+                  </span>
+                  <span style={{ fontSize: 10, color: '#666' }}>{showSolverPicker ? '▲' : '▼'}</span>
+                </button>
+                {showSolverPicker && (
+                  <div style={{
+                    position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, right: 0,
+                    background: '#2d2d30', border: '1px solid #3c3c3c', borderRadius: 7,
+                    overflow: 'hidden', zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+                  }}>
+                    {loadingSolvers ? (
+                      <div style={{ padding: '8px 12px', fontSize: 12, color: '#888' }}>Chargement des solveurs…</div>
+                    ) : solvers.length === 0 ? (
+                      <div style={{ padding: '8px 12px', fontSize: 12, color: '#888' }}>Seul Highs disponible</div>
+                    ) : (
+                      solvers.map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => { setSelectedSolver(s.id); setShowSolverPicker(false); }}
+                          style={{
+                            width: '100%', background: selectedSolver === s.id ? 'rgba(56,189,248,0.1)' : 'transparent',
+                            border: 'none', color: selectedSolver === s.id ? '#38bdf8' : '#cccccc',
+                            padding: '8px 12px', fontSize: 12, cursor: 'pointer', textAlign: 'left',
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            borderLeft: selectedSolver === s.id ? '2px solid #38bdf8' : '2px solid transparent',
+                          }}
+                        >
+                          {selectedSolver === s.id && <span style={{ fontSize: 10 }}>✓</span>}
+                          {s.label}
+                          {s.isDefault && <span style={{ fontSize: 10, color: '#666', marginLeft: 'auto' }}>défaut</span>}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Success banner */}
+              {selectedPlanning.solutionOutput && !editorSolving && (
+                <div style={{ fontSize: 12, color: '#10b981', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 7, padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span>✓ Planification résolue</span>
+                  <button
+                    onClick={handleGenerateReport}
+                    style={{ background: '#10b981', border: 'none', color: '#fff', borderRadius: 5, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    Rapport →
+                  </button>
+                </div>
+              )}
+
+              {/* Run button */}
+              <button
+                onClick={() => { void handleEditorSolve(); }}
+                disabled={editorSolving || dslErrorCount > 0}
+                style={{
+                  width: '100%',
+                  background: editorSolving || dslErrorCount > 0 ? 'rgba(56,189,248,0.15)' : 'linear-gradient(135deg, #38bdf8, #3b82f6)',
+                  border: 'none',
+                  color: editorSolving || dslErrorCount > 0 ? '#38bdf8' : '#0f172a',
+                  borderRadius: 7, padding: '9px 0',
+                  fontSize: 13, fontWeight: 700,
+                  cursor: editorSolving || dslErrorCount > 0 ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  opacity: dslErrorCount > 0 ? 0.6 : 1,
+                  transition: 'all 0.15s',
+                  boxShadow: editorSolving || dslErrorCount > 0 ? 'none' : '0 2px 8px rgba(56,189,248,0.3)',
+                }}
+              >
+                {editorSolving ? (
+                  <>
+                    <span style={{ width: 14, height: 14, border: '2px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                    Résolution en cours…
+                  </>
+                ) : dslErrorCount > 0
+                  ? '⊘ Corrigez les erreurs avant de lancer'
+                  : `▶  Résoudre avec ${solvers.find(s => s.id === selectedSolver)?.label ?? selectedSolver ?? 'Highs'}`}
+              </button>
+            </div>
+
+          </div>
+        )}
+      </div>
+
+      {/* Hidden import input */}
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".planning,.json"
+        style={{ display: 'none' }}
+        onChange={handleImportFile}
+      />
+
+      <Modal open={exitConfirm} onClose={() => setExitConfirm(false)} title="Quitter l'éditeur" width={420}>
+        <p style={{ margin: '0 0 8px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+          Votre progression sera conservée dans votre espace personnel. Vous pourrez reprendre cette planification exactement là où vous vous êtes arrêté.
+        </p>
+        <div style={{ padding: '12px 14px', background: 'rgba(56,189,248,0.06)', borderRadius: '10px', border: '1px solid rgba(56,189,248,0.15)', marginBottom: '20px' }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Étape actuelle : {currentStep}/{totalSteps} — {STEPS[currentStep - 1].label}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <Button variant="secondary" onClick={() => setExitConfirm(false)}>Continuer l'édition</Button>
+          <Button variant="primary" onClick={() => { void persist(currentStep, true).then(saved => { if (saved) { navigate('plannings'); setExitConfirm(false); } }); }}>Sauvegarder et quitter</Button>
+        </div>
+      </Modal>
+    </AppLayout>
+  );
+};
