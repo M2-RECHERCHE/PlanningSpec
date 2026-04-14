@@ -1,18 +1,60 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Home from './views/Home';
-import Planification from './views/pages/Planification';
+import { AppProvider, useApp } from './context/AppContext';
+import { LandingPage } from './views/LandingPage';
+import { LoginPage, RegisterPage } from './views/AuthPages';
+import { DashboardPage } from './views/DashboardPage';
+import { ProjectsPage, ProjectDetailPage } from './views/ProjectsPage';
+import { PlanningsPage } from './views/PlanningsPage';
+import { PlanningEditorPage } from './views/PlanningEditorPage';
+import { ProfilePage, NewPlanningPage, NewProjectPage } from './views/OtherPages';
+import { ReportWorkshopPage } from './views/ReportWorkshopPage';
+import { FullScreenLoader } from './components/ui';
+import { ToastContainer } from './components/ui/Toast';
+
+const PAGE_MAP: Record<string, React.FC> = {
+  landing:       LandingPage,
+  login:         LoginPage,
+  register:      RegisterPage,
+  dashboard:     DashboardPage,
+  projects:      ProjectsPage,
+  projectDetail: ProjectDetailPage,
+  plannings:     PlanningsPage,
+  editor:        PlanningEditorPage,
+  report:        ReportWorkshopPage,
+  profile:       ProfilePage,
+  newPlanning:   NewPlanningPage,
+  newProject:    NewProjectPage,
+};
+
+const AppRouter: React.FC = () => {
+  const { currentPage, isAuthenticated, isBootstrapping } = useApp();
+  const publicPages = ['landing', 'login', 'register'];
+
+  if (isBootstrapping) {
+    return (
+      <>
+        <FullScreenLoader message="Vérification de votre session et chargement de vos données..." />
+        <ToastContainer />
+      </>
+    );
+  }
+
+  const page = !isAuthenticated && !publicPages.includes(currentPage) ? 'landing' : currentPage;
+  const Page = PAGE_MAP[page] || LandingPage;
+  return (
+    <>
+      <Page />
+      <ToastContainer />
+    </>
+  );
+};
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path='planification' element={<Planification />} />
-      </Routes>
-    </Router>
+    <AppProvider>
+      <AppRouter />
+    </AppProvider>
   );
 }
 
 export default App;
-
