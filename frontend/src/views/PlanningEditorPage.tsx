@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import { AppLayout, Topbar } from '../components/layout/AppLayout';
 import { StatusBadge, ProgressBar, Button, Input, Textarea, NumberInput, Modal, Select, Card } from '../components/ui';
 import { useResponsive } from '../hooks/useResponsive';
-import { Planning } from '../types';
+import { Planning, Badge } from '../types';
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
@@ -16,7 +16,8 @@ const STEPS = [
   { id: 4, label: 'Ressources', icon: '◫', description: 'Ressources humaines et matérielles' },
   { id: 5, label: 'Rôles', icon: '⊚', description: 'Associer les activités aux types de ressources' },
   { id: 6, label: 'Contraintes', icon: '⊗', description: 'Définir des contraintes compatibles avec le solveur' },
-  { id: 7, label: 'Récapitulatif', icon: '✓', description: 'Vérifier toutes les correspondances puis lancer la résolution' },
+  { id: 7, label: 'Préférences', icon: '◈', description: 'Contraintes souples pour guider le solveur sans bloquer la résolution' },
+  { id: 8, label: 'Récapitulatif', icon: '✓', description: 'Vérifier toutes les correspondances puis lancer la résolution' },
 ];
 
 const CONSTRAINT_TYPES = [
@@ -85,7 +86,7 @@ interface EditorPreference {
 
 interface EditorFormData {
   title: string;
-  projectId: string;
+  badges: Badge[];
   description: string;
   priority: string;
   days: string[];
@@ -102,7 +103,7 @@ interface EditorFormData {
 
 const defaultFormData = (planning?: Planning | null): EditorFormData => ({
   title: planning?.title || '',
-  projectId: planning?.projectId || '',
+  badges: planning?.badges || [],
   description: '',
   priority: 'medium',
   days: [],
@@ -281,7 +282,7 @@ const deriveFormData = (planning: Planning): EditorFormData => {
   return {
     ...base,
     title: typeof editorState.title === 'string' ? editorState.title : planning.title,
-    projectId: typeof editorState.projectId === 'string' ? editorState.projectId : planning.projectId,
+    badges: Array.isArray(editorState.badges) ? editorState.badges as Badge[] : (planning.badges || []),
     description: typeof editorState.description === 'string' ? editorState.description : '',
     priority: typeof editorState.priority === 'string' ? editorState.priority : 'medium',
     days: Array.isArray(editorState.days)
@@ -927,7 +928,6 @@ const buildPlanningSchema = (formData: EditorFormData) => {
 const getStepError = (step: number, data: EditorFormData): string | null => {
   if (step === 1) {
     if (!data.title.trim()) return 'Le titre de la planification est requis.';
-    if (!data.projectId) return 'Choisissez un projet.';
   }
 
   if (step === 2) {
@@ -1050,8 +1050,14 @@ const getStepError = (step: number, data: EditorFormData): string | null => {
     if (invalidConstraint) {
       return 'Complète tous les champs de la contrainte sélectionnée.';
     }
+  }
 
+  if (step === 7) {
+    const resourceInstances = new Set(
+      data.resourceGroups.flatMap(group => buildResolvedResourceNames(group))
+    );
     const activityNames = new Set(data.activities.map(activity => activity.name.trim()).filter(Boolean));
+
     const invalidPreference = data.preferences.find(preference => {
       if (!preference.enabled) {
         return false;
@@ -1083,17 +1089,117 @@ const getStepError = (step: number, data: EditorFormData): string | null => {
   return null;
 };
 
+const BADGE_COLORS_STEP1 = ['#38bdf8','#a78bfa','#34d399','#fb923c','#f472b6','#818cf8','#22d3ee','#fbbf24','#e879f9','#4ade80'];
+
 const Step1: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => void }> = ({ data, onChange }) => {
-  const { projects } = useApp();
+  const { badges: globalBadges, createBadge } = useApp();
+  const [showBadgePanel, setShowBadgePanel] = useState(false);
+  const [newBadgeName, setNewBadgeName] = useState('');
+  const [newBadgeColor, setNewBadgeColor] = useState(BADGE_COLORS_STEP1[0]);
+  const [creatingBadge, setCreatingBadge] = useState(false);
+
+  const toggleBadge = (badge: Badge) => {
+    const next = data.badges.some(b => b.id === badge.id)
+      ? data.badges.filter(b => b.id !== badge.id)
+      : [...data.badges, badge];
+    onChange({ ...data, badges: next });
+  };
+
+  const handleCreateBadge = async () => {
+    if (!newBadgeName.trim()) return;
+    setCreatingBadge(true);
+    const badge = await createBadge(newBadgeName.trim(), newBadgeColor);
+    if (badge) {
+      onChange({ ...data, badges: [...data.badges, badge] });
+      setNewBadgeName('');
+      setNewBadgeColor(BADGE_COLORS_STEP1[0]);
+    }
+    setCreatingBadge(false);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ padding: '16px', background: 'rgba(56,189,248,0.05)', borderRadius: '12px', border: '1px solid rgba(56,189,248,0.1)', fontSize: '13px', color: 'var(--text-secondary)' }}>
-        Donnez un nom clair à votre planification et rattachez-la à votre projet sécurisé.
+        Donnez un nom clair à votre planification et étiquetez-la avec des badges pour la retrouver facilement.
       </div>
       <Input label="Titre de la planification" placeholder="Ex : Planning Semestre 1 — Informatique" value={data.title} onChange={value => onChange({ ...data, title: value })} required />
-      <Select label="Projet associé" value={data.projectId} onChange={value => onChange({ ...data, projectId: value })} required
-        options={[{ value: '', label: '— Sélectionner un projet —' }, ...projects.map(project => ({ value: project.id, label: project.name }))]}
-      />
+
+      {/* Badge picker */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+            Badges <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optionnel)</span>
+          </label>
+          <button onClick={() => setShowBadgePanel(v => !v)} style={{
+            fontSize: '12px', color: 'var(--accent)', background: 'none', border: 'none',
+            cursor: 'pointer', fontFamily: 'Inter, sans-serif', padding: '2px 6px',
+          }}>
+            {showBadgePanel ? '▲ Masquer' : '▼ Gérer'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: 28 }}>
+          {data.badges.map(b => (
+            <span key={b.id} onClick={() => toggleBadge(b)} style={{
+              padding: '3px 10px', borderRadius: '999px', fontSize: '12px', fontWeight: 600,
+              background: `${b.color}20`, border: `1px solid ${b.color}50`, color: b.color,
+              display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer',
+            }}>
+              {b.name}<span style={{ fontSize: '10px', opacity: 0.7 }}>✕</span>
+            </span>
+          ))}
+          {data.badges.length === 0 && <span style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '28px' }}>Aucun badge</span>}
+        </div>
+        {showBadgePanel && (
+          <div style={{ marginTop: '10px', padding: '14px', background: 'var(--bg-elevated)', borderRadius: '12px', border: '1px solid var(--border-subtle)' }}>
+            {globalBadges.length > 0 && (
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Badges existants</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {globalBadges.map(b => {
+                    const active = data.badges.some(s => s.id === b.id);
+                    return (
+                      <button key={b.id} onClick={() => toggleBadge(b)} style={{
+                        padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600,
+                        background: active ? `${b.color}30` : 'transparent',
+                        border: `1px solid ${active ? b.color : b.color + '50'}`,
+                        color: b.color, cursor: 'pointer', fontFamily: 'Inter, sans-serif', transition: 'all 0.15s',
+                      }}>
+                        {active ? '✓ ' : ''}{b.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Créer un badge</div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <input value={newBadgeName} onChange={e => setNewBadgeName(e.target.value)} placeholder="Nom du badge..."
+                  onKeyDown={e => e.key === 'Enter' && void handleCreateBadge()}
+                  style={{ flex: '1 1 130px', padding: '7px 10px', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '13px', outline: 'none', fontFamily: 'Inter, sans-serif' }} />
+                <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+                  {BADGE_COLORS_STEP1.slice(0, 6).map(c => (
+                    <button key={c} onClick={() => setNewBadgeColor(c)} style={{
+                      width: 22, height: 22, borderRadius: '50%', background: c,
+                      border: `2px solid ${newBadgeColor === c ? '#fff' : 'transparent'}`,
+                      cursor: 'pointer', boxShadow: newBadgeColor === c ? `0 0 0 2px ${c}` : 'none',
+                    }} />
+                  ))}
+                </div>
+                <button onClick={() => void handleCreateBadge()} disabled={!newBadgeName.trim() || creatingBadge} style={{
+                  padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+                  background: 'var(--accent-dim)', border: '1px solid rgba(56,189,248,0.2)',
+                  color: 'var(--accent)', cursor: newBadgeName.trim() ? 'pointer' : 'not-allowed',
+                  opacity: newBadgeName.trim() ? 1 : 0.5, fontFamily: 'Inter, sans-serif',
+                }}>
+                  {creatingBadge ? '...' : '+ Créer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <Textarea label="Description (optionnelle)" placeholder="Décrivez l'objectif de cette planification..." value={data.description} onChange={value => onChange({ ...data, description: value })} rows={3} />
       <Select label="Priorité" value={data.priority} onChange={value => onChange({ ...data, priority: value })}
         options={[{ value: 'low', label: 'Basse' }, { value: 'medium', label: 'Normale' }, { value: 'high', label: 'Haute' }]}
@@ -1459,77 +1565,6 @@ const Step6: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => v
     });
   };
 
-  const getDefaultPreferencePatch = (type: PreferenceType): Partial<EditorPreference> => {
-    if (type === 'avoid_participation_on_date') {
-      return {
-        type,
-        resource: resourceInstanceOptions[0]?.value || '',
-        date: data.days[0] || DAYS[0],
-        activity: '',
-        scope: 'day',
-        max: 1,
-        weight: 10,
-      };
-    }
-
-    return {
-      type,
-      resource: '',
-      date: data.days[0] || DAYS[0],
-      activity: activityOptions[0]?.value || '',
-      scope: 'day',
-      max: 1,
-      weight: 5,
-    };
-  };
-
-  const updatePreference = (id: string, patch: Partial<EditorPreference>) => {
-    onChange({
-      ...data,
-      preferences: data.preferences.map(preference => preference.id === id ? { ...preference, ...patch } : preference),
-    });
-  };
-
-  const addPreference = (type: PreferenceType) => {
-    onChange({
-      ...data,
-      preferences: [...data.preferences, {
-        ...emptyPreference(),
-        id: createId(),
-        ...getDefaultPreferencePatch(type),
-      }],
-    });
-  };
-
-  const renderPreferenceFields = (preference: EditorPreference) => {
-    if (preference.type === 'avoid_participation_on_date') {
-      return (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 0.8fr', gap: '12px', alignItems: 'end' }}>
-          <Select label="Ressource" value={preference.resource || ''} onChange={value => updatePreference(preference.id, { resource: value })}
-            options={[{ value: '', label: '— Ressource —' }, ...resourceInstanceOptions]}
-          />
-          <Select label="Jour" value={preference.date || ''} onChange={value => updatePreference(preference.id, { date: value })}
-            options={(data.days.length > 0 ? data.days : DAYS).map(day => ({ value: day, label: day }))}
-          />
-          <NumberInput label="Poids" value={preference.weight ?? 10} onChange={value => updatePreference(preference.id, { weight: value })} min={1} max={999} />
-        </div>
-      );
-    }
-
-    return (
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 0.8fr 0.8fr', gap: '12px', alignItems: 'end' }}>
-        <Select label="Activité" value={preference.activity || ''} onChange={value => updatePreference(preference.id, { activity: value })}
-          options={[{ value: '', label: '— Activité —' }, ...activityOptions]}
-        />
-        <Select label="Scope" value={preference.scope || 'day'} onChange={value => updatePreference(preference.id, { scope: value })}
-          options={[{ value: 'slot', label: 'slot' }, { value: 'day', label: 'day' }]}
-        />
-        <NumberInput label="Max" value={preference.max ?? 1} onChange={value => updatePreference(preference.id, { max: value })} min={1} max={99} />
-        <NumberInput label="Poids" value={preference.weight ?? 5} onChange={value => updatePreference(preference.id, { weight: value })} min={1} max={999} />
-      </div>
-    );
-  };
-
   const renderConstraintFields = (constraint: EditorConstraint) => {
     if (constraint.type === 'cardinality_per_activity') {
       const activityRoleOptions = getRoleOptionsForActivity(constraint.activity || '');
@@ -1624,40 +1659,190 @@ const Step6: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => v
         </div>
       ))}
 
-      <div style={{ padding: '14px', background: 'rgba(167,139,250,0.06)', borderRadius: '12px', border: '1px solid rgba(167,139,250,0.15)', fontSize: '13px', color: 'var(--text-secondary)' }}>
-        Les préférences sont des contraintes souples. Elles guident le solveur sans bloquer toute la résolution.
-      </div>
-
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-        {PREFERENCE_TYPES.map(template => (
-          <Button key={template.value} variant="secondary" onClick={() => addPreference(template.value)}>
-            + {template.label}
-          </Button>
-        ))}
-      </div>
-
-      {data.preferences.map(preference => (
-        <div key={preference.id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: isMobile ? 'flex-start' : 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <input type="checkbox" checked={preference.enabled} onChange={event => updatePreference(preference.id, { enabled: event.target.checked })} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
-              <span style={{ fontSize: '14px', fontWeight: 600 }}>{PREFERENCE_TYPES.find(item => item.value === preference.type)?.label}</span>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
-              <Select value={preference.type} onChange={value => updatePreference(preference.id, { ...emptyPreference(), id: preference.id, enabled: preference.enabled, ...getDefaultPreferencePatch(value as PreferenceType) })}
-                options={PREFERENCE_TYPES.map(item => ({ value: item.value, label: item.label }))}
-              />
-              <button onClick={() => onChange({ ...data, preferences: data.preferences.filter(item => item.id !== preference.id) })} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '14px' }}>✕</button>
-            </div>
-          </div>
-          {renderPreferenceFields(preference)}
-        </div>
-      ))}
     </div>
   );
 };
 
-interface Step7Props {
+const Step7Preferences: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => void }> = ({ data, onChange }) => {
+  const { isMobile, isCompact } = useResponsive();
+
+  const activityOptions = data.activities
+    .filter(activity => activity.name.trim())
+    .map(activity => ({ value: activity.name.trim(), label: activity.name.trim() }));
+  const resourceInstanceOptions = data.resourceGroups.flatMap(group =>
+    buildResolvedResourceNames(group)
+      .map(instanceName => ({ value: instanceName, label: `${instanceName} (${group.type})` }))
+  );
+
+  const getDefaultPreferencePatch = (type: PreferenceType): Partial<EditorPreference> => {
+    if (type === 'avoid_participation_on_date') {
+      return {
+        type,
+        resource: resourceInstanceOptions[0]?.value || '',
+        date: data.days[0] || DAYS[0],
+        activity: '',
+        scope: 'day',
+        max: 1,
+        weight: 10,
+      };
+    }
+    return {
+      type,
+      resource: '',
+      date: data.days[0] || DAYS[0],
+      activity: activityOptions[0]?.value || '',
+      scope: 'day',
+      max: 1,
+      weight: 5,
+    };
+  };
+
+  const updatePreference = (id: string, patch: Partial<EditorPreference>) => {
+    onChange({
+      ...data,
+      preferences: data.preferences.map(preference => preference.id === id ? { ...preference, ...patch } : preference),
+    });
+  };
+
+  const addPreference = (type: PreferenceType) => {
+    onChange({
+      ...data,
+      preferences: [...data.preferences, {
+        ...emptyPreference(),
+        id: createId(),
+        ...getDefaultPreferencePatch(type),
+      }],
+    });
+  };
+
+  const renderPreferenceFields = (preference: EditorPreference) => {
+    if (preference.type === 'avoid_participation_on_date') {
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 0.8fr', gap: '12px', alignItems: 'end' }}>
+          <Select label="Ressource" value={preference.resource || ''} onChange={value => updatePreference(preference.id, { resource: value })}
+            options={[{ value: '', label: '— Ressource —' }, ...resourceInstanceOptions]}
+          />
+          <Select label="Jour" value={preference.date || ''} onChange={value => updatePreference(preference.id, { date: value })}
+            options={(data.days.length > 0 ? data.days : DAYS).map(day => ({ value: day, label: day }))}
+          />
+          <NumberInput label="Poids" value={preference.weight ?? 10} onChange={value => updatePreference(preference.id, { weight: value })} min={1} max={999} />
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 0.8fr 0.8fr', gap: '12px', alignItems: 'end' }}>
+        <Select label="Activité" value={preference.activity || ''} onChange={value => updatePreference(preference.id, { activity: value })}
+          options={[{ value: '', label: '— Activité —' }, ...activityOptions]}
+        />
+        <Select label="Scope" value={preference.scope || 'day'} onChange={value => updatePreference(preference.id, { scope: value })}
+          options={[{ value: 'slot', label: 'slot' }, { value: 'day', label: 'day' }]}
+        />
+        <NumberInput label="Max" value={preference.max ?? 1} onChange={value => updatePreference(preference.id, { max: value })} min={1} max={99} />
+        <NumberInput label="Poids" value={preference.weight ?? 5} onChange={value => updatePreference(preference.id, { weight: value })} min={1} max={999} />
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '14px', background: 'rgba(167,139,250,0.06)', borderRadius: '12px', border: '1px solid rgba(167,139,250,0.2)', fontSize: '13px', color: 'var(--text-secondary)' }}>
+        <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: 4 }}>Étape optionnelle</strong>
+        Les préférences sont des contraintes souples — le solveur les respecte autant que possible sans bloquer la résolution. Chaque préférence a un <em>poids</em> qui indique son importance relative.
+      </div>
+
+      {data.days.length === 0 || (data.activities.length === 0 && data.resourceGroups.length === 0) ? (
+        <div style={{ padding: '16px', background: 'rgba(251,191,36,0.06)', borderRadius: '12px', border: '1px solid rgba(251,191,36,0.2)', fontSize: '13px', color: '#fbbf24' }}>
+          Complétez d'abord les étapes Temps, Activités et Ressources pour pouvoir définir des préférences avec des valeurs précises.
+        </div>
+      ) : null}
+
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {PREFERENCE_TYPES.map(template => (
+          <button
+            key={template.value}
+            onClick={() => addPreference(template.value)}
+            style={{
+              padding: '8px 16px', borderRadius: '10px',
+              border: '1px dashed rgba(167,139,250,0.4)',
+              background: 'rgba(167,139,250,0.06)',
+              color: '#a78bfa', cursor: 'pointer', fontSize: '13px', fontWeight: 500,
+              fontFamily: 'Inter, sans-serif', transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(167,139,250,0.14)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(167,139,250,0.06)'; }}
+          >
+            + {template.label}
+          </button>
+        ))}
+        {data.preferences.length === 0 && (
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucune préférence — cliquez ci-dessus pour en ajouter.</span>
+        )}
+      </div>
+
+      {data.preferences.map((preference, index) => (
+        <div key={preference.id} style={{
+          background: 'var(--bg-elevated)', borderRadius: '12px', padding: '16px',
+          display: 'flex', flexDirection: 'column', gap: '14px',
+          border: preference.enabled ? '1px solid rgba(167,139,250,0.25)' : '1px solid var(--border-subtle)',
+          opacity: preference.enabled ? 1 : 0.55,
+          transition: 'opacity 0.15s, border-color 0.15s',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: isMobile ? 'flex-start' : 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <input
+                type="checkbox"
+                checked={preference.enabled}
+                onChange={event => updatePreference(preference.id, { enabled: event.target.checked })}
+                style={{ accentColor: '#a78bfa', width: 14, height: 14 }}
+              />
+              <span style={{ fontSize: '12px', color: '#a78bfa', fontWeight: 600, background: 'rgba(167,139,250,0.12)', padding: '2px 8px', borderRadius: '999px' }}>
+                #{index + 1}
+              </span>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {PREFERENCE_TYPES.find(item => item.value === preference.type)?.label}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
+              <Select
+                value={preference.type}
+                onChange={value => updatePreference(preference.id, { ...emptyPreference(), id: preference.id, enabled: preference.enabled, ...getDefaultPreferencePatch(value as PreferenceType) })}
+                options={PREFERENCE_TYPES.map(item => ({ value: item.value, label: item.label }))}
+              />
+              <button
+                onClick={() => onChange({ ...data, preferences: data.preferences.filter(item => item.id !== preference.id) })}
+                style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '14px', padding: '4px' }}
+              >✕</button>
+            </div>
+          </div>
+          {renderPreferenceFields(preference)}
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: preference.enabled ? '#a78bfa' : '#555', flexShrink: 0 }} />
+            {preference.type === 'avoid_participation_on_date'
+              ? `${preference.resource || '—'} évite le ${preference.date || '—'} (poids : ${preference.weight ?? 10})`
+              : `${preference.activity || '—'} max ${preference.max ?? 1} par ${preference.scope || 'jour'} (poids : ${preference.weight ?? 5})`
+            }
+          </div>
+        </div>
+      ))}
+
+      {data.preferences.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => onChange({ ...data, preferences: [] })}
+            style={{ background: 'none', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 8, color: '#f87171', cursor: 'pointer', fontSize: '12px', padding: '6px 14px', transition: 'all 0.15s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(248,113,113,0.08)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+          >
+            Supprimer toutes les préférences
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface Step8Props {
   data: EditorFormData;
   planning: Planning | null;
   selectedSolver: string;
@@ -1669,10 +1854,8 @@ interface Step7Props {
 
 interface AvailableSolver { id: string; label: string; isDefault: boolean; }
 
-const Step7: React.FC<Step7Props> = ({ data, planning, selectedSolver, onSolverChange, solvers, loadingSolvers, onGenerateReport }) => {
+const Step8: React.FC<Step8Props> = ({ data, planning, selectedSolver, onSolverChange, solvers, loadingSolvers, onGenerateReport }) => {
   const { isMobile } = useResponsive();
-  const { projects } = useApp();
-  const project = projects.find(item => item.id === data.projectId);
 
   const roleGroups = data.activities.map(activity => ({
     activityName: activity.name,
@@ -1685,7 +1868,7 @@ const Step7: React.FC<Step7Props> = ({ data, planning, selectedSolver, onSolverC
         <h3 style={{ marginTop: 0, marginBottom: '12px' }}>Résumé général</h3>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
           <div><strong>Titre :</strong> {data.title || '—'}</div>
-          <div><strong>Projet :</strong> {project?.name || '—'}</div>
+          <div><strong>Badges :</strong> {data.badges.length > 0 ? data.badges.map(b => b.name).join(', ') : '—'}</div>
           <div><strong>Description :</strong> {data.description || '—'}</div>
           <div><strong>Priorité :</strong> {data.priority || '—'}</div>
           <div><strong>Jours :</strong> {data.days.join(', ') || '—'}</div>
@@ -1968,6 +2151,56 @@ export const PlanningEditorPage: React.FC = () => {
     [jsonValidationMarkers, semanticValidationMarkers]
   );
 
+  const syncDslIntoPlatform = useCallback(async (
+    rawSource: string,
+    options?: { persist?: boolean; toastMessage?: string }
+  ) => {
+    if (!selectedPlanning) {
+      return false;
+    }
+
+    const canonicalized = canonicalizePlanningSource(rawSource, formData);
+    if (!canonicalized) {
+      setDslSource(rawSource);
+      setDslDirty(true);
+      return false;
+    }
+
+    const { canonicalSource, formData: nextFormData } = canonicalized;
+    setDslSource(canonicalSource);
+    setFormData(nextFormData);
+    setEditorError(null);
+    setJsonValidationMarkers([]);
+    setSemanticValidationMarkers([]);
+    lastSyncedDslRef.current = canonicalSource;
+
+    if (!options?.persist) {
+      setDslDirty(true);
+      return true;
+    }
+
+    setDslAutoSaving(true);
+    const saved = await savePlanningData(selectedPlanning.id, {
+      title: nextFormData.title.trim() || selectedPlanning.title,
+      badges: nextFormData.badges,
+      data: { ...buildPlanningPayload(nextFormData), dslSource: canonicalSource },
+    });
+    setDslAutoSaving(false);
+
+    if (!saved) {
+      setDslDirty(true);
+      return false;
+    }
+
+    setDslDirty(false);
+    lastPersistedDslRef.current = canonicalSource;
+    setSaveTime(new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+    if (options?.toastMessage) {
+      toast(options.toastMessage, 'success');
+    }
+    return true;
+  }, [formData, savePlanningData, selectedPlanning, toast]);
+
   useEffect(() => {
     if (!selectedPlanning) {
       return;
@@ -2095,6 +2328,7 @@ export const PlanningEditorPage: React.FC = () => {
 
         if (canonicalSource !== lastSyncedDslRef.current) {
           setFormData(nextFormData);
+          setDslSource(canonicalSource);
           lastSyncedDslRef.current = canonicalSource;
         }
       } catch (error: any) {
@@ -2161,7 +2395,7 @@ export const PlanningEditorPage: React.FC = () => {
       setDslAutoSaving(true);
       await savePlanningData(selectedPlanning.id, {
         title: formDataToPersist.title.trim() || selectedPlanning.title,
-        projectId: formDataToPersist.projectId || selectedPlanning.projectId,
+        badges: formDataToPersist.badges,
         data: { ...buildPlanningPayload(formDataToPersist), dslSource: sourceToPersist },
       });
       setDslAutoSaving(false);
@@ -2205,10 +2439,10 @@ export const PlanningEditorPage: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = ev.target?.result as string;
-      setDslSource(content);
-      setDslDirty(true);
-      setEditorError(null);
-      toast('Source .planning importée avec succès.', 'success');
+      void syncDslIntoPlatform(content, {
+        persist: true,
+        toastMessage: 'Source .planning importée et synchronisée avec succès.',
+      });
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -2279,7 +2513,7 @@ export const PlanningEditorPage: React.FC = () => {
 
     const planning = await savePlanningData(selectedPlanning.id, {
       title: formData.title.trim(),
-      projectId: formData.projectId,
+      badges: formData.badges,
       currentStep: targetStep,
       totalSteps,
       progress: Math.round((targetStep / totalSteps) * 100),
@@ -2330,7 +2564,7 @@ export const PlanningEditorPage: React.FC = () => {
     const payload = { ...buildPlanningPayload(formData), dslSource: source };
     const saved = await savePlanningData(selectedPlanning.id, {
       title: formData.title.trim(),
-      projectId: formData.projectId,
+      badges: formData.badges,
       currentStep: totalSteps,
       totalSteps,
       progress: 100,
@@ -2379,7 +2613,7 @@ export const PlanningEditorPage: React.FC = () => {
     setShowConsole(true);
     const saved = await savePlanningData(selectedPlanning.id, {
       title: formDataToPersist.title.trim() || selectedPlanning.title,
-      projectId: formDataToPersist.projectId || selectedPlanning.projectId,
+      badges: formDataToPersist.badges,
       currentStep: totalSteps,
       totalSteps,
       progress: 100,
@@ -2431,7 +2665,8 @@ export const PlanningEditorPage: React.FC = () => {
     <Step4 key="step-4" data={formData} onChange={setFormData} />,
     <Step5 key="step-5" data={formData} onChange={setFormData} />,
     <Step6 key="step-6" data={formData} onChange={setFormData} />,
-    <Step7 key="step-7" data={formData} planning={selectedPlanning} selectedSolver={selectedSolver} onSolverChange={setSelectedSolver} solvers={solvers} loadingSolvers={loadingSolvers} onGenerateReport={handleGenerateReport} />,
+    <Step7Preferences key="step-7" data={formData} onChange={setFormData} />,
+    <Step8 key="step-8" data={formData} planning={selectedPlanning} selectedSolver={selectedSolver} onSolverChange={setSelectedSolver} solvers={solvers} loadingSolvers={loadingSolvers} onGenerateReport={handleGenerateReport} />,
   ];
 
   return (
@@ -2458,7 +2693,7 @@ export const PlanningEditorPage: React.FC = () => {
 
       <Topbar
         title={formData.title || selectedPlanning.title}
-        subtitle={`Projet : ${selectedPlanning.projectName}`}
+        subtitle={`Planification — ${selectedPlanning.status === 'done' ? 'Terminée' : selectedPlanning.status === 'active' ? 'En cours' : 'Brouillon'}`}
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
             {saveTime && !saving && (
@@ -2923,7 +3158,7 @@ export const PlanningEditorPage: React.FC = () => {
               <div style={{ position: 'relative' }}>
                 <div style={{ fontSize: 11, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Solveur</div>
                 <button
-                  onClick={() => setShowSolverPicker(v => !v)}
+                  onClick={e => { e.stopPropagation(); setShowSolverPicker(v => !v); }}
                   style={{
                     width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid #3c3c3c',
                     color: '#cccccc', borderRadius: 6, padding: '6px 10px',
@@ -2946,7 +3181,9 @@ export const PlanningEditorPage: React.FC = () => {
                   <span style={{ fontSize: 10, color: '#666' }}>{showSolverPicker ? '▲' : '▼'}</span>
                 </button>
                 {showSolverPicker && (
-                  <div style={{
+                  <div
+                    onClick={e => e.stopPropagation()}
+                    style={{
                     position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, right: 0,
                     background: '#2d2d30', border: '1px solid #3c3c3c', borderRadius: 7,
                     overflow: 'hidden', zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.5)',

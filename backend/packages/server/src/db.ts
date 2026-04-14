@@ -7,6 +7,12 @@ import { env } from './env.js';
 export type ProjectStatus = 'active' | 'archived' | 'completed';
 export type PlanStatus = 'draft' | 'active' | 'paused' | 'done' | 'error';
 
+export interface Badge {
+    id: string;
+    name: string;
+    color: string;
+}
+
 export interface UserRecord {
     id: string;
     name: string;
@@ -44,11 +50,20 @@ export interface ProjectRecord {
     createdAt: string;
 }
 
+export interface TagDefinitionRecord {
+    id: string;
+    userId: string;
+    name: string;
+    color: string;
+    createdAt: string;
+}
+
 export interface PlanningRecord {
     id: string;
+    userId: string;
     title: string;
-    projectId: string;
-    projectName: string;
+    projectId?: string;
+    projectName?: string;
     status: PlanStatus;
     currentStep: number;
     totalSteps: number;
@@ -56,6 +71,7 @@ export interface PlanningRecord {
     createdAt: string;
     updatedAt: string;
     data: Record<string, unknown>;
+    badges: Badge[];
     solutionOutput?: string;
     solutionWarnings?: string[];
     lastErrorMessage?: string;
@@ -96,11 +112,20 @@ interface ProjectRow extends RowDataPacket {
     created_at: string | Date;
 }
 
+interface TagDefinitionRow extends RowDataPacket {
+    id: string;
+    user_id: string;
+    name: string;
+    color: string;
+    created_at: string | Date;
+}
+
 interface PlanningRow extends RowDataPacket {
     id: string;
+    user_id: string | null;
     title: string;
-    project_id: string;
-    project_name: string;
+    project_id: string | null;
+    project_name: string | null;
     status: PlanStatus;
     current_step: number;
     total_steps: number;
@@ -108,6 +133,7 @@ interface PlanningRow extends RowDataPacket {
     created_at: string | Date;
     updated_at: string | Date;
     wizard_data: unknown;
+    badges: unknown;
     solution_output: string | null;
     solution_warnings: unknown;
     last_error: unknown;
@@ -115,6 +141,10 @@ interface PlanningRow extends RowDataPacket {
 
 interface ExistsRow extends RowDataPacket {
     count: number;
+}
+
+interface IsNullableRow extends RowDataPacket {
+    IS_NULLABLE: string;
 }
 
 export interface UserInput {
@@ -142,14 +172,20 @@ export interface ProjectUpdateInput {
     status?: ProjectStatus;
 }
 
+export interface TagDefinitionInput {
+    name: string;
+    color: string;
+}
+
 export interface PlanningInput {
     title: string;
-    projectId: string;
+    projectId?: string;
     status?: PlanStatus;
     currentStep?: number;
     totalSteps?: number;
     progress?: number;
     data?: Record<string, unknown>;
+    badges?: Badge[];
 }
 
 export interface PlanningUpdateInput {
@@ -160,6 +196,7 @@ export interface PlanningUpdateInput {
     totalSteps?: number;
     progress?: number;
     data?: Record<string, unknown>;
+    badges?: Badge[];
     solutionOutput?: string | null;
     solutionWarnings?: string[] | null;
     lastError?: { message: string; details?: string[]; hint?: string } | null;
@@ -225,14 +262,26 @@ function mapProjectRow(row: ProjectRow): ProjectRecord {
     };
 }
 
+function mapTagDefinitionRow(row: TagDefinitionRow): TagDefinitionRecord {
+    return {
+        id: row.id,
+        userId: row.user_id,
+        name: row.name,
+        color: row.color,
+        createdAt: toIsoDate(row.created_at)
+    };
+}
+
 function mapPlanningRow(row: PlanningRow): PlanningRecord {
     const lastError = parseJson<{ message?: string; details?: string[]; hint?: string } | null>(row.last_error, null);
+    const badges = parseJson<Badge[]>(row.badges, []);
 
     return {
         id: row.id,
+        userId: row.user_id ?? '',
         title: row.title,
-        projectId: row.project_id,
-        projectName: row.project_name,
+        projectId: row.project_id ?? undefined,
+        projectName: row.project_name ?? undefined,
         status: row.status,
         currentStep: row.current_step,
         totalSteps: row.total_steps,
@@ -240,6 +289,7 @@ function mapPlanningRow(row: PlanningRow): PlanningRecord {
         createdAt: toIsoDate(row.created_at),
         updatedAt: toIsoDate(row.updated_at),
         data: parseJson<Record<string, unknown>>(row.wizard_data, {}),
+        badges,
         solutionOutput: row.solution_output ?? undefined,
         solutionWarnings: parseJson<string[]>(row.solution_warnings, []),
         lastErrorMessage: lastError?.message,
@@ -280,6 +330,20 @@ async function columnExists(tableName: string, columnName: string): Promise<bool
     return Number(rows[0]?.count ?? 0) > 0;
 }
 
+async function isColumnNullable(tableName: string, columnName: string): Promise<boolean> {
+    const database = getPool();
+    const [rows] = await database.execute<IsNullableRow[]>(`
+        SELECT IS_NULLABLE
+        FROM information_schema.columns
+        WHERE table_schema = ?
+          AND table_name = ?
+          AND column_name = ?
+        LIMIT 1
+    `, [env.mysql.database, tableName, columnName]);
+
+    return rows[0]?.IS_NULLABLE === 'YES';
+}
+
 async function indexExists(tableName: string, indexName: string): Promise<boolean> {
     const database = getPool();
     const [rows] = await database.execute<ExistsRow[]>(`
@@ -303,6 +367,18 @@ async function foreignKeyExists(tableName: string, constraintName: string): Prom
           AND constraint_name = ?
           AND constraint_type = 'FOREIGN KEY'
     `, [env.mysql.database, tableName, constraintName]);
+
+    return Number(rows[0]?.count ?? 0) > 0;
+}
+
+async function tableExists(tableName: string): Promise<boolean> {
+    const database = getPool();
+    const [rows] = await database.execute<ExistsRow[]>(`
+        SELECT COUNT(*) AS count
+        FROM information_schema.tables
+        WHERE table_schema = ?
+          AND table_name = ?
+    `, [env.mysql.database, tableName]);
 
     return Number(rows[0]?.count ?? 0) > 0;
 }
@@ -331,6 +407,7 @@ async function ensureSchema(): Promise<void> {
     });
 
     const database = getPool();
+
     await database.query(`
         CREATE TABLE IF NOT EXISTS users (
             id VARCHAR(36) PRIMARY KEY,
@@ -371,27 +448,46 @@ async function ensureSchema(): Promise<void> {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Create plannings table with user_id (new schema)
     await database.query(`
         CREATE TABLE IF NOT EXISTS plannings (
             id VARCHAR(36) PRIMARY KEY,
-            project_id VARCHAR(36) NOT NULL,
+            user_id VARCHAR(36) NULL,
+            project_id VARCHAR(36) NULL,
             title VARCHAR(191) NOT NULL,
             status VARCHAR(32) NOT NULL DEFAULT 'draft',
             current_step INT NOT NULL DEFAULT 1,
-            total_steps INT NOT NULL DEFAULT 7,
+            total_steps INT NOT NULL DEFAULT 8,
             progress INT NOT NULL DEFAULT 0,
             wizard_data JSON NULL,
+            badges JSON NULL,
             solution_output LONGTEXT NULL,
             solution_warnings JSON NULL,
             last_error JSON NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            CONSTRAINT fk_plannings_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            INDEX idx_plannings_user_id (user_id),
             INDEX idx_plannings_project_id (project_id),
             INDEX idx_plannings_updated_at (updated_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Badge definitions table
+    if (!(await tableExists('tag_definitions'))) {
+        await database.query(`
+            CREATE TABLE tag_definitions (
+                id VARCHAR(36) PRIMARY KEY,
+                user_id VARCHAR(36) NOT NULL,
+                name VARCHAR(191) NOT NULL,
+                color VARCHAR(32) NOT NULL DEFAULT '#38bdf8',
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_tag_definitions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_tag_definitions_user_id (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+    }
+
+    // --- Migrations for existing projects table ---
     if (!(await columnExists('projects', 'user_id'))) {
         await database.query('ALTER TABLE projects ADD COLUMN user_id VARCHAR(36) NULL AFTER id');
     }
@@ -403,6 +499,35 @@ async function ensureSchema(): Promise<void> {
     }
     if (!(await foreignKeyExists('projects', 'fk_projects_user'))) {
         await database.query('ALTER TABLE projects ADD CONSTRAINT fk_projects_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE');
+    }
+
+    // --- Migrations for plannings table ---
+    if (!(await columnExists('plannings', 'user_id'))) {
+        await database.query('ALTER TABLE plannings ADD COLUMN user_id VARCHAR(36) NULL AFTER id');
+        // Backfill user_id from project ownership
+        await database.query(`
+            UPDATE plannings
+            INNER JOIN projects ON projects.id = plannings.project_id
+            SET plannings.user_id = projects.user_id
+            WHERE plannings.user_id IS NULL AND projects.user_id IS NOT NULL
+        `);
+    }
+    if (!(await indexExists('plannings', 'idx_plannings_user_id'))) {
+        await database.query('ALTER TABLE plannings ADD INDEX idx_plannings_user_id (user_id)');
+    }
+    if (!(await columnExists('plannings', 'badges'))) {
+        await database.query('ALTER TABLE plannings ADD COLUMN badges JSON NULL AFTER wizard_data');
+    }
+    // Make project_id nullable if it isn't already
+    if (await columnExists('plannings', 'project_id') && !(await isColumnNullable('plannings', 'project_id'))) {
+        // Drop FK first if it exists, then alter column
+        if (await foreignKeyExists('plannings', 'fk_plannings_project')) {
+            await database.query('ALTER TABLE plannings DROP FOREIGN KEY fk_plannings_project');
+        }
+        await database.query('ALTER TABLE plannings MODIFY project_id VARCHAR(36) NULL');
+    }
+    if (!(await columnExists('plannings', 'badges'))) {
+        await database.query('ALTER TABLE plannings ADD COLUMN badges JSON NULL AFTER wizard_data');
     }
 }
 
@@ -662,52 +787,87 @@ export async function deleteProject(id: string, userId: string): Promise<boolean
     return result.affectedRows > 0;
 }
 
-export async function listPlannings(userId: string, projectId?: string): Promise<PlanningRecord[]> {
+// ─── Tag Definitions ──────────────────────────────────────────────────────────
+
+export async function listTagDefinitions(userId: string): Promise<TagDefinitionRecord[]> {
     const database = getPool();
-    const [rows] = projectId
-        ? await database.execute<PlanningRow[]>(`
-            SELECT
-                plannings.id,
-                plannings.title,
-                plannings.project_id,
-                projects.name AS project_name,
-                plannings.status,
-                plannings.current_step,
-                plannings.total_steps,
-                plannings.progress,
-                plannings.created_at,
-                plannings.updated_at,
-                plannings.wizard_data,
-                plannings.solution_output,
-                plannings.solution_warnings,
-                plannings.last_error
-            FROM plannings
-            INNER JOIN projects ON projects.id = plannings.project_id
-            WHERE plannings.project_id = ?
-              AND projects.user_id = ?
-            ORDER BY plannings.updated_at DESC
-        `, [projectId, userId])
-        : await database.execute<PlanningRow[]>(`
-            SELECT
-                plannings.id,
-                plannings.title,
-                plannings.project_id,
-                projects.name AS project_name,
-                plannings.status,
-                plannings.current_step,
-                plannings.total_steps,
-                plannings.progress,
-                plannings.created_at,
-                plannings.updated_at,
-                plannings.wizard_data,
-                plannings.solution_output,
-                plannings.solution_warnings,
-                plannings.last_error
-            FROM plannings
-            INNER JOIN projects ON projects.id = plannings.project_id
-            WHERE projects.user_id = ?
-            ORDER BY plannings.updated_at DESC
-        `, [userId]);
+    const [rows] = await database.execute<TagDefinitionRow[]>(`
+        SELECT id, user_id, name, color, created_at
+        FROM tag_definitions
+        WHERE user_id = ?
+        ORDER BY name ASC
+    `, [userId]);
+
+    return rows.map(mapTagDefinitionRow);
+}
+
+export async function createTagDefinition(userId: string, input: TagDefinitionInput): Promise<TagDefinitionRecord> {
+    const database = getPool();
+    const id = randomUUID();
+
+    await database.execute<ResultSetHeader>(`
+        INSERT INTO tag_definitions (id, user_id, name, color)
+        VALUES (?, ?, ?, ?)
+    `, [id, userId, input.name.trim(), input.color]);
+
+    const tag = await getTagDefinitionById(id, userId);
+    if (!tag) {
+        throw new Error('The tag was created but could not be reloaded.');
+    }
+
+    return tag;
+}
+
+export async function getTagDefinitionById(id: string, userId: string): Promise<TagDefinitionRecord | null> {
+    const database = getPool();
+    const [rows] = await database.execute<TagDefinitionRow[]>(`
+        SELECT id, user_id, name, color, created_at
+        FROM tag_definitions
+        WHERE id = ? AND user_id = ?
+        LIMIT 1
+    `, [id, userId]);
+
+    return rows[0] ? mapTagDefinitionRow(rows[0]) : null;
+}
+
+export async function deleteTagDefinition(id: string, userId: string): Promise<boolean> {
+    const database = getPool();
+    const [result] = await database.execute<ResultSetHeader>(
+        'DELETE FROM tag_definitions WHERE id = ? AND user_id = ?',
+        [id, userId]
+    );
+    return result.affectedRows > 0;
+}
+
+// ─── Plannings ────────────────────────────────────────────────────────────────
+
+const PLANNING_SELECT = `
+    plannings.id,
+    plannings.user_id,
+    plannings.title,
+    plannings.project_id,
+    NULL AS project_name,
+    plannings.status,
+    plannings.current_step,
+    plannings.total_steps,
+    plannings.progress,
+    plannings.created_at,
+    plannings.updated_at,
+    plannings.wizard_data,
+    plannings.badges,
+    plannings.solution_output,
+    plannings.solution_warnings,
+    plannings.last_error
+`;
+
+export async function listPlannings(userId: string): Promise<PlanningRecord[]> {
+    const database = getPool();
+    const [rows] = await database.execute<PlanningRow[]>(`
+        SELECT ${PLANNING_SELECT}
+        FROM plannings
+        WHERE plannings.user_id = ?
+        ORDER BY plannings.updated_at DESC
+    `, [userId]);
 
     return rows.map(mapPlanningRow);
 }
@@ -715,25 +875,10 @@ export async function listPlannings(userId: string, projectId?: string): Promise
 export async function getPlanningById(id: string, userId: string): Promise<PlanningRecord | null> {
     const database = getPool();
     const [rows] = await database.execute<PlanningRow[]>(`
-        SELECT
-            plannings.id,
-            plannings.title,
-            plannings.project_id,
-            projects.name AS project_name,
-            plannings.status,
-            plannings.current_step,
-            plannings.total_steps,
-            plannings.progress,
-            plannings.created_at,
-            plannings.updated_at,
-            plannings.wizard_data,
-            plannings.solution_output,
-            plannings.solution_warnings,
-            plannings.last_error
+        SELECT ${PLANNING_SELECT}
         FROM plannings
-        INNER JOIN projects ON projects.id = plannings.project_id
         WHERE plannings.id = ?
-          AND projects.user_id = ?
+          AND plannings.user_id = ?
         LIMIT 1
     `, [id, userId]);
 
@@ -747,29 +892,28 @@ export async function createPlanning(userId: string, input: PlanningInput): Prom
     await database.execute<ResultSetHeader>(`
         INSERT INTO plannings (
             id,
+            user_id,
             project_id,
             title,
             status,
             current_step,
             total_steps,
             progress,
-            wizard_data
+            wizard_data,
+            badges
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?
-        FROM projects
-        WHERE projects.id = ?
-          AND projects.user_id = ?
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
         id,
-        input.projectId,
+        userId,
+        input.projectId ?? null,
         input.title,
         input.status ?? 'draft',
         input.currentStep ?? 1,
-        input.totalSteps ?? 7,
+        input.totalSteps ?? 8,
         input.progress ?? 0,
         JSON.stringify(input.data ?? null),
-        input.projectId,
-        userId
+        JSON.stringify(input.badges ?? [])
     ]);
 
     const planning = await getPlanningById(id, userId);
@@ -812,6 +956,10 @@ export async function updatePlanning(id: string, userId: string, input: Planning
         fields.push('plannings.wizard_data = ?');
         params.push(JSON.stringify(input.data));
     }
+    if (input.badges !== undefined) {
+        fields.push('plannings.badges = ?');
+        params.push(JSON.stringify(input.badges));
+    }
     if (input.solutionOutput !== undefined) {
         fields.push('plannings.solution_output = ?');
         params.push(input.solutionOutput);
@@ -833,12 +981,10 @@ export async function updatePlanning(id: string, userId: string, input: Planning
     params.push(id, userId);
     const [result] = await database.execute<ResultSetHeader>(`
         UPDATE plannings
-        INNER JOIN projects ON projects.id = plannings.project_id
         SET ${fields.join(', ')}, plannings.updated_at = CURRENT_TIMESTAMP
         WHERE plannings.id = ?
-          AND projects.user_id = ?
-          ${input.projectId !== undefined ? 'AND EXISTS (SELECT 1 FROM projects target_projects WHERE target_projects.id = ? AND target_projects.user_id = ?)' : ''}
-    `, input.projectId !== undefined ? [...params, input.projectId, userId] : params);
+          AND plannings.user_id = ?
+    `, params);
 
     if (result.affectedRows === 0) {
         return null;
@@ -849,13 +995,9 @@ export async function updatePlanning(id: string, userId: string, input: Planning
 
 export async function deletePlanning(id: string, userId: string): Promise<boolean> {
     const database = getPool();
-    const [result] = await database.execute<ResultSetHeader>(`
-        DELETE plannings
-        FROM plannings
-        INNER JOIN projects ON projects.id = plannings.project_id
-        WHERE plannings.id = ?
-          AND projects.user_id = ?
-    `, [id, userId]);
-
+    const [result] = await database.execute<ResultSetHeader>(
+        'DELETE FROM plannings WHERE id = ? AND user_id = ?',
+        [id, userId]
+    );
     return result.affectedRows > 0;
 }

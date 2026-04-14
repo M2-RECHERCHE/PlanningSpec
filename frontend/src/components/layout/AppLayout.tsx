@@ -4,7 +4,6 @@ import { useResponsive } from '../../hooks/useResponsive';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: '⊞' },
-  { id: 'projects', label: 'Projets', icon: '◫' },
   { id: 'plannings', label: 'Planifications', icon: '≡' },
   { id: 'profile', label: 'Profil', icon: '○' },
 ];

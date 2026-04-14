@@ -1,6 +1,12 @@
 export type PlanStatus = 'draft' | 'active' | 'paused' | 'done' | 'error';
 export type ProjectStatus = 'active' | 'archived' | 'completed';
 
+export interface Badge {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -23,12 +29,13 @@ export interface Project {
 export interface Planning {
   id: string;
   title: string;
-  projectId: string;
-  projectName: string;
+  projectId?: string;
+  projectName?: string;
   status: PlanStatus;
   currentStep: number;
   totalSteps: number;
   progress: number;
+  badges?: Badge[];
   createdAt: string;
   updatedAt: string;
   data?: Record<string, any>;

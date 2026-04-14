@@ -7,17 +7,17 @@ import { useResponsive } from '../hooks/useResponsive';
 const formatDate = (d: string) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 
 export const PlanningsPage: React.FC = () => {
-  const { plannings, projects, navigate, deletePlanning } = useApp();
+  const { plannings, badges, navigate, deletePlanning } = useApp();
   const { isMobile, isCompact } = useResponsive();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [projectFilter, setProjectFilter] = useState<string>('all');
+  const [badgeFilter, setBadgeFilter] = useState<string>('all');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const filtered = plannings
     .filter(p => statusFilter === 'all' || p.status === statusFilter)
-    .filter(p => projectFilter === 'all' || p.projectId === projectFilter)
-    .filter(p => p.title.toLowerCase().includes(search.toLowerCase()) || p.projectName.toLowerCase().includes(search.toLowerCase()));
+    .filter(p => badgeFilter === 'all' || (p.badges ?? []).some(b => b.id === badgeFilter))
+    .filter(p => p.title.toLowerCase().includes(search.toLowerCase()));
 
   const statusCounts = {
     all: plannings.length,
@@ -64,27 +64,42 @@ export const PlanningsPage: React.FC = () => {
           ))}
         </div>
 
-        {/* Search + Project filter */}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: isMobile ? '100%' : 340, width: isMobile ? '100%' : undefined }}>
+        {/* Search */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: badges.length > 0 ? '12px' : '20px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 240px', maxWidth: isMobile ? '100%' : 400, width: isMobile ? '100%' : undefined }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une planification..."
               style={{ width: '100%', padding: '9px 12px 9px 38px', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: '10px', color: 'var(--text-primary)', fontSize: '14px', outline: 'none', fontFamily: 'Inter, sans-serif' }} />
           </div>
-          <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{
-            padding: '9px 14px', background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-            borderRadius: '10px', color: 'var(--text-primary)', fontSize: '14px',
-            outline: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif',
-            width: isMobile ? '100%' : undefined,
-          }}>
-            <option value="all" style={{ background: 'var(--bg-card)' }}>Tous les projets</option>
-            {projects.map(p => <option key={p.id} value={p.id} style={{ background: 'var(--bg-card)' }}>{p.name}</option>)}
-          </select>
         </div>
+
+        {/* Badge filter pills */}
+        {badges.length > 0 && (
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginRight: '2px' }}>Badges :</span>
+            <button onClick={() => setBadgeFilter('all')} style={{
+              padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 500,
+              background: badgeFilter === 'all' ? 'var(--accent-dim)' : 'transparent',
+              border: `1px solid ${badgeFilter === 'all' ? 'rgba(56,189,248,0.3)' : 'var(--border-default)'}`,
+              color: badgeFilter === 'all' ? 'var(--accent)' : 'var(--text-secondary)',
+              cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+            }}>Tous</button>
+            {badges.map(b => (
+              <button key={b.id} onClick={() => setBadgeFilter(badgeFilter === b.id ? 'all' : b.id)} style={{
+                padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 600,
+                background: badgeFilter === b.id ? `${b.color}25` : 'transparent',
+                border: `1px solid ${badgeFilter === b.id ? b.color : b.color + '40'}`,
+                color: b.color, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+                transition: 'all 0.15s',
+              }}>{b.name}</button>
+            ))}
+          </div>
+        )}
 
         {/* Table */}
         {filtered.length === 0 ? (
-          <EmptyState icon="≡" title="Aucune planification" description={search ? `Aucun résultat pour "${search}"` : "Créez votre première planification pour commencer."}
+          <EmptyState icon="≡" title="Aucune planification"
+            description={search ? `Aucun résultat pour "${search}"` : badgeFilter !== 'all' ? "Aucune planification avec ce badge." : "Créez votre première planification pour commencer."}
             action={<Button variant="primary" onClick={() => navigate('newPlanning')}>Créer une planification</Button>}
           />
         ) : isMobile ? (
@@ -102,8 +117,14 @@ export const PlanningsPage: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '4px' }}>{pl.title}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{pl.projectName}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Modifié le {formatDate(pl.updatedAt)}</div>
+                    {(pl.badges ?? []).length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '4px' }}>
+                        {(pl.badges ?? []).map(b => (
+                          <span key={b.id} style={{ padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 600, background: `${b.color}20`, border: `1px solid ${b.color}40`, color: b.color }}>{b.name}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Modifié le {formatDate(pl.updatedAt)}</div>
                   </div>
                   <StatusBadge status={pl.status} pulse={pl.status === 'active'} />
                 </div>
@@ -144,8 +165,8 @@ export const PlanningsPage: React.FC = () => {
         ) : (
           <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: '16px', overflowX: isCompact ? 'auto' : 'hidden', overflowY: 'hidden' }}>
             {/* Header */}
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'grid', gridTemplateColumns: '1fr 160px 100px 130px 120px 140px', gap: '12px', alignItems: 'center', minWidth: isCompact ? 760 : undefined }}>
-              {['Titre', 'Projet', 'Étape', 'Progression', 'Statut', 'Actions'].map(h => (
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'grid', gridTemplateColumns: '1fr 180px 100px 130px 120px 140px', gap: '12px', alignItems: 'center', minWidth: isCompact ? 760 : undefined }}>
+              {['Titre', 'Badges', 'Étape', 'Progression', 'Statut', 'Actions'].map(h => (
                 <span key={h} style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>
               ))}
             </div>
@@ -153,7 +174,7 @@ export const PlanningsPage: React.FC = () => {
             {filtered.map((pl, i) => (
               <div key={pl.id} style={{
                 padding: '14px 16px', borderBottom: i < filtered.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                display: 'grid', gridTemplateColumns: '1fr 160px 100px 130px 120px 140px', gap: '12px', alignItems: 'center',
+                display: 'grid', gridTemplateColumns: '1fr 180px 100px 130px 120px 140px', gap: '12px', alignItems: 'center',
                 transition: 'background 0.15s', cursor: 'pointer',
                 minWidth: isCompact ? 760 : undefined,
               }}
@@ -165,9 +186,15 @@ export const PlanningsPage: React.FC = () => {
                   <div style={{ fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '3px' }}>{pl.title}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Modifié le {formatDate(pl.updatedAt)}</div>
                 </div>
-                {/* Project */}
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {pl.projectName}
+                {/* Badges */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', overflow: 'hidden' }}>
+                  {(pl.badges ?? []).length > 0
+                    ? (pl.badges ?? []).slice(0, 3).map(b => (
+                        <span key={b.id} style={{ padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 600, background: `${b.color}20`, border: `1px solid ${b.color}40`, color: b.color, whiteSpace: 'nowrap' }}>{b.name}</span>
+                      ))
+                    : <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>—</span>
+                  }
+                  {(pl.badges ?? []).length > 3 && <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>+{(pl.badges ?? []).length - 3}</span>}
                 </div>
                 {/* Step */}
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>

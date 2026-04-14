@@ -1,17 +1,17 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api, getBackendError, setAuthToken, type BackendErrorPayload } from '../lib/api';
 import { buildRoute, hasExplicitHashRoute, readCurrentRoute, type AppRoute } from '../lib/routing';
-import { User, Project, Planning, PlanStatus, PlanningSolveResult } from '../types';
+import { User, Planning, Badge, PlanStatus, PlanningSolveResult } from '../types';
 
 const TOKEN_STORAGE_KEY = 'planify:auth-token';
 
 interface SavePlanningInput {
   title?: string;
-  projectId?: string;
   status?: PlanStatus;
   currentStep?: number;
   totalSteps?: number;
   progress?: number;
+  badges?: Badge[];
   data?: Record<string, any>;
 }
 
@@ -20,10 +20,9 @@ interface AppContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isBootstrapping: boolean;
-  projects: Project[];
   plannings: Planning[];
+  badges: Badge[];
   currentPage: string;
-  selectedProject: Project | null;
   selectedPlanning: Planning | null;
   sidebarOpen: boolean;
   login: (email: string, password: string) => Promise<BackendErrorPayload | null>;
@@ -31,17 +30,16 @@ interface AppContextType {
   register: (name: string, email: string, password: string) => Promise<BackendErrorPayload | null>;
   updateProfile: (name: string, email: string) => Promise<BackendErrorPayload | null>;
   navigate: (page: string, params?: any) => void;
-  setSelectedProject: (p: Project | null) => void;
   setSelectedPlanning: (p: Planning | null) => void;
   setSidebarOpen: (v: boolean) => void;
-  createProject: (name: string, description: string, color: string) => Promise<Project | null>;
-  createPlanning: (title: string, projectId: string) => Promise<Planning | null>;
+  createPlanning: (title: string, badges?: Badge[]) => Promise<Planning | null>;
   updatePlanningStatus: (id: string, status: PlanStatus) => Promise<void>;
   updatePlanningStep: (id: string, step: number, data?: Record<string, any>) => Promise<void>;
   savePlanningData: (id: string, payload: SavePlanningInput) => Promise<Planning | null>;
   solvePlanning: (id: string, data?: Record<string, any>, source?: string, solver?: string) => Promise<PlanningSolveResult | null>;
   deletePlanning: (id: string) => Promise<void>;
-  deleteProject: (id: string) => Promise<void>;
+  createBadge: (name: string, color: string) => Promise<Badge | null>;
+  deleteBadge: (id: string) => Promise<void>;
   refreshData: () => Promise<void>;
   toast: (msg: string, type?: 'success' | 'error' | 'info') => void;
   toasts: ToastItem[];
@@ -81,10 +79,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
-  const [projects, setProjects] = useState<Project[]>([]);
   const [plannings, setPlannings] = useState<Planning[]>([]);
+  const [badges, setBadges] = useState<Badge[]>([]);
   const [currentPage, setCurrentPage] = useState(initialRoute.page);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedPlanning, setSelectedPlanning] = useState<Planning | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -95,19 +92,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTimeout(() => setToasts(prev => prev.filter(item => item.id !== id)), 3500);
   }, []);
 
-  const applyRouteState = useCallback((route: AppRoute, nextProjects: Project[], nextPlannings: Planning[]) => {
+  const applyRouteState = useCallback((route: AppRoute, nextPlannings: Planning[]) => {
     setCurrentPage(route.page);
-    setSelectedProject(route.projectId ? nextProjects.find(project => project.id === route.projectId) ?? null : null);
     setSelectedPlanning(route.planningId ? nextPlannings.find(planning => planning.id === route.planningId) ?? null : null);
   }, []);
 
-  const syncSelections = useCallback((nextProjects: Project[], nextPlannings: Planning[]) => {
-    applyRouteState(readCurrentRoute(), nextProjects, nextPlannings);
+  const syncSelections = useCallback((nextPlannings: Planning[]) => {
+    applyRouteState(readCurrentRoute(), nextPlannings);
   }, [applyRouteState]);
 
-  const syncRouteFromLocation = useCallback((nextProjects: Project[] = projects, nextPlannings: Planning[] = plannings) => {
-    applyRouteState(readCurrentRoute(), nextProjects, nextPlannings);
-  }, [applyRouteState, plannings, projects]);
+  const syncRouteFromLocation = useCallback((nextPlannings: Planning[] = plannings) => {
+    applyRouteState(readCurrentRoute(), nextPlannings);
+  }, [applyRouteState, plannings]);
 
   const updateLocation = useCallback((page: string, params?: { projectId?: string; planningId?: string }, replace = false) => {
     if (typeof window === 'undefined') {
@@ -128,9 +124,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     persistToken(null);
     setAuthToken(null);
     setUser(null);
-    setProjects([]);
     setPlannings([]);
-    setSelectedProject(null);
+    setBadges([]);
     setSelectedPlanning(null);
     setCurrentPage(nextPage);
     updateLocation(nextPage, undefined, true);
@@ -152,22 +147,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadAppData = useCallback(async (options?: { userOverride?: User | null }) => {
     const effectiveUser = options?.userOverride ?? user;
     if (!effectiveUser) {
-      setProjects([]);
       setPlannings([]);
       return;
     }
 
     try {
-      const [projectsResponse, planningsResponse] = await Promise.all([
-        api.get<{ data: { projects: Project[] } }>('/api/projects'),
+      const [planningsResponse, tagsResponse] = await Promise.all([
         api.get<{ data: { plannings: Planning[] } }>('/api/plannings'),
+        api.get<{ data: { tags: Badge[] } }>('/api/tags'),
       ]);
 
-      const nextProjects = projectsResponse.data.data.projects;
       const nextPlannings = planningsResponse.data.data.plannings;
-      setProjects(nextProjects);
       setPlannings(nextPlannings);
-      syncRouteFromLocation(nextProjects, nextPlannings);
+      setBadges(tagsResponse.data.data.tags);
+      syncRouteFromLocation(nextPlannings);
     } catch (error) {
       const backendError = handlePossibleAuthError(error);
       if (backendError.code !== 'AUTH_REQUIRED' && backendError.code !== 'INVALID_SESSION') {
@@ -244,22 +237,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const route = readCurrentRoute();
 
-    if (route.page === 'projectDetail') {
-      if (selectedProject) {
-        return;
-      }
-
-      if (projects.length === 0) {
-        void loadAppData({ userOverride: user });
-        return;
-      }
-
-      updateLocation('projects', undefined, true);
-      setCurrentPage('projects');
-      setSelectedProject(null);
-      return;
-    }
-
     if (route.page === 'editor') {
       if (selectedPlanning) {
         return;
@@ -280,9 +257,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isBootstrapping,
     loadAppData,
     plannings.length,
-    projects.length,
     selectedPlanning,
-    selectedProject,
     updateLocation,
     user,
   ]);
@@ -383,16 +358,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [clearSession, toast]);
 
   const navigate = useCallback((page: string, params?: any) => {
-    const nextProject = params?.project ?? null;
     const nextPlanning = params?.planning ?? null;
     const routeParams = {
-      projectId: nextProject?.id,
       planningId: nextPlanning?.id,
     };
 
     updateLocation(page, routeParams);
     setCurrentPage(page);
-    setSelectedProject(nextProject);
     setSelectedPlanning(nextPlanning);
   }, [updateLocation]);
 
@@ -403,38 +375,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? prev.map(item => (item.id === planning.id ? planning : item))
         : [planning, ...prev];
 
-      syncSelections(projects, next);
+      syncSelections(next);
       return next;
     });
     setSelectedPlanning(prev => (prev?.id === planning.id ? planning : prev));
-  }, [projects, syncSelections]);
+  }, [syncSelections]);
 
-  const createProject = useCallback(async (name: string, description: string, color: string) => {
-    try {
-      const response = await api.post<{ data: { project: Project } }>('/api/projects', {
-        name,
-        description,
-        color,
-      });
-
-      const project = response.data.data.project;
-      setProjects(prev => [project, ...prev]);
-      toast('Projet cree avec succes.', 'success');
-      return project;
-    } catch (error) {
-      const backendError = handlePossibleAuthError(error);
-      if (backendError.code !== 'AUTH_REQUIRED' && backendError.code !== 'INVALID_SESSION') {
-        toast(backendError.message, 'error');
-      }
-      return null;
-    }
-  }, [handlePossibleAuthError, toast]);
-
-  const createPlanning = useCallback(async (title: string, projectId: string) => {
+  const createPlanning = useCallback(async (title: string, badges?: Badge[]) => {
     try {
       const response = await api.post<{ data: { planning: Planning } }>('/api/plannings', {
         title,
-        projectId,
+        ...(badges && badges.length > 0 ? { badges } : {}),
       });
 
       const planning = response.data.data.planning;
@@ -533,28 +484,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [handlePossibleAuthError, refreshData, selectedPlanning, toast, updateLocation]);
 
-  const deleteProject = useCallback(async (id: string) => {
+
+  const createBadge = useCallback(async (name: string, color: string) => {
     try {
-      await api.delete(`/api/projects/${id}`);
-      setProjects(prev => prev.filter(project => project.id !== id));
-      setPlannings(prev => prev.filter(planning => planning.projectId !== id));
-      if (selectedProject?.id === id) {
-        setSelectedProject(null);
-        updateLocation('projects', undefined, true);
-        setCurrentPage('projects');
+      const response = await api.post<{ data: { tag: Badge } }>('/api/tags', { name, color });
+      const tag = response.data.data.tag;
+      setBadges(prev => [...prev, tag]);
+      return tag;
+    } catch (error) {
+      const backendError = handlePossibleAuthError(error);
+      if (backendError.code !== 'AUTH_REQUIRED' && backendError.code !== 'INVALID_SESSION') {
+        toast(backendError.message, 'error');
       }
-      if (selectedPlanning?.projectId === id) {
-        setSelectedPlanning(null);
-      }
-      await refreshData();
-      toast('Projet supprime.', 'success');
+      return null;
+    }
+  }, [handlePossibleAuthError, toast]);
+
+  const deleteBadge = useCallback(async (id: string) => {
+    try {
+      await api.delete(`/api/tags/${id}`);
+      setBadges(prev => prev.filter(b => b.id !== id));
+      toast('Badge supprime.', 'success');
     } catch (error) {
       const backendError = handlePossibleAuthError(error);
       if (backendError.code !== 'AUTH_REQUIRED' && backendError.code !== 'INVALID_SESSION') {
         toast(backendError.message, 'error');
       }
     }
-  }, [handlePossibleAuthError, refreshData, selectedPlanning, selectedProject, toast, updateLocation]);
+  }, [handlePossibleAuthError, toast]);
 
   return (
     <AppContext.Provider
@@ -563,10 +520,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isAuthenticated: !!user,
         isLoading,
         isBootstrapping,
-        projects,
         plannings,
+        badges,
         currentPage,
-        selectedProject,
         selectedPlanning,
         sidebarOpen,
         login,
@@ -574,17 +530,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         register,
         updateProfile,
         navigate,
-        setSelectedProject,
         setSelectedPlanning,
         setSidebarOpen,
-        createProject,
         createPlanning,
         updatePlanningStatus,
         updatePlanningStep,
         savePlanningData,
         solvePlanning,
         deletePlanning,
-        deleteProject,
+        createBadge,
+        deleteBadge,
         refreshData,
         toast,
         toasts,

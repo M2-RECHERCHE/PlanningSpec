@@ -3,10 +3,9 @@ import { AppProvider, useApp } from './context/AppContext';
 import { LandingPage } from './views/LandingPage';
 import { LoginPage, RegisterPage } from './views/AuthPages';
 import { DashboardPage } from './views/DashboardPage';
-import { ProjectsPage, ProjectDetailPage } from './views/ProjectsPage';
 import { PlanningsPage } from './views/PlanningsPage';
 import { PlanningEditorPage } from './views/PlanningEditorPage';
-import { ProfilePage, NewPlanningPage, NewProjectPage } from './views/OtherPages';
+import { ProfilePage, NewPlanningPage } from './views/OtherPages';
 import { ReportWorkshopPage } from './views/ReportWorkshopPage';
 import { FullScreenLoader } from './components/ui';
 import { ToastContainer } from './components/ui/Toast';
@@ -16,14 +15,11 @@ const PAGE_MAP: Record<string, React.FC> = {
   login:         LoginPage,
   register:      RegisterPage,
   dashboard:     DashboardPage,
-  projects:      ProjectsPage,
-  projectDetail: ProjectDetailPage,
   plannings:     PlanningsPage,
   editor:        PlanningEditorPage,
   report:        ReportWorkshopPage,
   profile:       ProfilePage,
   newPlanning:   NewPlanningPage,
-  newProject:    NewProjectPage,
 };
 
 const AppRouter: React.FC = () => {
