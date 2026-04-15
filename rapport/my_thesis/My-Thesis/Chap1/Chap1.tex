@@ -1,0 +1,1162 @@
+%\myChapter{Titre}{Titre court}
+\myChapter{Généralités sur la composition des services}{}
+\label{chap:services_composition_generalities}
+%\myMinitoc{Profondeur de la minitoc (section|subsection|subsubsection)}{Titre de la minitoc}
+\myMiniToc{mysection}{Sommaire}
+
+% \newpage
+
+% This chapter introduces the intersection of parallel computing and dynamic programming, outlining their relevance in solving large-scale computational problems efficiently. The discussion encompasses various computing architectures, the design of parallel algorithms, and explores dynamic programming strategies suited for parallel execution.
+
+% ====section=====
+% ====section=====
+\mySection{Introduction}{}
+
+Dans un monde où les systèmes informatiques deviennent de plus en plus complexes et interconnectés, les architectures orientées services (SOA) \cite{papazoglou2007service} et les paradigmes de microservices se sont imposés comme des approches incontournables pour assurer la modularité, la réutilisabilité et la scalabilité des applications. Ces architectures permettent de décomposer les fonctionnalités en unités indépendantes, appelées services, qui peuvent être combinées dynamiquement pour répondre à des besoins variés.
+
+Le calcul orienté service occupe aujourd’hui une place importante dans les approches modernes de structuration des systèmes logiciels complexes. Bien que la notion de service ne soit pas nouvelle, elle reste difficile à cerner dans une définition unique, tant elle s’exprime dans plusieurs domaines. \textit{Par exemple en électronique domestique, un lecteur DVD fournit un service de lecture; en télécommunications, un opérateur offre des services de messagerie ou de connectivité mettant en liaison deux utilisateurs; en informatique, un système d’exploitation expose des services d’abstraction matérielle, tandis qu’un fournisseur cloud met à disposition des services de stockage, de calcul ou d’intelligence artificielle.}
+
+Dans les domaine du génie logiciel et du cloud computing, le concept de service est un paradigme en constante évolution. Il s’inscrit dans une trajectoire historique qui a vu émerger successivement le paradigme procédural où la structuration se faisait par fonctionnalité, le modèle objet avec l'encapsulation des données et des traitements associés, puis les composants logiciels, qui exposent des points d’entrée normalisés pour faciliter la réutilisation. L’orientation service constitue l’aboutissement naturel de cette progression : elle vise à exposer des fonctionnalités accessibles via des interfaces explicites, tout en dissimulant les détails d’implémentation. Ces fonctionnalités sont consommées via des échanges de messages, souvent standardisés, dans un cadre \textit{loosely coupled} \cite{papazoglou2007service} (faiblement couplé).
+
+L’une des avancées majeures liées à cette orientation se situe dans la désynchronisation entre la structure logicielle interne et l’utilisation externe: un service peut être distribué, répliqué, mis à l’échelle ou remplacé indépendamment des composants qui le consomment. À l’opposé des objets distribués, dont la réutilisabilité est parfois freinée par les dépendances fortes (comme l’héritage), les services offrent une meilleure interopérabilité et une plus grande flexibilité. Les composants distribués sont également apparus comme une tentative d’organisation logicielle plus robuste, mais c’est avec le Web Services Model que le paradigme s’est véritablement consolidé.
+
+La littérature scientifique présente une diversité de modèles de services, incluant les services web, les services grid et les services destinés aux réseaux domestiques. Néanmoins, le modèle des services web\footnote{Dans la suite de notre mémoire nous utilisons les termes \textit{service}, \textit{service web} et \textit{microservice} de manière interchangeable} s'impose comme l'approche prédominante dans ce domaine. La conceptualisation des services web a donné lieu à diverses définitions d'une précision variable selon les auteurs. IBM  \cite{kreger2001web} propose de caractériser un service web comme « une entité logicielle autonome et modulaire, accessible via un réseau pour satisfaire des exigences spécifiées ».
+
+Austin et al. \cite{austin2004web} proposent une approche plus technique en décrivant les services web comme « des applications identifiées des applications identifiées par un URI, dont l'interface et les liaisons sont découvrables, et qui communiquent avec d'autres applications par l'intermédiaire de messages XML ».
+
+Booth David \cite{booth2004web}, propose une définition davantage axée sur les aspects techniques, mettant l'accent sur les interactions machine-à-machine réalisées via des messages SOAP transmis sur HTTP, avec une interface intelligible pour les systèmes automatisés.
+
+% À partir de ces définitions, trois éléments fondamentaux caractérisent un service à savoir
+L'analyse de ces différentes définitions révèle trois composantes essentielles qui définissent un service :(\textit{i}) une interface explicite, décrivant les opérations disponibles et leurs signatures, (\textit{ii}) un mécanisme de liaison (binding) définissant les messages échangés via un protocole de communication, et (\textit{iii}) une aptitude à l'interaction avec d'autres services, autorisant la composition dynamique et distribuée.
+
+À l'heure actuelle, les technologies orientées services ont connu une évolution considérable :
+Les Web Services classiques (SOAP/WSDL) ont laissé place à des approches plus légères, comme les services RESTful \cite{fielding2000architectural}, utilisant HTTP et des formats JSON pour améliorer l’intégration avec le web moderne.
+Les outils de description d’API permettent de documenter et générer automatiquement des services.
+Les microservices, déployés via des conteneurs Docker et orchestrés avec Kubernetes, favorisent la scalabilité et la résilience applicative.
+Enfin, des architectures orientées événements (ex. AWS Lambda, Google Cloud Functions) \cite{jonas2019cloud} repoussent encore plus loin la granularité et la souplesse des services.
+
+L’évolution vers une organisation par services autonomes, découplés et réactifs, est aussi facilitée par la montée des paradigmes orientés données, comme les Guarded Attribute Grammars (GAG) \cite{badouel2015active}, qui permettent une exécution guidée par les dépendances de données et une composition incrémentale.
+
+% ====section=====
+% ====section=====
+\mySection{Calcul Orienté Services}{}
+\label{sec:calcul_orientee_service}
+
+\subsection{Architecture Orientée Services}{}
+\label{subsec:evolution_high_performance}
+
+L'évolution du génie logiciel s'est caractérisée par l'émergence successive d'approches méthodologiques visant à répondre aux exigences croissantes du développement logiciel. Chaque nouveau paradigme proposé avait pour objectif de pallier aux limitations des paradigmes précédents en réutilisant certains principes et en créant de nouveaux. C’est ainsi que les approches orientées objets \cite{taylor1990object}, orientées composants \cite{szyperski2002component} et récemment les paradigmes orientés services ont vu le jour.
+
+Les architectures basées sur les composants, telles que EJB et .NET ont été conçues pour masquer la complexité liée à l'intégration d'applications autonomes et hétérogènes \cite{vinoski2004overview}. Toutefois, ces technologies de composants distribués présentent un couplage relativement fort entre les objets, chaque architecture imposant sa propre infrastructure spécifique. Par conséquent, la mise en place de ces architectures dans un environnement ouvert comme Internet a présenté certaines difficultés. Pour pallier ces contraintes, les efforts de recherche ont menés à l’émergence des architectures orientées services qui offrent une approche plus flexible et souple.
+
+\subsubsection{Définition}
+Il n'existe pas officiellement de définitions standards des SOA; néanmoins nous avons relevé de la littérature quelques unes %faisant référence à un ou plusieurs critères de l'architecture:    
+en référence à un ou plusieurs critères architecturaux :
+\begin{definition}
+    Une architecture orientée services constitue une architecture applicative dans laquelle l'ensemble des fonctionnalités sont conçues comme des services autonomes, dotés d'interfaces clairement définies et invocables pour l'élaboration de processus métier. Cette approche permet de développer des systèmes logiciels qui fournissent des services à d'autres applications par l'intermédiaire d'interfaces publiées et découvrables, ces services étant accessibles via un réseau \cite{channabasavaiah2003migrating}.
+\end{definition}
+\begin{definition}
+    % La SOA est un paradigme permettant d'organiser et d'utiliser des ressources distribuées pouvant être de domaines différentes. Elle fournit un moyen uniforme d'offrir, de découvrir, d'interagir et d'utiliser des ressources pour produire le résultat désiré avec des préconditions et des buts mesurables \cite{josuttis2007soa}.
+    La SOA est un modèle qui permet d'organiser et d'exploiter des ressources distribuées provenant de divers domaines. Elle offre un moyen standardisé pour proposer, découvrir, interagir et utiliser ces ressources afin d'atteindre le résultat souhaité avec des préconditions et des objectifs mesurables \cite{josuttis2007soa}.
+\end{definition}
+\begin{definition}
+    La SOA implique de diviser l'activité metier en une série de services qui peuvent interagir entre eux \cite{papazoglou2007service}. Ces services, ainsi que leurs descriptions et les opérations fondamentales (telles que la publication, la découverte et la liaison) qui produisent ou utilisent ces descriptions, forment la base de la SOA \cite{papazoglou2003service}.
+\end{definition}
+À partir de ces énoncés, il ressort que la SOA représente une approche de conception logicielle qui utilise les services comme unité de base pour construire des systèmes distribués modulaires, flexibles et interopérables. Ces services, porteurs de fonctionnalités spécialisées, sont développés selon un principe d'indépendance technologique vis-à-vis des plateformes, langages et systèmes d'exploitation. Ils servent à répondre aux attentes des utilisateurs finaux ou à constituer des services composés plus complexes, encourageant la réutilisabilité, la scalabilité et l'intégration multi-environnements.
+
+\subsubsection{Propriétés}
+En général, dans une SOA, les services conformes sont censés répondre aux exigences suivantes \cite{papazoglou2003service,kreger2001web,papazoglou2007service,dragoni2017microservices}:
+\begin{itemize}
+    \item \textbf{Modularité}: chaque service est conçu de manière autonome pour accomplir une tâche spécifique et s'expose via une interface standardisée (REST, SOAP), facilitant ainsi son intégration dans des applications plus vastes;
+    \item \textbf{Couplage faible}: Dans une SOA, un client peut invoquer un service sans connaître ses détails internes, tels que la structure des données ou la base de données utilisée. De la même manière, le fournisseur de services n’a pas besoin d’accéder à l’état interne du client pour fournir une réponse. Les interactions entre eux reposent exclusivement sur des protocoles standards et ouverts, garantissant une communication indépendante et flexible;
+    \item \textbf{Réutilisabilité}: les servies web existant peuvent être agrégées dans d'autres services composites. En effet, la modularité et le couplage faible des services favorise leur réutilisation; 
+    \item \textbf{Interopérabilité}: Les services web sont capables de collaborer efficacement pour atteindre un objectif commun, quelque soit le contexte ou l'environnement dans lequel ils évoluent. Les services web sont développés pour intégrer les applications issues d'environnement distribues et hétérogènes;  
+    \item \textbf{Composabilité}: Des services simples peuvent être associés afin d'effectuer des processus métier plus complexe;
+    \item \textbf{Communication Asynchrone}: les services interagissent sans que le consommateur de services ait besoin d’attendre une réponse immédiate pour continuer son exécution, permettant ainsi un traitement indépendant et parallèle.
+\end{itemize}
+
+\subsubsection{Modèle SOA}
+Le modèle des SOA (Figure \ref{fig:modele-soa}), est un modèle triangulaire constituée de trois entités principales: le \textbf{fournisseur}, le \textbf{client} et l'\textbf{annuaire} de services. Ces entités se chargent de la description, la publication, le stockage, la localisation et l'innovation de services indépendants disponibles à travers la toile.  
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\linewidth]{My-Thesis/Chap1/images/modele SOA.png}
+    \caption{Architecture Orientée Service \cite{kreger2001web,papazoglou2007service}}
+    \label{fig:modele-soa}
+\end{figure}
+
+\textit{Le fournisseur de service}:
+ un fournisseur conçoit un service web et en publie la description dans un répertoire de services. Cette description expose les fonctionnalités disponibles et leurs méthodes d'invocation, incluant les paramètres d'entrée nécessaires à chaque opération ainsi que les paramètres de sortie produits lors de l'exécution.
+
+\textit{L'annuaire de service}:
+un annuaire de services s'apparente à un répertoire centralisé référençant les services accessibles. Il assure la réception et l'enregistrement des spécifications de services publiées par les fournisseurs, ainsi que le traitement des demandes de recherche formulées par les clients.
+
+\textit{Le client}:
+Le client peut identifier les services répondant à ses exigences par consultation du catalogue. Une fois que le catalogue a retourné la liste des descriptions de services disponibles, le client sélectionne le service le plus approprié et se connecte au fournisseur pour exécuter les opérations nécessaires. Il est important de noter que ce sont les opérations de service qui sont exécutées, et non les services eux-mêmes. Ainsi, parler d'invocation de service est en réalité un abus de langage.
+
+\subsection{Évolution des microservices}
+\subsubsection{Définition}
+Un microservice est une unité logicielle autonome qui réalise une fonctionnalité métier spécifique, déployée indépendamment et capable de communiquer avec d'autres microservices par des interfaces légère. Cette architecture s'appuie sur le principe de \textit{découplage maximal}: chaque service possède sa logique métier spécifique, sa base de données dédiée (le cas échéant), et peut faire l'objet de mises à jour, de déploiements ou de remplacements sans affecter le reste du système \cite{newman2021building}.
+\begin{definition}
+    Selon Dragoni et al. \cite{dragoni2017microservices}, un microservice peut être défini comme un service à \textit{granularité fine}, souvent construit autour d'un domaine métier précis (au sens de Domain-Driven Design), et pouvant s’intégrer dynamiquement dans une architecture distribuée.
+\end{definition}
+Ces services interagissent entre eux par des mécanismes de communication légers et standardisés, notamment les API REST \cite{soni2019api} ou encore gRPC \cite{indrasiri2020grpc}.
+
+\subsubsection{Différence entre SOA et microservices}
+Alors que la SOA et les microservices partagent des principes fondamentaux similaires en matière de modularité et de découplage, ils se distinguent tout de même par leur approche, leur portée et leurs modalités d'implémentation.
+Cette section présente une analyse comparative détaillée de ces deux approches architecturales, s'appuyant sur les études récentes qui mettent en évidence leurs différences structurelles et opérationnelles.
+
+Comme le soulignent les recherches contemporaines, la principale distinction réside dans leur champ d'application : la SOA a une portée d'entreprise, tandis que l'architecture microservices a une portée d'application. Cette différence fondamentale influence tous les autres aspects de ces architectures.
+
+Voici un tableau récapitulatif des principales différences \cite{awada2018application,ibm2025soa}:
+\begin{table}[h]
+\centering
+\caption{Comparaison entre SOA et Microservices}
+\label{tab:soa-vs-microservices}
+\begin{tabular}{|p{3.5cm}|p{5.5cm}|p{5.5cm}|}
+\hline
+\rowcolor{gray!30}
+& \textbf{SOA} & \textbf{Microservices} \\
+\hline
+Granularité & Services métiers à large portée & Services très spécialisés \\
+\hline
+Mise en œuvre & Différents services avec des ressources partagées. & Plus petits services indépendants et destinés à un objectif spécifique. \\
+\hline
+Communication & Un ESB utilise plusieurs protocoles de messagerie comme SOAP. & API, service de messagerie, Pub/Sub \\
+\hline
+Stockage de données & Stockage de données partagé. & Stockage de données indépendant. \\
+\hline
+Déploiement & Difficile. La reconstruction complète est nécessaire pour les petites modifications. & Facile à déployer. Chaque microservice peut être conteneurisé. \\
+\hline
+Réutilisabilité & Des services réutilisables s'appuyant sur des ressources communes partagées. & Chaque service dispose de ses propres ressources indépendantes. Vous pouvez réutiliser les microservices par l'intermédiaire de leurs API. \\
+\hline
+Rapidité & Ralentie à mesure que de nouveaux services sont ajoutés. & Vitesse constante à mesure que le trafic augmente. \\
+\hline
+Flexibilité de gouvernance & Gouvernance cohérente des données pour tous les services. & Des politiques de gouvernance des données différentes pour chaque stockage. \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Avantages et défis des microservices}
+
+L'architecture microservices, bien qu'offrant de nombreux bénéfices en termes de flexibilité et d'évolutivité, présente également des défis considérables qui doivent être soigneusement évalués.
+
+\textbf{Avantages des Microservices}
+
+\begin{itemize}
+    \item \textbf{Modularité}: Chaque microservice correspond à une fonctionnalité précise, ce qui favorise une séparation claire des responsabilités et rend le système plus lisible et maintenable; 
+
+    \item \textbf{Déploiement indépendant}: les microservices peuvent implémentés, testés, déployés et mis à jour individuellement sans impacter le reste du système;
+    
+    \item \textbf{Flexibilité technologique}: les microservice sont développés dans le langage ou la technologie la plus adaptée à leur besoin, tant qu’il respecte les protocoles d’échange.
+\end{itemize}
+
+\textbf{Défis des microservices}
+
+\begin{itemize}
+    \item \textbf{Complexité opérationnelle}: le déploiement, le monitoring, la mise en réseau et l'administration de multiples services indépendants demandent une infrastructure complexe;
+    
+    \item \textbf{Communication et réseau}: les appels inter-services sont souvent faits via le réseau, ce qui introduit de la latence, des risques de panne, et complexifie le contrôle des transactions distribuées;
+
+    \item \textbf{Consistance des données}: le modèle distribue rend le pilotage des données plus délicate.
+\end{itemize}
+
+Les microservices représentent une approche architecturale puissante qui peut apporter une valeur significative dans le bon contexte. Cependant, leur adoption nécessite une évaluation approfondie des capacités organisationnelles, techniques et financières. Le succès de cette architecture dépend largement de la maturité de l'organisation et de sa capacité à gérer la complexité distribuée.
+
+% ====section=====
+% ====section=====
+\mySection{Composition des Services}{}
+\label{sec:service_composition}
+La composition des services est le processus qui permet d'intégrer des services dans une application. Le produit de cette composition est un nouveau service, appelé service composite. Dans ce contexte, la composition est qualifiée de récursive ou hiérarchique. 
+
+% La composition des services est le mécanisme qui permet l’intégration des services dans une application. Le résultat de la composition de services est un nouveau service appelé service composite (Figure \ref{fig:web-service-composition}). Dans ce cas, la composition est dite composition récursive ou hiérarchique.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\linewidth]{My-Thesis/Chap1/images/service composition - 1.png}
+    \caption{Composition des services web \cite{sheng2014web}}
+    \label{fig:web-service-composition}
+\end{figure}
+
+% La composition constitue aujourd'hui un domaine d'intérêt majeur tant pour la communauté de recherche que pour le secteur industriel. De nombreux travaux de recherche s'attachent à développer des modèles de composition de services et à fournir les outils nécessaires à cette composition.
+Actuellement, la composition est un domaine d'intérêt majeur pour la communauté scientifique ainsi que pour le secteur industriel. De nombreuses recherches se concentrent sur le développement de modèles de composition de services et sur la fourniture des outils nécessaires à cette fin.
+
+Un service web est caractérisé comme \textit{composé} ou \textit{composite} dès lors que son fonctionnement implique des échanges avec d'autres services web en vue d'exploiter leurs capacités fonctionnelles. La composition de services web spécifie les services à invoquer, leur séquencement et les modalités de gestion des situations exceptionnelles.
+
+% Dans cette section, nous discutons des différents  points sur la composition de services web. Nous accordons une attention particulière à la \textit{composition statique} plus précisément l'\textit{orchestration} du fait de sa relation avec notre travail.
+
+\subsection{Approches de composition de services}{}
+\subsubsection{Composition statique}
+La composition statique se déroule en phase de conception applicative, impliquant la sélection, la liaison et l'assemblage préalables des composants. Cette méthode convient aux environnements stables à faible évolutivité. Elle génère cependant une rigidité applicative potentiellement incompatible avec les besoins clients. La composition statique des services web se décline en orchestration et chorégraphie \cite{peltz2003web}.
+
+\textbf{Orchestration}
+L'orchestration des services web requiert la définition d'un enchaînement selon un modèle établi et l'exécution via un script dédié. Les services web restent inconscients de la composition, seul l'orchestrateur maîtrisant cette connaissance. Le script et le modèle formalisent les interactions par l'identification des messages et la spécification des logiques d'invocation.
+
+La figure \ref{fig:orchestration-services-web} illustre une orchestration de service. Le service coordinateur contrôle tous les services web impliqué et coordonne l’exécution de leurs différentes opérations. 
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\linewidth]{My-Thesis/Chap1/images/orchestration.png}
+    \caption{Orchestration de services web \cite{sheng2014web}}
+    \label{fig:orchestration-services-web}
+\end{figure}
+% %%%%%%%%% To Delete %%%%%%%%%%%%%%%
+% La composition statique des services web s'appuie sur divers langages de définition. Cette section détaille les langages les plus employés dans ce domaine :
+% \begin{itemize}
+%     \item \textbf{XLANG} est une extension WSDL développée par Microsoft, qui offre un framework d'orchestration de services web et de définition d'accords collaboratifs, basé sur des fondements théoriques de calcul. Les actions constituent ses éléments fondamentaux, intégrant les quatre opérations WSDL standard (requête/réponse, sollicitation, notification) et ajoutant deux catégories spécifiques: \textit{arrêts} (date-limite et durée) et \textit{exceptions};
+%     \item \textbf{WSFL} Web Services Flow Language \cite{leymann2001web} constitue un langage XML destiné à spécifier les services web composites. Il distingue deux approches compositionnelles : premièrement, la modélisation d'usage coordonné d'un ensemble de services web pour atteindre un objectif métier spécifique, générant ainsi une spécification de processus d'affaires ; deuxièmement, la définition des patterns d'interaction entre services web, produisant une description des échanges globaux associés;
+%     \item \textbf{BPEL4WS} \cite{juric2006business} (également désigné BPEL ou BPELWS) constitue un langage XML spécialisé dans la spécification des processus d'affaires. Son architecture permet l'échange et la modification de données distribuées entre organismes multiples via l'orchestration de services web. Ce langage modélise les interactions de processus métier fondés sur les services web, tant en contexte intra-entreprise qu'inter-organisationnel. Les organisations adoptant BPEL peuvent établir leurs workflows métier tout en assurant l'interopérabilité à l'échelle corporative et avec leurs partenaires commerciaux dans un écosystème de services web. La spécification BPEL unifie et supplante les standards WSFL et XLANG.  
+% \end{itemize}
+% %%%%%%%%% To Delete %%%%%%%%%%%%%%%
+
+\textbf{Chorégraphie}
+À l'inverse de l'orchestration, la chorégraphie fonctionne sans coordinateur centralisé. Chaque service web participant possède une connaissance précise du moment d'exécution de ses opérations et des partenaires d'interaction concernés. Cette approche privilégie l'échange direct de messages entre services web plutôt que l'exécution d'un processus métier par une entité unique.
+
+La chorégraphie constitue une démarche collaborative où chaque acteur du processus définit ses propres interactions. Elle établit l'enchaînement des échanges de messages impliquant potentiellement plusieurs services web. Cette collaboration chorégraphique peut être modélisée selon l'approche suivante (Figure \ref{fig:choregraphie-service-web}):
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\linewidth]{My-Thesis/Chap1/images/choregraphie.png}
+    \caption{Chorégraphie des services web \cite{sheng2014web}}
+    \label{fig:choregraphie-service-web}
+\end{figure}
+
+% %%%%%%%%% To Delete %%%%%%%%%%%%%%%
+% La chorégraphie adopte une stratégie décentralisée et coopérative pour assembler les services. Les langages de chorégraphie majeurs comprennent :
+% \begin{itemize}
+%     \item \textbf{WSCL} \cite{banerji2002web}: propose une description XML des services web centrée sur leurs échanges conversationnels et la prise en compte des messages transmis. Conçu pour un déploiement complémentaire avec WSDL, WSCL exploite les définitions WSDL pour spécifier les opérations disponibles et leur chorégraphie, tandis que WSDL fournit les implémentations concrètes des définitions de messages et les spécifications techniques des éléments manipulés;
+%     \item \textbf{WSCI} \cite{w3c2002wsci}: constitue un langage XML axé sur la modélisation des services web comme interfaces définissant les flux de messages échangés (chorégraphie des messages). Il vise à caractériser le comportement externe observable des services en exprimant les dépendances logiques et temporelles inter-messages via des mécanismes de contrôle séquentiel, de corrélation, de gestion d'erreurs et de transactions. WSCI réutilise les définitions abstraites WSDL pour spécifier ultérieurement les modalités d'implémentation concrète des éléments manipulés dans la modélisation de sevices.  
+% \end{itemize}
+% %%%%%%%%% To Delete %%%%%%%%%%%%%%%
+
+\subsubsection{Composition dynamique}
+La composition dynamique désigne l'assemblage de services web visant à satisfaire un objectif spécifique formulé par l'utilisateur selon ses préférences. Cette agrégation peut s'effectuer en amont ou durant l'exécution des services web. Actuellement, aucun standard n'encadre la spécification de cette composition dynamique de services web.
+
+Les approches existantes de composition dynamique de services web peuvent être catégorisées selon: les \textit{approches basées sur les workflows}, \textit{les approches basées sur les techniques d'IA} et les \textit{approches de spécification formelles}. 
+% % %%%%%%%%% To Delete %%%%%%%%%%%%%%%
+% Les approches basées sur les worflows étant présentées dans la section précédente, nous nous attarderons donc ici sur les deux points restants: 
+
+% \textbf{Approches orientées Intelligence Artificielle}
+% Un service web peut être spécifié à l'aide de ses conditions et effet qui sont des concepts très proches de ceux de la planification.
+
+% Plusieurs branches de l'IA intègrent le processus de composition; nous notons notamment:
+% \begin{itemize}
+%     \item \textbf{Composition à base de règles}: cette approche de planification s'appuie sur un ensemble de règles prédéfinies et de conditions dans la même philosophie que les déclarations \textit{if-then-else};
+%     \item \textbf{Composition avec SMA} \cite{kumar2008framework}:  l'implémentation de la composition de services peut exploiter les SMA. Chaque agent représente un service et traite une portion de la requête utilisateur selon ses capacités spécifiques;
+%     \item \textbf{Calcul situationnel}: cette méthode modélise les requêtes utilisateur et contraintes de services sous forme de prédicats du premier ordre dans le langage de calcul situationnel. Les services sont formalisés comme actions (primitives ou complexes) dans ce même langage. Des modèles sont ensuite générés via des règles de déduction et contraintes, puis instanciés à l'exécution selon les préférences utilisateur; 
+%     \item \textbf{Composition par planification} \cite{peer2004pddl}:cette approche organise les services web selon leurs préconditions et effets. Diverses méthodes ont été développées pour traiter la composition servicielle comme un problème de planification, notamment l'approche PDDL qui vise à standardiser les données d'entrée des planificateurs. Ce langage propose un formalisme unifié pour décrire les domaines de planification, incitant ainsi la communauté de recherche en services web à l'adapter au contexte compositionnel. 
+% \end{itemize}
+
+% \textbf{Approches Formelles}
+% Le modèles sémantiques formels apparaissent comme l'une des meilleures solutions pour spécifier la composition des services web.
+
+% Plusieurs formalismes ont été développés dans cette perspective, incluant les automates, diagrammes d'activités, algèbres de processus et réseaux de Pétri.
+% \begin{itemize}
+%     \item \textbf{Automate} ces modèles constituent des outils largement employés pour la spécification formelle de systèmes complexes. Un automate comprend un ensemble de nœuds représentant les états et des arcs étiquetés décrivant les transitions inter-états. Dans le contexte de la modélisation compositionnelle de services, chaque appel de service correspond à un état spécifique, un état distinct signale la terminaison d'exécution du service, et chaque réponse génère un événement associé;
+%     \item \textbf{Diagrammes UML} \cite{jacobson2021unified} UML constitue désormais un standard reconnu pour la modélisation orientée objet de systèmes complexes. Les diagrammes UML se répartissent en trois catégories:(\textit{i}) diagrammes structurels modélisant les aspects statiques (diagrammes de \textit{classes}, d'\textit{objets}), (\textit{ii}) diagrammes comportementaux (diagrammes d'\textit{activités}, d'\textit{états-transitions}), et (\textit{iii}) les diagrammes d'interactions dynamiques (les diagrammes de \textit{séquences}). Le \textit{diagramme d'activité} s'avère particulièrement prisé pour la composition de services web. Dans cette approche, l'exécution de services est généralement représentée par une action, la transition entrante modélise l'invocation du service tandis que la transition sortante signale la fin d'exécution;
+%     \item \textbf{Algèbre de Processus} \cite{lucchi2007pi} ces familles de langages formels permettent la modélisation de systèmes complexes, notamment les architectures distribuées et concurrentielles; 
+%     \item \textbf{Réseaux de Pétri} \cite{cheng2014automatic} les RdPs les RdPs constituent un outil de modélisation pour les systèmes dynamiques à événements discrets. Leur principal atout réside dans leur représentation graphique facilitant considérablement la modélisation conceptuelle de systèmes variés. Les RdPs jouissent d'une forte reconnaissance dans le domaine de la gestion des processus métiers (BPM) grâce à leur capacité à modéliser une grande diversité de processus et de flux de contrôle.
+% \end{itemize}
+
+% \subsubsection{Synthèse
+% % %%%%%%%%% To Delete %%%%%%%%%%%%%%%}
+\begin{table}[h]
+\centering
+\caption{Comparaison des approches de composition des services}
+\label{tab:criteres-approches}
+\begin{tabular}{|p{3.5cm}|p{3.5cm}|p{3.5cm}|p{3.5cm}|}
+\hline
+\rowcolor{gray!30}
+\textbf{Critères} & \textbf{Approches basées Workflows} & \textbf{Approches basées Intelligence Artificielle} & \textbf{Approches basées Méthodes Formelles} \\
+\hline
+Niveau d'automatisation & -Moyen- Seule la recherche et la liaison aux services se font de manière automatique & -Élevé- Le processus est réalisé de manière automatique & Moyen-Élevé- Le Processus est partiellement automatisé \\
+\hline
+Niveau de dynamicité & -Moyen- les modèles sont générés statiquement seule la liaison aux services est dynamique & -Élevé- possibilité de génération de plan de manière dynamique & -Élevé- Génération de modèles de composition graphiques de manière dynamique \\
+\hline
+Formulation de la requête utilisateur & -Bas niveau- (langage de flux) & Moyen à élevé Langages logiques & -Élevé- Spécification algébriques.. \\
+\hline
+Support sémantique et niveau d'abstraction & -Bas niveau- (descriptions syntaxiques : WSDL, WSFL..) & -Élevé- Formalismes logiques, DAML-s, OWL-s. & -Élevé- Logique de réécriture, Algèbre de processus \\
+\hline
+Reconfiguration dynamique & non pris en charge & Non pris en charge & Envisageable \\
+\hline
+\end{tabular}
+\end{table}
+
+Nous constatons à travers le tableau \ref{tab:criteres-approches} que les méthodes basées workflows sont inadaptées pour mener à bien le processus de composition des services web, alors que les approches basées IA et les approches issues des méthodes formelles offrent une spécification efficace de ce processus. Notons qu'un détail assez important échappe aux approches orientées IA, c'est la reconfiguration dynamique. Celle ci est prise en charge par la méthode formelle du fait de leur fondement sur les logiques computationnelles.
+
+\subsection{Vers la composition incrémentale}
+% La transition vers la composition incrémentale découle des limites rencontrées avec les modèles classiques de composition, tant statiques que dynamiques. Cette approche, émergente dans le domaine du génie logiciel et des systèmes distribués, s’inscrit dans un paradigme orienté données, où l’exécution est pilotée non pas par un ordonnancement global, mais par la disponibilité et les dépendances entre données locales.
+
+% La composition incrémentale des services représente une approche sophistiquée de construction d'applications distribuées où les services sont assemblés progressivement selon les besoins métier et les contraintes techniques. Cette méthode permet une adaptation dynamique et une évolution continue des SOA en fonction des exigences changeantes.
+
+% Les Grammaires Attribuées Gardées (GAG) constituent un formalisme mathématique puissant qui permet de modéliser et de contrôler cette composition incrémentale. Elles offrent un cadre théorique rigoureux pour spécifier les règles de composition, les contraintes d'assemblage et les propriétés sémantiques des services composés.
+
+\subsubsection{Motivations}
+Dans les architectures orientées services, la composition permet de construire des applications complexes à partir de services élémentaires. Jusqu’ici, deux grands paradigmes de composition sont largement utilisés : la composition statique, entièrement spécifiée lors de la phase de conception, et la composition dynamique, permettant la sélection ou l'adaptation de services durant l'exécution selon le contexte. Toutefois, ces deux approches supposent généralement que la structure globale du processus est à l’avance connue, et que l’ensemble des services nécessaires est disponible et sélectionné au moment du lancement du processus.
+
+Dans les environnements modernes \textit{– cloud computing, edge computing, ou encore systèmes collaboratifs distribués –} ces hypothèses ne tiennent plus toujours. Les données peuvent arriver de manière partielle et imprévisible, l'accessibilité immédiate de certains services n'est pas garantie, et la composition doit pouvoir évoluer de manière réactive face à ces contraintes. C’est dans ce contexte qu’émerge la composition incrémentale des services.
+
+La composition incrémentale désigne une approche dans laquelle la construction et l’exécution du processus s'effectuent de manière progressive, selon la disponibilité des éléments (services, données, ressources) effectivement disponibles. Elle s'inscrit dans une logique data-driven, où l’activation des étapes d’un processus dépend directement des informations disponibles localement, et non d’un ordonnancement global préétabli. Les services sont ajoutés, remplacés ou connectés à la volée, tout au long de l'exécution, en maintenant l’état partiel du processus. La composition incrémentale conjugue granularité, suivi dynamique des dépendances, activation paresseuse des services et pilotage guidé par les données. Ces principes permettent de construire des processus flexibles, efficaces et adaptés aux contraintes des architectures modernes.
+
+\subsubsection{Principes}
+La composition incrémentale repose sur un changement fondamental par rapport aux approches statique et dynamique traditionnelles : elle considère que la construction du processus ne peut pas être entièrement planifiée à l’avance, mais doit s’adapter en continu aux informations et ressources qui deviennent disponibles au fil de l’exécution. Cette adaptation progressive nécessite plusieurs principes fondamentaux.
+
+Premièrement, la décomposition fine du processus en sous-composants élémentaires permet une gestion granulaire de la composition. Chaque sous-service peut être vu comme une unité autonome, susceptible d’être activée indépendamment en fonction des données disponibles ou des événements reçus. Cette granularité facilite l’activation sélective des parties du workflow, évitant ainsi de lancer ou recomposer l’ensemble du processus pour chaque changement.
+
+Ensuite, la composition incrémentale repose sur un mécanisme de suivi des dépendances entre services et données. Chaque étape du processus est liée à un ensemble précis d’informations d’entrée ; lorsqu’une donnée évolue ou qu’un service devient disponible, seule la partie concernée du processus est réévaluée ou étendue. Cette propagation ciblée des changements optimise les coûts de calcul et limite les traitements redondants.
+
+Par ailleurs, la notion de services « paresseux » ou \textit{lazy evaluation} joue un rôle cruciale. Plutôt que d’exécuter immédiatement chaque service dans le flux, la composition incrémentale peut différer l’activation de certains services jusqu’au moment où leurs résultats sont effectivement nécessaires. Cette stratégie retarde la consommation des ressources et réduit les calculs inutiles, en s’adaptant à l’évolution des données en temps réel.
+
+Enfin, la composition incrémentale s’inscrit dans un paradigme \textit{data-driven}: l’ordre et la sélection des services dépendent directement des événements et des données locales, et non d’un plan global statique. Cette orientation conduit à des processus plus réactifs et modulaires, capables de s’adapter à des environnements dynamiques et incertains, comme ceux rencontrés dans le cloud, les systèmes distribués ou les flux continus.
+
+% \subsubsection{Approches de composition incrémentale}
+% Plusieurs modèles ont été développés pour répondre aux exigences de modularité, de flexibilité et de réactivité dans la composition de services complexes. Ces modèles partagent l’idée que l’exécution d’un processus n’a pas à être planifiée globalement et entièrement à l’avance : au contraire, la composition peut évoluer au fil de la disponibilité des données, des conditions du contexte, ou des événements de l’environnement. Trois modèles se distinguent particulièrement dans la littérature : les approches dirigées par les modèles, les modèles orientés flux de données (Dataflow), et les grammaires attribuées gardées (GAG).
+% \begin{itemize}
+%     \item \textbf{Approches dirigées par les modèles} \cite{farokhi2012mdches}: Cette méthode repose sur les fondements de l'ingénierie orientée modèle (Model-Driven Engineering, MDE). Elle consiste à décrire les processus de composition de services à l’aide de modèles abstraits (souvent sous forme de DSLs ou de profils UML), qui sont ensuite interprétés ou transformés pour générer des orchestrateurs ou des exécutables.
+
+%    Dans une perspective d'évolution continue, l'avantage principal de MDSC réside dans sa capacité à gérer l'exécution partielle ou évolutive : il est possible de mettre à jour les modèles dynamiquement pendant leur exécution (modèles @runtime), ce qui offre la possibilité de modifier la composition au fur et à mesure que de nouvelles ressources ou informations deviennent accessibles.  Ceci procure une flexibilité considérable, en particulier dans des contextes tels que les systèmes embarqués, les nuages hybrides ou les architectures axées sur les événements.
+
+%     Cette méthode est particulièrement appropriée lorsqu'on veut assurer une forte correspondance entre les exigences métier et la mise en œuvre technique, tout en autorisant un développement progressif des processus mis en place.  Néanmoins, elle requiert un environnement logiciel complet pour gérer les modèles, effectuer des transformations et exécuter des tâches.
+%     \item \textbf{Modèles orientées flux de données (Dataflow)} \cite{jonas2019cloud}: Les modèles de composition orientés \textit{flux de données} sont fondés sur une vision réactive et décentralisée du processus de composition. Dans ces modèles, chaque service ou composant est vu comme un nœud dans un graphe de calcul, qui est déclenché dès que les données d’entrée sont disponibles.
+
+%     Ce paradigme est bien représenté dans des outils tels que \textit{Apache NiFi}, \textit{Node-RED}, ou encore les systèmes de traitement en flux (stream processing) comme \textit{Apache Flink}. Il est également courant dans les architectures \textit{serverless} et les \textit{applications IoT}, où l’exécution doit s’adapter dynamiquement aux événements produits dans l’environnement.
+
+%     L’incrémentalité est ici \textit{naturelle}: la composition progresse au fil de l’arrivée des données, sans coordination centrale. Cela permet d’avoir un comportement asynchrone, scalable, et très adapté aux architectures distribuées modernes, notamment dans le cloud. Toutefois, ce modèle est parfois limité dans sa capacité à exprimer des dépendances complexes ou conditionnelles entre les services;
+%     \item \textbf{Modèle GAG} \cite{badouel2015active,tchendji2021guarded}: il constitue une approche formelle et très puissante de la composition incrémentale. Il repose sur le formalisme des grammaires attribuées, dans lesquelles chaque nœud (ou service) porte des \textit{attributs d’entrée et de sortie} et sur des \textit{règles de production} conditionnées par des \textit{gardes} logiques.
+
+%     L’idée centrale est de modéliser une composition de services comme un \textit{arbre de dérivation} où chaque règle représente une étape de transformation. Une règle peut être appliquée dès que: (\textit{i}) ses attributs d’entrée sont instanciés, (\textit{ii}) ses conditions (gardes) sont satisfaites.
+
+%     Cette approche permet de propager localement l’exécution, en exploitant uniquement les données disponibles, ce qui rend le système naturellement \textit{incrémental}, \textit{modulaire} et \textit{réactif}. Elle est particulièrement adaptée aux systèmes distribués dans lesquels les services sont hétérogènes, déployés dynamiquement, ou encore coopérants de manière asynchrone.
+
+%     Par ailleurs, le modèle GAG est compatible avec des paradigmes tels que le publish/subscribe, ce qui renforce son applicabilité dans les environnements collaboratifs, mobiles ou contextuels. Il a notamment été utilisé dans les systèmes \textit{Active Workspaces} pour supporter des interactions utilisateur complexes dans un cadre pleinement distribué.
+% \end{itemize}
+
+\subsubsection{Grammaires Attribuées Gardées (GAG)}
+La GAG \cite{badouel2015active} est un cadre formel inspiré des concepts de la grammaire attribuée de Knuth \cite{klint2005toward}, également considérée comme grammaires de processus, et conçue pour modéliser des architectures ouvertes centrées sur l'utilisateur où les données et les règles nécessitent de la flexibilité.
+
+Commençons par rappeler la notion d'une grammaire hors-contexte et d'un grammaire attribuée, qui sont à la base de la notion de Grammaires Attribuées Gardées 
+\begin{definition}
+    On appelle \textbf{grammaire hors-contexte} (CFG) le quadruplet ($N,T,S,P$) avec:
+    \begin{itemize}
+        \item $N$ un ensemble fini de non-terminaux;
+        \item $T$ un ensemble fini de terminaux, $N \cap T = \emptyset$;
+        \item $P$ un ensemble fini de production, $P \subset N \times (N \cup T)^*$ de la forme $A \rightarrow A_1 \ldots A_n$ où ($A \in N$ et $A_i \in N \cup T$);
+        \item $S \in N$ est l'axiome de départ.
+    \end{itemize}
+\end{definition}
+\begin{definition}
+    Une \textbf{grammaire attribuée} est un triplet $(G, A, F)$ où:
+    \begin{itemize}
+        \item $G = (N, T, S, P)$ est une grammaire hors-contexte;
+        \item $A$ est l'ensemble d'attributs défini par: 
+            \begin{align}
+                A &= \bigcup_{X \in N} \left( H(X) \cup S(X) \right) \\
+                &\text{avec } H(X) \text{ les attributs \textbf{hérités} de $X$}, \nonumber \\
+                &\phantom{\text{avec }} S(X) \text{ les attributs \textbf{synthétisés} de $X$} \nonumber \\
+                &\phantom{\text{avec }} \text{et } H(X) \cap S(X) = \emptyset \nonumber
+            \end{align}
+        \item $F$ est l'ensemble des règles sémantiques associées aux productions.
+    \end{itemize}
+\end{definition}
+Les GAG sont apparues à l'origine comme un instrument pour la compilation des langages fonctionnels, permettant l'analyse descendante avec des grammaires contenant des productions gauches. Les stratégies d'analyse descendante permettent de décrire les programmes de manière très modulaire, tandis que les productions récursives à gauche permettent l'évaluation paresseuse de ces programmes. Cette modularité est une caractéristique intéressante pour une approche orientée service, et l'évaluation paresseuse est ce qui permet un calcul incrémental. En tant que modèle formel et plutôt abstrait, leur domaine d'application s'est élargi depuis lors.
+
+\textbf{Grammaires et workflow}
+Les GAG sont fondamentalement des grammaires formelles. Elles intègrent structurellement un \textit{alphabet}, divisé en symboles \textit{terminaux} ($T$) et \textit{non terminaux} ($N$), ainsi qu'un ensemble de \textit{règles de production} ou simplement de \textit{productions} ($r \in P$). Ces règles décrivent la réécriture des symboles non terminaux sous forme de chaînes de caractères sur l'alphabet. En réécrivant récursivement les symboles non terminaux, l'application d'un nombre fini de règles finit par produire une chaîne composée uniquement de symboles terminaux. Comme dans une grammaire hors-contexte, chaque règle décrit la réécriture d'un seul symbole non terminal isolé. 
+\begin{equation}
+    r \in P \quad \text{est} \quad \sigma \rightarrow \sigma_1 \ldots \sigma_n \quad \text{avec} \quad \sigma \in N \quad \text{et} \quad \sigma_i \in N \cup T 
+\end{equation}
+Cependant, la structure plus riche du modèle permet de décrire une certaine forme de contexte et la grammaire peut donc accepter des langages plus complexes que les simples langages sans contexte. En effet, chaque symbole de l'alphabet représente une fonction. À l'origine, les symboles étaient en fait destinés à représenter des transducteurs d'arbres, transformant l'arbre d'analyse d'une expression sous une forme exécutable. En général, les symboles peuvent être interprétés comme des tâches à accomplir ou des problèmes à résoudre. Ainsi, les règles décrivent comment une tâche (problème) peut être divisée en sous-tâches (sous-problèmes). 
+
+Une tâche peut impliquer le traitement d'informations, et ces informations peuvent influencer la manière dont la tâche est exécutée. Dans notre cadre, les symboles représentent des services, qui peuvent nécessiter des données d'entrée et produire des données de sortie, ainsi que d'éventuels effets secondaires, tels que l'interrogation d'une base de données ou l'exécution d'un morceau de code sur une micro-architecture particulière. Les symboles non terminaux représentent des services composites, et les symboles terminaux représentent des calculs locaux ou des services de tiers. Les règles de production spécifient ensuite le flux de travail de l'application. La grammaire doit être spécifiée à la compilation, mais la réécriture se fait à l'exécution. En effet, les données d'entrée détermineront quelle production doit réécrire un symbole donné.
+
+\textbf{Attributs et data-flow.}
+% Nous désignons un service par ($I,\sigma$) et notons par ($I,\sigma, O$) le fait qu'un appel de service $\sigma$ avec des données d’entrée $I \in A$ a produit des données de sortie $O \in A$. Les valeurs d’entrées et de sorties doivent être structurées, nous pouvons considérer les symboles comme consommant et produisant des fichiers xml ou json. Cette notion de données structurées est formalisée par des \textit{attributs} ($\alpha \in A$). On peut considérer des attributs comme une liste associant des \textit{champs} arbitraires ($D \in F$) à des valeurs ($X \in D$). La valeur d'un champ donné peut elle-même être un attribut, de sorte que les attributs sont des structures arborescentes. Les attributs ont la particularité que les valeurs peuvent être laissées indéfinies, nous dirons qu'elles sont intentionnelles. Une valeur intentionnelle ($\perp$) représente un engagement à ce que la valeur réelle soit éventuellement définie, et permet un calcul incrémental.
+Un service est désigné par ($I,\sigma$) où $I \in A$ représente les données d'entrée et $\sigma$ le service invoqué. La notation $(I,\sigma, O)$ indique qu'un appel de service $\sigma$ avec les données d'entrée $I$ a produit les données de sortie $O \in A$.
+
+Les données d'entrée et de sortie doivent être structurées (comparable à des fichiers XML ou JSON) et sont formalisées par des attributs ($\alpha \in A$). Un attribut est conceptuellement une liste associant des champs arbitraires ($D \in F$) à des valeurs ($X \in D$). La valeur d'un champ peut elle-même être un attribut, créant ainsi des structures arborescentes.
+
+Une caractéristique distinctive des attributs est la possibilité de laisser des valeurs indéfinies, appelées valeurs intentionnelles ($\perp$). Une valeur intentionnelle représente un engagement que la valeur réelle sera éventuellement définie, permettant ainsi un calcul incrémental.
+
+Formellement :
+\begin{equation}
+    \alpha \in A \quad \text{est} \quad [(D_1,x_1), \ldots ,(D_k,x_k)] \quad \text{avec} \quad D_i \in F \quad \text{et} x_i \in D_i \cup \{A,\perp\} 
+\end{equation}
+% La structuration des données sous forme d'attributs est cruciale car elle permet la correspondance des motifs qui sera responsable de la liaison des variables pertinentes pour une réécriture particulière d'un symbole. Les GAG sont des systèmes de réécriture conscients des données, et leurs règles de réécriture gèrent donc des données. En effet, les règles de production de la grammaire vont au-delà de la décomposition des services, elles décrivent le flux de données entre les sous-services. Ceci est formalisé par les règles sémantiques de chaque production. Chaque production est associée à un ensemble de variables, réparties en variables d'entrée ($x \in X$), variables de sortie ($y \in Y$) et variables locales ($l \in L$). Lors de la compilation, les variables servent d'espaces réservés pour les valeurs des attributs et, lors de l'exécution, elles sont remplacées par des valeurs éventuellement intentionnelles. Les variables de sortie représentent les valeurs qui doivent être renvoyées par le service réécrit par la production. Chaque production $\sigma \rightarrow \sigma_1 \ldots \sigma_n \in R$ est associée à une liste de règles sémantiques contenant une affectation pour chaque $\sigma_i$ sous la forme suivante
+La structuration des données sous forme d'attributs est fondamentale dans les GAG car elle permet la correspondance de motifs nécessaire à la liaison des variables lors des réécritures. Les GAG constituent des systèmes de réécriture conscients des données où les règles de production dépassent la simple décomposition de services pour décrire explicitement les flux de données entre sous-services.
+Chaque production est associée à trois types de variables : les variables d'entrée ($x \in X$), les variables de sortie ($y \in Y$) représentant les valeurs retournées par le service, et les variables locales ($l \in L$). Ces variables servent d'espaces réservés lors de la compilation et sont remplacées par des valeurs (éventuellement intentionnelles) à l'exécution.
+Les flux de données sont formalisés par les règles sémantiques : chaque production $\sigma \rightarrow \sigma_1 \ldots \sigma_n \in R$ est associée à une liste de règles sémantiques contenant une affectation pour chaque $\sigma_i$ de la forme :
+\begin{equation}
+    v \leftarrow \sigma_iw \quad \text{où} \quad v \in Y \cup L \quad \text{et} \quad w \in X \cup Y \cup L 
+\end{equation}
+Les variables d'entrée sont en lecture seule (côté droit uniquement) tandis que chaque variable de sortie a exactement une affectation (côté gauche unique), les variables locales sont minimales pour optimiser les flux de données. Au moment de l’exécution, chaque règle sémantique s'exécute sur son propre thread et l'ordre d’exécution est détermine par le flux de données disponibles. Lorsqu'une production est appliquée, chaque règle sémantique ($v \leftarrow \sigma_i w$) crée une disposition ($I, \sigma_i, O$) contenant des valeurs intentionnelles qui sont progressivement remplacées par des valeurs réelles au fur et à mesure que les demandes ($I, \sigma_i$) sont résolues récursivement. Cette approche permet une définition incrémentielle des données structurées, où la résolution partielle d'une valeur peut déclencher la définition d'autres valeurs dans des dispositions associées, créant ainsi des flux de données complexes. Le mécanisme d'association des valeurs repose sur la correspondance de motifs effectuée par les gardes: lors d'une demande de service ($I, \sigma$), chaque production applicable associe les valeurs d'entrée à ses variables via un pattern matching, où chaque variable d'entrée correspond à un champ spécifique de l'attribut $I$.
+
+\textbf{Gardes et flux de contrôle.}
+Les gardes constituent le mécanisme de contrôle des Grammaires Attribuées Gardées. Chaque production $r \in R$ possède une garde $g \in G$ qui évalue si l'attribut d'entrée $I$ contient les champs nécessaires à l'activation de la production. Cette évaluation peut être récursive lorsque les champs sont eux-mêmes des attributs.
+
+Une production $r$ n'est applicable que si sa garde génère avec succès une affectation $x_i \leftarrow v_i$ pour chaque variable d'entrée $x_i$, où $v_i$ provient de $I$. Les gardes étant évaluées dynamiquement, des productions peuvent devenir applicables au fur et à mesure que les valeurs intentionnelles se définissent. Pour maintenir le déterminisme, l'application d'une production pour résoudre $(I, \sigma)$ désactive automatiquement toutes les autres productions candidates.
+
+Les gardes permettent aux services d'avoir des décompositions alternatives selon les données d'entrée, encodant ainsi le flux de contrôle de l'application et autorisant des définitions récursives. Elles garantissent un traitement sécurisé et récursif des données en appliquant le même service sur des portions progressivement réduites de l'entrée, assurant ainsi la terminaison du processus.
+
+\mySection{Distribution des services}{}
+Dans les architectures logicielles modernes, et plus particulièrement dans les environnements cloud-native, l’exécution des services ne se limite plus à leur simple implémentation fonctionnelle. Elle dépend étroitement de l’infrastructure technique qui permet de les déployer, de les superviser, et de les faire évoluer dynamiquement. Cette infrastructure repose aujourd’hui sur deux piliers fondamentaux : la conteneurisation et l’orchestration.
+
+La conteneurisation, rendue populaire par Docker \cite{merkel2014docker}, permet d’empaqueter les services avec leurs dépendances dans des unités légères, isolées et portables appelées conteneurs. Cette approche a profondément transformé la manière de développer, de livrer et d'exécuter les applications, en supprimant les problèmes de compatibilité liés aux environnements d'exécution.
+
+Cependant, à mesure que les systèmes distribués deviennent plus complexes et que le nombre de conteneurs augmente, il devient nécessaire de disposer d’un mécanisme capable de les gérer de manière automatisée. C’est le rôle des plateformes d’orchestration de conteneurs, dont Kubernetes \cite{7036275} s’est imposé comme le standard de facto. Ces plateformes assurent le déploiement, la montée en charge, la résilience et la supervision des services conteneurisés, en facilitant leur exécution distribuée à grande échelle.
+
+Dans le cadre de la composition incrémentale des services, ces technologies sont particulièrement pertinentes. Elles permettent d’exécuter les services de manière indépendante, réactive et scalable, en réponse à des données ou événements, tout en assurant la robustesse et la flexibilité nécessaires à une architecture orientée événements et pilotée par les données.
+
+Cette section présente dans un premier temps les fondements de la conteneurisation, avant d’introduire les principales caractéristiques des orchestrateurs de conteneurs, avec un focus particulier sur Kubernetes, son fonctionnement, et ses avantages comparés aux autres solutions existantes.
+
+\subsection{Le cloud computing}
+Le cloud computing est une infrastructure informatique distribuée qui permet d'accéder à des ressources de calcul et de stockage via un réseau, généralement Internet. Selon le NIST, il s'agit de « l'accès via le réseau, à la demande et en libre-service, à des ressources informatiques virtualisées et partagées » \cite{mell2011nist}.
+
+Cette approche permet aux utilisateurs d'accéder à leurs applications et données depuis n'importe quel appareil connecté, sans se soucier de l'infrastructure sous-jacente.
+
+\textbf{Caractéristiques du \textit{cloud}.}
+Le cloud computing se distingue des infrastructures informatiques classiques par certaines caractéristiques:
+\begin{itemize}
+    \item \textbf{Services à la demande}: Les clients peuvent se fournir automatiquement des services sans nécessiter d'intervention de la part du fournisseur;
+    \item \textbf{Élasticité rapide} Les ressources peuvent être ajustées de manière statique ou dynamique selon les variations de charge. Cette capacité de montée en charge (scaling) permet d'adapter instantanément l'infrastructure aux pics de demande tout en optimisant les coûts lors des périodes creuses;
+    \item \textbf{Mutualisation}: partage optimisé des ressources de serveur allouées entre plusieurs serveurs;
+    \item \textbf{Résilience}: Compatibilité avec tous types d'appareils, des smartphones aux ordinateurs de bureau;
+    \item \textbf{Paiement à l'utilisation}: Facturation transparente basée sur la consommation réelle des ressources, remplaçant les forfaits prépayés traditionnels.
+\end{itemize}
+
+\textbf{Les niveaux de services cloud.}
+Le NIST définit trois modèles de service cloud qui correspondent à différents niveaux d'abstraction et de responsabilité entre le fournisseur et l'utilisateur: le IaaS, PaaS, SaaS \cite{mell2011nist, jonas2019cloud, rashid2019cloud}.
+\begin{itemize}
+    \item \textbf{Infrastructure as a Service}: Le fournisseur met à disposition l'infrastructure informatique de base (serveurs virtuels, stockage, réseaux). L'utilisateur conserve le contrôle du système d'exploitation, des applications et des configurations réseau. \textit{Exemples : Amazon EC2, Microsoft Azure VMs, Google Compute Engine};
+    \item \textbf{Platform as a Service}: Le fournisseur offre une plateforme de développement complète incluant l'infrastructure, le système d'exploitation, les middlewares et les outils de développement. L'utilisateur se concentre uniquement sur le développement et le déploiement de ses applications. \textit{Exemples : Google App Engine, Heroku, Microsoft Azure App Service};
+    \item \textbf{Software as a Service}: Le fournisseur livre des applications complètes et opérationnelles accessibles via un navigateur web ou une API. L'utilisateur n'a aucune responsabilité sur l'infrastructure ou la maintenance. \textit{Exemples : Gmail, Google Docs, Microsoft 365, Dropbox}.
+\end{itemize}
+Ces trois modèles traditionnels ont évolué avec l'émergence du Function as a Service (FaaS), qui représente le niveau d'abstraction le plus poussé. Le FaaS permet l'exécution de fonctions individuelles sans aucune gestion de serveurs, où les développeurs déploient uniquement du code métier tandis que la plateforme gère automatiquement l'allocation des ressources et la facturation au temps d'exécution (\textit{AWS Lambda, Azure Functions, Google Cloud Functions}). Cette évolution vers des granularités de plus en plus fines a directement inspiré le développement des technologies de conteneurisation, qui offrent une approche intermédiaire entre la flexibilité de l'IaaS et la simplicité du PaaS.
+
+La figure \ref{fig:niveau-service-cloud} illustre la répartition des responsabilités entre fournisseur et client selon les niveaux de service cloud. Ces modèles ne constituent du véritable cloud computing que s'ils respectent les caractéristiques essentielles présentées précédemment, sans lesquelles il s'agirait simplement d'hébergement traditionnel.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\linewidth]{My-Thesis/Chap1/images/types de services cloud.png}
+    \caption{Niveaux de services dans le cloud \cite{rashid2019cloud}}
+    \label{fig:niveau-service-cloud}
+\end{figure}
+
+\textbf{Modèles de déploiement.}
+Les niveaux de services cités peuvent être déployées suivant quatre modèles:
+\begin{itemize}
+    \item \textbf{Cloud public}: Infrastructure gérée par un fournisseur tiers (\textit{Amazon Web Services, Google Cloud Platform, Microsoft Azure}) et partagée entre plusieurs organisations. Les ressources sont accessibles via Internet avec une facturation à l'usage;
+    \item \textbf{Cloud privé}: Infrastructure dédiée exclusivement à une organisation, pouvant être (\textit{i}) \textbf{interne}: l'entreprise gère son propre centre de données, (\textit{ii}) \textbf{externe}: un fournisseur réserve des ressources dédiées accessibles via des connexions sécurisées (VPN);
+    \item \textbf{Cloud communautaire}: Infrastructure partagée entre plusieurs organisations ayant des préoccupations communes (\textit{sécurité, conformité, juridiction}). Peut être géré par l'une des organisations participantes ou par un tiers;
+    \item \textbf{Cloud hybride}: C'est une combinaison de deux ou plusieurs modèles de déploiement (privé, communautaire, public) qui restent des entités distinctes mais sont interconnectées par des technologies standardisées ou propriétaires. Cette approche facilite la portabilité des données et des applications entre différents environnements selon les besoins de l'entreprise.
+\end{itemize}
+
+\textbf{Le défi de l'isolation dans le cloud.}
+La mutualisation des ressources cloud nécessite des mécanismes d'isolation pour garantir :
+\begin{itemize}
+    \item \textbf{Exclusivité d'accès}: ressources dédiées malgré l'infrastructure partagée;
+    \item \textbf{Transparence}: illusion d'être le seul utilisateur du système;
+    \item \textbf{Équité}: prévention de la monopolisation par un client unique;
+    \item \textbf{Étanchéité}: protection des données entre espaces utilisateurs
+\end{itemize}
+
+\subsection{La virtualisation}
+\textbf{Définition}
+La virtualisation consiste à créer une représentation logicielle d'une ressource physique, qu'il s'agisse d'un système d'exploitation, d'un serveur, d'un dispositif de stockage ou d'une infrastructure réseau \cite{danny2013virtualisation,liu2014research}.
+
+Cette technologie opère par abstraction des ressources physiques : les composants virtuels (processeurs, mémoire, disques, interfaces réseau) correspondent à des ressources matérielles réelles du système hôte, mais sont présentés de manière abstraite aux environnements virtualisés. Ainsi, chaque machine virtuelle dispose de ses propres ressources virtuelles, mappées dynamiquement sur les ressources physiques disponibles.
+
+Du point de vue du système hôte, les machines virtuelles s'exécutent comme des applications ordinaires auxquelles des ressources sont allouées et distribuées selon les besoins. Cette approche permet de faire fonctionner simultanément plusieurs environnements isolés sur une même infrastructure physique.
+
+% La virtualisation se décline en plusieurs types, chacun répondant à des cas d'usage spécifiques et offrant différents niveaux d'abstraction et de performance:
+% \begin{itemize}
+%     \item \textbf{Virtualisation du stockage}: Cette approche isole les données de leur localisation physique en masquant les spécificités matérielles des unités de stockage. Les volumes de stockage distribués sont présentés comme une ressource unique et homogène. Cette technologie est largement utilisée dans les architectures SAN (Storage Area Network) et NAS (Network Attached Storage) pour optimiser la gestion des capacités de stockage;
+%     \item \textbf{Virtualisation du réseau}: Elle combine ressources réseau physiques (commutateurs, routeurs) et logiques (bande passante, adressage) pour créer des réseaux virtuels découplés de l'infrastructure matérielle sous-jacente. L'objectif est d'assurer un partage efficace et sécurisé des ressources réseau entre différents utilisateurs et systèmes;
+%     \item \textbf{Virtualisation du serveur}: Cette méthode permet de faire fonctionner en même temps plusieurs systèmes, serveurs ou applications sur une seule machine physique, en donnant l'impression qu'ils opèrent sur des machines séparées. Elle constitue le fondement de l'infrastructure cloud moderne.
+% \end{itemize}
+
+\textbf{Virtualisation système.}
+La virtualisation système repose sur un hyperviseur, également connu sous le nom de VMM (Virtual Machine Monitor), pour permettre à plusieurs machines virtuelles (VM) de fonctionner simultanément sur une seule infrastructure physique. Ces concepts sont donc définis de la manière suivante:
+\begin{itemize}
+    \item \textbf{Machine Virtuelle (VM)}: Environnement virtualisé reproduisant un système informatique complet avec son propre système d'exploitation. Chaque VM gère de manière autonome l'accès à ses ressources virtuelles (\textit{processeur, mémoire RAM, stockage, réseau}) tout en fonctionnant comme une machine physique indépendante;
+    \item \textbf{Hyperviseur (VMM)}: Couche logicielle qui implémente les mécanismes d'isolation et de partage des ressources matérielles. Il orchestre l'exécution simultanée de plusieurs VM de types différents (\textit{Linux, Windows, macOS}) sur le même matériel physique. L'hyperviseur contrôle l'allocation des ressources, gère la planification CPU et configure l'accès réseau des VM via l'attribution d'adresses IP et la mise en place de politiques de routage et de filtrage. On peut distinguer deux types d'hyperviseur (\textit{i}) \textbf{Hyperviseur de type 1 (natif)}: il s'installe directement sur le matériel physique et prend le contrôle exclusif des ressources au démarrage. Cette approche offre des performances optimales et une latence réduite.
+    \textit{Exemples : VMware ESXi, Microsoft Hyper-V, Citrix Xen, KVM}; (\textit{ii}) Celui ci est similaire à un émulateur, il s’exécute  comme une application sur un système d'exploitation hôte existant. Plus simple à déployer mais avec des performances moindres dues à la couche OS supplémentaire.
+    \textit{Exemples : Oracle VirtualBox, VMware Workstation, Parallels Desktop}.
+\end{itemize}
+Les figures \ref{fig:hyperviseur-type1} et \ref{fig:hyperviseur-type2} donne un aperçu sur les deux types d'hyperviseur de la virtualisation système.
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=0.7\linewidth]{My-Thesis/Chap1/images/hyperviseur-type-1.jpeg}
+        \caption{Hyperviseur de type 1}
+        \label{fig:hyperviseur-type1}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=0.7\linewidth]{My-Thesis/Chap1/images/hyperviseur-type-2.jpeg}
+        \caption{Hyperviseur de type 2}
+        \label{fig:hyperviseur-type2}
+    \end{subfigure}
+    % \caption{Légende générale pour les deux images}
+    \label{fig:hyperviseurs}
+\end{figure}
+
+\textbf{La virtualisation applicative.}
+La virtualisation applicative adopte une approche différente de la virtualisation système en implémentant une couche de virtualisation au niveau applicatif plutôt qu'au niveau matériel. Cette technique crée des instances virtuelles isolées des spécificités de la machine hôte (architecture, système d'exploitation), permettant aux développeurs de créer des applications portables sans devoir maintenir plusieurs versions pour différents environnements.
+Les VM applicatives les plus connues sont la \textit{JVM} et les \textit{conteneurs}.
+\begin{itemize}
+    \item \textbf{Java Virtual Machine (JVM)}: environnement d'exécution qui permet aux applications Java compilées de produire des résultats identiques sur toutes les plateformes disposant de la JVM appropriée. Cette approche "write once, run anywhere" a révolutionné le développement d'applications multiplateformes. La JVM était propriétaire jusqu'à la version 6, puis est devenue libre sous licence GPL à partir de la version 7 \cite{jayasena2015auto};
+    \item \textbf{Conteneurs}: technologie de virtualisation applicative offrant une portée plus large que la JVM. Les conteneurs supportent multiple langages et frameworks (\textit{Java, Python, Ruby, Node.js, Go}) tout en étant compatibles avec l'écosystème Linux. Ils fournissent un niveau d'isolation entre instances tout en optimisant l'utilisation des ressources système (CPU, RAM, stockage) de la machine hôte. 
+\end{itemize}
+
+\subsection{Virtualisation par conteneurs}
+
+\textbf{Définition}
+Également appelée \textit{conteneurisation}, la virtualisation par conteneurs constitue une alternative légère à la virtualisation système traditionnelle. C'est une approche qui exploite directement les fonctionnalités natives du noyau Linux (\textit{Kernel}) pour créer des environnements virtuels (VE - Virtual Environment) appelés \textit{conteneurs}, isolés les uns des autres.
+
+La virtualisation par conteneur repose sur deux fonctionnalités clés du noyau Linux, les groupes de contrôles (\textit{cgroups}) et les espaces de noms (\textit{namespaces}) \cite{moga2016level}. Les \textit{namespaces} permettent l'isolation qui partitionnent les ressources système (processus, réseau, système de fichiers, utilisateurs) pour créer des vues distinctes et isolées pour chaque conteneur. Chaque conteneur dispose ainsi de sa propre vision du système sans interférer avec les autres. Tandis que les \textit{cgroups} sont des fonctionnalités de limitation et de surveillance qui contrôlent et régulent la quantité de ressources (CPU, mémoire, I/O) allouée à un groupe de processus. Les cgroups garantissent un partage équitable des ressources et empêchent qu'un conteneur monopolise les capacités du système hôte.
+
+\textbf{Vue d'ensemble.}
+Les conteneurs informatiques s'inspirent des conteneurs d'expédition pour standardiser le déploiement d'applications. Leur évolution historique suit plusieurs étapes clés :
+\begin{itemize}
+    \item \textbf{1979 - Unix chroot}: Premier mécanisme d'isolation créant des sessions isolées avec partage des ressources, précurseur de la conteneurisation;
+    \item \textbf{2000 - FreeBSD Jail}: Partitionnement du système d'exploitation en sous-systèmes isolés avec isolation étendue (système de fichiers, utilisateurs, réseau);
+    \item \textbf{2001 - Linux VServer}: Solution VPS (Virtual Private Server) partitionnant les ressources en contextes de sécurité;
+    \item \textbf{2008 - Linux Containers (LXC)} : Exploitation optimale des fonctionnalités du noyau Linux, mais avec des problèmes de compatibilité entre distributions;
+    \item \textbf{2013 - Docker}: Standardisation et simplification de la conteneurisation, résolvant le problème de portabilité des applications dans le cloud computing.
+\end{itemize}
+Les conteneurs constituent une solution efficace pour la gestion des ressources entre applications \cite{moga2016level}. L'importance de la portabilité dans le contexte cloud justifie notre focus sur la technologie \textit{Docker} dans la suite.
+
+\textbf{Les conteneurs Docker}
+Docker représente l'évolution moderne de la technologie de conteneurisation. Initialement développé par la société \textit{Dotcloud} (devenue \textit{Docker Inc.}), ce projet open source s'appuyait originellement sur la technologie \textit{LXC}.
+
+L'innovation principale de Docker réside dans l'introduction du \textit{Docker daemon}, une API qui s'intercale entre le noyau du système d'exploitation et les environnements virtuels \cite{joy2015performance}. Cette couche intermédiaire permet l'exécution de processus complètement isolés, gérant de manière indépendante les ressources système : processeur, mémoire, entrées/sorties et réseau.
+À partir de la version 0.9 sortie en 2014, Docker a abandonné sa dépendance à LXC pour développer sa propre solution : \textit{Libcontainer} \cite{bui2015analysis}. Cette bibliothèque propriétaire, programmée en langage \textit{Go}, offre un environnement d'exécution optimisé spécifiquement pour l'écosystème Docker.
+
+Docker se distingue par son approche complète et intuitive du \textit{développement conteneurisé}. L'écosystème propose un ensemble d'outils intégrés comprenant un système de gestion d'images sophistiqué, des registres pour le stockage et la distribution, ainsi qu'une interface en ligne de commande conviviale. Cette architecture cohérente fait de Docker une plateforme complète pour la conteneurisation moderne.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\linewidth]{My-Thesis/Chap1/images/Architecture docker.png}
+    \caption{Architecture de Docker \cite{docker2025}}
+    \label{fig:archi-docker}
+\end{figure}
+
+La figure \ref{fig:archi-docker} présente l'architecture de docker, 
+\begin{itemize}
+    \item \textbf{Le client Docker}: Interface en ligne de commande permettant aux utilisateurs d'émettre des commandes (push, pull, run, build, etc.) vers le daemon Docker. Il constitue le point d'entrée principal pour interagir avec l'écosystème Docker;
+    \item \textbf{Le daemon Docker (dockerd)}: Composant central qui gère l'ensemble des conteneurs sur le système hôte. Il traite les requêtes du client Docker, supervise le cycle de vie complet des conteneurs (création, démarrage, arrêt, suppression) et assure la communication avec d'autres daemons pour les services distribués;
+    \item \textbf{Les images Docker}: Modèles en lecture seule contenant l'application et toutes ses dépendances (bibliothèques, fichiers de configuration, variables d'environnement);
+    \item \textbf{Les conteneurs Docker.}: Instances d'images en cours d'exécution. Chaque conteneur constitue un environnement isolé du système hôte et des autres conteneurs, disposant de son propre espace processus, réseau et système de fichiers;
+    \item \textbf{Le Registry}: Service de stockage et de distribution des images Docker, pouvant être public (comme Docker Hub) ou privé (registry d'entreprise). Il permet le partage, la versioning et la distribution centralisée des images entre différents environnements.
+\end{itemize}
+
+\subsection{Comparaison entre conteneur Docker et VMs}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\linewidth]{My-Thesis/Chap1/images/docker-and-vm (1).png}
+    \caption{Comparaison de l’architecture d’une machine virtuelle et d’un conteneur Docker \cite{docker2025}}
+    \label{fig:docker-vs-vm}
+\end{figure}
+
+La virtualisation traditionnelle s'appuie sur un hyperviseur pour créer et isoler les machines virtuelles, tandis que la conteneurisation Docker ne requiert que l'installation du moteur Docker sur le système d'exploitation hôte. Malgré leurs différences techniques, ces deux technologies partagent un point commun : elles créent des environnements virtuels autonomes qui exploitent les ressources d'un système hôte supérieur.
+La distinction fondamentale réside dans leur approche de l'isolation : les machines virtuelles embarquent un système d'exploitation complet (OS invité), alors que les conteneurs partagent le noyau du système d'exploitation hôte \ref{fig:docker-vs-vm}.
+
+Les conteneurs Docker, évolution des capacités LXC, n'émulent pas l'environnement matériel sous-jacent (Felter et al., 2015; Naik, 2016). Cette approche permet un déploiement flexible aussi bien sur machines physiques que virtuelles.
+Les conteneurs offrent des performances supérieures aux machines virtuelles : création et destruction quasi-instantanées avec une surcharge négligeable des ressources système (CPU, RAM, E/S) \cite{jayasena2015auto}. Ils excellent également en termes de gestion réseau, consommation mémoire, stockage, vitesse de démarrage, déploiement et migration.
+
+Cependant, les conteneurs présentent un niveau d'isolation inférieur aux machines virtuelles. Une compromission d'un conteneur Docker peut potentiellement donner à un attaquant un accès privilégié au système d'exploitation hôte. Cette vulnérabilité souligne l'importance de déployer les conteneurs dans des environnements robustes et sécurisés.
+Le tableau \ref{tab:vm_vs_docker} présente une étude comparative entre la virtualisation système (VM) et la virtualisation par conteneur.
+
+\begin{table}[h]
+\centering
+\caption{Comparaison entre machines virtuelles et conteneurs Docker}
+\label{tab:vm_vs_docker}
+\begin{tabular}{|p{3cm}|p{5cm}|p{5cm}|}
+\hline
+\rowcolor{gray!30}
+\textbf{Critères} & \textbf{Machine Virtuelle} & \textbf{Conteneur Docker} \\
+\hline
+OS & Chaque VM virtualise complètement le matériel et intègre son propre système d'exploitation & Les conteneurs n'émulent pas le matériel physique et utilisent directement l'OS de la machine hôte \\
+\hline
+Communication & Communication via les périphériques Ethernet virtualisés & Utilise les mécanismes IPC standards : sockets, pipes, mémoire partagée, etc. \\
+\hline
+Consommation des ressources (\textit{CPU et RAM}) & Forte consommation des ressources système & Consommation quasi-native avec une surcharge minimale \\
+\hline
+Temps de démarrage & Démarrage en plusieurs minutes & Démarrage en quelques secondes seulement \\
+\hline
+Stockage & Nécessite un espace de stockage important car l'OS complet et les applications associées doivent être installés et exécutés & Utilise moins d'espace de stockage grâce au système de couches partagées \\
+\hline
+Portabilité & Le partage de bibliothèques et fichiers entre VMs est complexe & Les sous-répertoires peuvent être montés de manière transparente et facilement partagés \\
+\hline
+Sécurité & Isolation robuste dépendant de la configuration de l'hyperviseur & Nécessite un contrôle d'accès renforcé en raison du partage du noyau \\
+\hline
+\end{tabular}
+\end{table}
+
+Cette section a exploré les fondements de la conteneurisation dans le contexte du cloud computing. L'analyse comparative démontre la supériorité des conteneurs Docker sur les machines virtuelles en termes de performances, consommation de ressources et vitesse de déploiement.
+Bien que Docker excelle dans la gestion de conteneurs sur une machine unique, il présente des limitations pour les déploiements distribués multi-machines. Cette lacune a conduit au développement de plateformes d'orchestration, sujet de la section suivante, permettant de gérer efficacement des architectures conteneurisées complexes à grande échelle.
+
+\mySection{Orchestration des conteneurs}{}
+La conteneurisation Docker a révolutionné le développement et le déploiement d'applications grâce à sa légèreté et sa flexibilité. Cette technologie a favorisé l'émergence d'architectures distribuées où les applications sont organisées en conteneurs déployables sur des clusters de machines.
+Cette évolution nécessite de nouveaux outils spécialisés : les orchestrateurs de conteneurs, essentiels pour gérer la complexité des déploiements distribués à grande échelle \cite{7036275}.
+
+La gestion de quelques conteneurs Docker sur une machine unique reste simple. Cependant, le passage en production sur des infrastructures distribuées soulève de nombreux défis critiques : \textit{gestion des déploiements}, \textit{équilibrage de charge}, \textit{communication inter-conteneurs}, \textit{découverte de services}, \textit{mises à jour}, \textit{montée en charge}, \textit{persistance des données}, \textit{configuration des secrets} et \textit{gestion des pannes}.
+
+Une approche manuelle de ces problématiques compromettrait la viabilité et la pérennité du système. D'où la nécessité d'une plateforme d'orchestration automatisée.
+Plusieurs solutions existent \cite{smith2017docker}: \textit{Fleet}, \textit{Apache Mesos}, \textit{Docker Swarm} et \textit{Kubernetes}. Cette section se concentre sur Kubernetes, solution stable et gratuite qui automatise le déploiement, la migration, la surveillance, la mise en réseau, l'extensibilité et la disponibilité des applications conteneurisées.
+
+\textbf{Définition}
+Kubernetes (K8s) est un orchestrateur de conteneurs initié par Google en 2014, fruit de plus d'une décennie d'expérience avec Borg, leur gestionnaire de conteneurs interne \cite{7036275}. 
+Cette plateforme automatise le déploiement et la gestion d'applications conteneurisées à grande échelle sur des clusters de machines physiques et/ou virtuelles. Kubernetes gère l'intégralité du cycle de vie des applications en garantissant prévisibilité, extensibilité et haute disponibilité.
+
+\textbf{Architecture de Kubernetes}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\linewidth]{My-Thesis/Chap1/images/Archi K8s.png}
+    \caption{Orchestrateur des conteneurs}
+    \label{fig:archi-k8s}
+\end{figure}
+Comme le montre la figure \ref{fig:archi-k8s}, l'architecture Kubernetes suit un modèle maître-esclave composé de deux types de nœuds principaux \cite{kubernetes2025}. Le nœud \textbf{maître} centralise la gestion et le contrôle du cluster à travers quatre composants essentiels:
+\begin{itemize}
+    \item \textbf{API Server}: point d'entrée central exposant l'API REST de Kubernetes pour toutes les interactions;
+    \item \textbf{Sheduler}: responsable de l'affectation des pods aux nœuds workers selon les ressources disponibles;
+    \item \textbf{Controller Manager} : Supervise l'état du cluster et maintient la configuration désirée;
+    \item \textbf{etcd}: Base de données distribuée stockant toutes les données de configuration du cluster.
+\end{itemize}
+Les nœuds \textbf{workers} hébergent et exécutent les applications conteneurisées via plusieurs composants:
+\begin{itemize}
+    \item \textbf{Pods}: unités d'exécution contenant un ou plusieurs conteneurs partageant le même contexte;
+    \item \textbf{Container Runtime Interface (CRI)}: Runtime de conteneurisation gérant l'exécution des conteneurs (Docker);
+    \item \textbf{Kubelet} : Agent Kubernetes communiquant avec le maître et gérant les pods localement;
+    \item \textbf{Kube-proxy} : Proxy réseau gérant les règles de trafic et l'équilibrage de charge.
+\end{itemize}
+Le \textbf{kubectl} est le CLI permettant aux administrateurs d'interagir avec le cluster via l'API Server.
+
+% \textbf{Avantages}
+% Kubernetes offre plusieurs
+
+\vspace{1cm}
+% ====section=====
+% ====section=====
+\mySection{Généralités sur la transformée de Fourier (TF)}{}
+\label{sec:designing_parallel_algorithms}
+Le traitement du signal est une discipline technique qui utilise les ressources de l'électronique, de l'informatique et de la physique appliquée pour développer et interpréter les signaux. Il permet de concevoir, d'examiner et de modifier les signaux afin de les exploiter. Son domaine d'application englobe donc tous les secteurs liés à la perception, à la transmission ou à l'utilisation des informations transportées par ces signaux.
+
+\subsection{Notions fondamentales sur les signaux}
+
+Un signal est une fonction mathématique qui représente la variation d'une grandeur physique en fonction d’une ou plusieurs variables indépendantes, généralement le temps ou l’espace. Il constitue le support de l'information dans les systèmes techniques. En traitement du signal, l’analyse des signaux permet d’en extraire des caractéristiques utiles à diverses applications, qu’il s’agisse de reconnaissance vocale, de détection d’anomalies, ou de transmission d’informations. Le bruit peut être décrit comme tout phénomène perturbateur qui entrave la perception ou l'interprétation d'un signal.
+
+On distingue plusieurs types de signaux, principalement:
+\begin{itemize}
+    \item Les \textbf{signaux continus}: il est continu et, en théorie, peut posséder un nombre illimité de valeurs dans une certaine fourchette. on les appelle aussi \textit{signaux analogiques} (figure \ref{fig:continuous-signal}); Ils sont généralement issus de processus physiques et sont modélisés par des fonctions mathématiques continues définies sur un domaine temporel ou spatial continu;
+    \begin{figure}[h]
+        \centering
+        \includegraphics[width=0.7\linewidth]{My-Thesis/Chap1/images/Continuous-time-signal.jpg}
+        \caption{Signal continue}
+        \label{fig:continuous-signal}
+    \end{figure}
+    % \item Les \textbf{signaux discrets}: Ce sont les signaux échantillonnés (figure \ref{fig:discrete-signal}).
+    \item Les \textbf{signaux discrets}: ils sont définis uniquement à des instants précis et discrets, contrairement aux signaux continus. On les appelle aussi \textit{signaux numériques} lorsqu'ils sont également quantifiés en amplitude (figure \ref{fig:discrete-signal}); Ils résultent généralement de l'échantillonnage de signaux analogiques ou proviennent directement de systèmes numériques, et sont modélisés par des séquences mathématiques discrètes $x[n]$ où n représente l'indice temporel discret;
+    \begin{figure}[h]
+        \centering
+        \includegraphics[width=0.7\linewidth]{My-Thesis/Chap1/images/Discrete-time-signal.jpg}
+        \caption{Signal discret}
+        \label{fig:discrete-signal}
+    \end{figure}
+\end{itemize}
+
+
+% \subsection{Définition et Importance dans le traitement du signal}{}
+La transformée de Fourier est une opération mathématique qui permet de représenter un signal dans le domaine fréquentiel. Elle transforme un signal $f(t)$ du domaine temporel vers une fonction $\hat{f}(\nu)$ exprimant l'amplitude de ses composantes sinusoïdales. Cette représentation est fondamentale pour analyser les fréquences contenues dans un signal, détecter des motifs, compresser des données ou concevoir des filtres. Elle est omniprésente dans les domaines du traitement du signal, de l'audio, des communications et de la vision.
+
+La transformée de Fourier (TF) d'un signal défini par une fonction $f(t)$ intégrable, notée $\mathcal{F}[f]$ ou $\hat{f}(\nu)$, est définie par :
+\begin{equation}
+\hat{f}(\nu) = \mathcal{F}[f(t)] = \int_{-\infty}^{+\infty} f(t) e^{-2i\pi\nu t} dt
+\end{equation}
+où $\nu$ représente la fréquence en Hz et $i$ l'unité imaginaire $i=\sqrt{-1}$.
+
+La TF inverse, notée $\mathcal{F}^{-1}$ est également définie et permet, à partir de la TF de reconstruire la fonction $f(t)$. Elle s'écrit :
+\begin{equation}
+f(t) = \mathcal{F}^{-1}[\hat{f}](t) = \int_{-\infty}^{+\infty} \hat{f}(\nu) e^{2i\pi\nu t} d\nu.
+\end{equation}
+
+% \subsection{Exemple de transformée de Fourier Continue}{}
+% Considérons un signal rectangulaire $f(t)$ défini par :
+% \begin{equation}
+% f(t) = \begin{cases}
+% 1 & \text{si } |t| \leq \frac{T}{2} \\
+% 0 & \text{sinon}
+% \end{cases}
+% \end{equation}
+
+% Sa transformée de Fourier est calculée comme suit :
+% \begin{align}
+% \hat{f}(\nu) &= \int_{-T/2}^{T/2} 1 \cdot e^{-2i\pi\nu t} dt \\
+% &= \left[ \frac{e^{-2i\pi\nu t}}{-2i\pi\nu} \right]_{-T/2}^{T/2} \\
+% &= \frac{e^{-i\pi\nu T} - e^{i\pi\nu T}}{-2i\pi\nu} \\
+% &= \frac{-2i\sin(\pi\nu T)}{-2i\pi\nu} \\
+% &= T \cdot \frac{\sin(\pi\nu T)}{\pi\nu T} = T \cdot \text{sinc}(\nu T)
+% \end{align}
+
+% où $\text{sinc}(x) = \frac{\sin(\pi x)}{\pi x}$ est la fonction sinus cardinal.
+
+\subsection{Traitement des signaux numériques}
+\subsubsection{Transformée de Fourier Discrète}{}
+Le calcul de la transformée de Fourier présente un défi lorsqu'il s'agit de signaux discrets, ce qui est généralement le cas puisque l'acquisition d'un signal nécessite un échantillonnage. Par conséquent, ce calcul est réalisé en utilisant l'algorithme de la Transformée de Fourier Discrète (TFD), dont une version plus rapide, la FFT (Fast Fourier Transform), a été proposée par Cooley et Tukey en 1965 \cite{cooley1965algorithm}.
+
+La Transformée de Fourier Discrète (TFD) est l'outil utilisé pour analyser le contenu fréquentiel d'un signal discret et de durée finie. Elle transforme une séquence de $N$ échantillons dans le domaine temporel en une séquence de $N$ composantes dans le domaine fréquentiel.
+
+La TFD d'un signal $x[n]$ avec $n=\{0,1,\ldots,N-1\}$, encore appelé \textit{spectre} du signal notée $X[k]$ est donnée par la formule :
+\begin{equation}
+    X[k] = \sum_{n=0}^{N-1} x[n] e^{-i \frac{2\pi}{N} kn} \quad \text{avec} \quad k=\{0,1,\ldots,N-1\}
+\end{equation}
+
+Le signal $x[n]$ peut être retrouvé à partir de son spectre $X[k]$ en utilisant la \textbf{transformée de Fourier discrète inverse} donnée par :
+\begin{equation}
+    x[n] = \frac{1}{N} \sum_{k=0}^{N-1} X[k] e^{i \frac{2\pi}{N} kn} \quad \text{avec} \quad n=\{0,1,\ldots,N-1\}
+\end{equation}
+
+% \subsubsection*{Exemple de TFD}{}
+% Considérons un signal simple de 4 échantillons : $x[n] = [1, 0, 1, 0]$ pour $n = 0, 1, 2, 3$.
+
+% Le calcul de la TFD donne :
+% \begin{align}
+% X[0] &= \sum_{n=0}^{3} x[n] e^{-i \frac{2\pi \cdot 0 \cdot n}{4}} = 1 + 0 + 1 + 0 = 2 \\
+% X[1] &= \sum_{n=0}^{3} x[n] e^{-i \frac{2\pi \cdot 1 \cdot n}{4}} = 1 + 0 \cdot e^{-i\pi/2} + 1 \cdot e^{-i\pi} + 0 \cdot e^{-i3\pi/2} \\
+% &= 1 + 0 + 1 \cdot (-1) + 0 = 0 \\
+% X[2] &= \sum_{n=0}^{3} x[n] e^{-i \frac{2\pi \cdot 2 \cdot n}{4}} = 1 + 0 + 1 \cdot e^{-i2\pi} + 0 = 1 + 0 + 1 + 0 = 2 \\
+% X[3] &= \sum_{n=0}^{3} x[n] e^{-i \frac{2\pi \cdot 3 \cdot n}{4}} = 1 + 0 + 1 \cdot e^{-i3\pi/2} + 0 = 1 + 0 + 1 \cdot i + 0 = 1 + i
+% \end{align}
+
+% Donc $X[k] = [2, 0, 2, 1+i]$.
+
+% La complexité de calcul de la TFD est de $\mathcal{O}(N^2)$ car chaque coefficient $X[k]$ nécessite $N$ multiplications complexes, et il y a $N$ coefficients à calculer.
+
+
+\subsubsection{Transformée de Fourier Rapide (FFT)}{}
+La FFT est un algorithme efficace pour calculer la TFD qui réduit la complexité de $\mathcal{O}(N^2)$ à $\mathcal{O}(N \log N)$. L'algorithme le plus courant est celui de Cooley-Tukey, qui utilise une approche "diviser pour régner".
+
+%%%%%%%%% Correction
+\begin{comment}
+    
+Le principe de base consiste à décomposer une TFD de taille $N$ en deux TFD de taille $N/2$ :
+\begin{equation}
+X[k] = \sum_{n=0}^{N-1} x[n] W_N^{kn}
+\end{equation}
+où $W_N = e^{-i2\pi/N}$ est le facteur de rotation.
+
+En séparant les indices pairs et impairs :
+\begin{align}
+X[k] &= \sum_{m=0}^{N/2-1} x[2m] W_N^{k(2m)} + \sum_{m=0}^{N/2-1} x[2m+1] W_N^{k(2m+1)} 
+\end{align}
+Nous avons:
+\[
+W_N^{k(2m)} = \left(e^{-i \frac{2\pi}{N}}\right)^{k(2m)}
+= e^{-i \frac{2\pi k \cdot 2m}{N}}
+= e^{-i \frac{2\pi km}{N/2}}
+= W_{N/2}^{km}.
+\]
+
+\[
+W_N^{k(2m+1)}
+= W_N^{2km+k}
+= W_N^{k(2m)} \cdot W_N^k
+= W_{N/2}^{km} \cdot W_N^k.
+\]
+
+Ce qui donne:
+\begin{align}
+X[k] &= \sum_{m=0}^{N/2-1} x[2m] W_{N/2}^{km} + W_N^k \sum_{m=0}^{N/2-1} x[2m+1] W_{N/2}^{km} \\[1em]
+&= E[k] + W_N^k \cdot O[k]
+\end{align}
+
+où $E[k]$ et $O[k]$ sont respectivement les TFD des échantillons pairs et impairs.
+
+% \textbf{Périodicité du facteur de rotation :}
+Par définition, le facteur de rotation est donné par :
+\[
+W_N = e^{-i \frac{2\pi}{N}}.
+\]
+
+En remplaçant l’exposant \( k+N/2 \), on obtient :
+\[
+W_N^{k+N/2}
+= \left(e^{-i \frac{2\pi}{N}}\right)^{k+N/2}
+= e^{-i \frac{2\pi}{N} (k+N/2)}
+= e^{-i \frac{2\pi k}{N}} \cdot e^{-i \frac{2\pi (N/2)}{N}}.
+\]
+
+Le premier terme est simplement \( W_N^k \).  
+Le second terme se simplifie ainsi :
+\[
+e^{-i \frac{2\pi (N/2)}{N}}
+= e^{-i \pi}
+= -1.
+\]
+
+En remplaçant :
+\[
+W_N^{k+N/2} = W_N^k \cdot (-1) = -W_N^k.
+\]
+
+% Cette équation s'explique par :
+% \[ W_N^{k+N/2} = e^{-i2\pi k/N} \cdot e^{-i2\pi (N/2)/N} = e^{-i2\pi k/N} \cdot e^{-i\pi} = W_N^k \cdot (-1) = -W_N^k, \]
+% car \( e^{-i\pi} = -1 \). 
+Nous avons:
+\begin{align}
+    X[k] &= E[k] + W_N^k \cdot O[k]\\[1em]
+    X\left[k+\frac{N}{2}\right] &= E\left[k+\frac{N}{2}\right] - W_N^{k+\frac{N}{2}} \cdot O\left[k+\frac{N}{2}\right]\\[1em]
+    &= E\left[k+\frac{N}{2}\right] - W_N^k \cdot O\left[k+\frac{N}{2}\right]
+\end{align}
+
+\begin{align}
+E\left[k+\frac{N}{2}\right]
+&= \sum_{m=0}^{N/2-1} x[2m]\, W_{N/2}^{\left(k+\frac{N}{2}\right)m} \\[1em]
+&= \sum_{m=0}^{N/2-1} x[2m]\, W_{N/2}^{k m}\\[1em]
+&= E[k]
+\end{align}
+
+\[
+\text{Car}\quad 
+W_{N/2}^{\left(k+\frac{N}{2}\right)m}
+= \left(e^{-i \frac{4\pi}{N}}\right)^{\left(k+\frac{N}{2}\right)m}
+= e^{-i \frac{4\pi}{N} \bigl(km+\frac{N}{2}m\bigr)}
+= e^{-i \frac{4\pi}{N} km} \cdot e^{-i 2\pi m}
+= e^{-i \frac{4\pi}{N} km}
+= W_{N/2}^{km}
+\]
+Ce qui nous ramene à:
+\begin{align}
+    X[k] &= E[k] + W_N^k \cdot O[k]\\[1em]
+    X\left[k+\frac{N}{2}\right] &= E[k] - W_N^k \cdot O[k]
+\end{align}
+
+Cette périodicité est cruciale dans la combinaison (\textit{butterfly}), où les valeurs pour \( k \) et \( k + N/2 \) sont liées par un simple changement de signe, réduisant le nombre d'opérations de combinaison.
+\end{comment}
+Le principe de base consiste à décomposer une TFD de taille $N$ en deux TFD de taille $N/2$ :
+\begin{equation}
+X[k] = \sum_{n=0}^{N-1} x[n] W_N^{kn},
+\end{equation}
+où $W_N = e^{-i2\pi/N}$ est le facteur de rotation.
+
+En séparant les indices pairs et impairs :
+\begin{align}
+X[k] &= \sum_{m=0}^{N/2-1} x[2m] W_N^{k(2m)} 
+      + \sum_{m=0}^{N/2-1} x[2m+1] W_N^{k(2m+1)}.
+\end{align}
+
+Nous avons pour le terme pair :
+\[
+W_N^{k(2m)} = \left(e^{-i \frac{2\pi}{N}}\right)^{k(2m)}
+= e^{-i \frac{4\pi km}{N}}
+= e^{-i \frac{2\pi km}{N/2}}
+= W_{N/2}^{km}.
+\]
+
+Pour le terme impair :
+\[
+W_N^{k(2m+1)}
+= W_N^{2km+k}
+= W_N^{2km} \cdot W_N^k
+= (W_N^2)^{km} \cdot W_N^k
+= W_{N/2}^{km} \cdot W_N^k.
+\]
+
+En remplaçant ces deux résultats dans la somme :
+\begin{align}
+X[k] &= \sum_{m=0}^{N/2-1} x[2m] W_{N/2}^{km} 
+      + W_N^k \sum_{m=0}^{N/2-1} x[2m+1] W_{N/2}^{km} \\[0.8em]
+&= E[k] + W_N^k \cdot O[k],
+\end{align}
+où $E[k]$ et $O[k]$ sont respectivement les TFD des échantillons pairs et impairs.
+
+% Périodicité du facteur de rotation :
+\subsubsection*{Périodicité du facteur de rotation}
+Par définition, 
+\[
+W_N^{k+N/2}
+= \left(e^{-i \frac{2\pi}{N}}\right)^{k+N/2}
+= e^{-i \frac{2\pi}{N} (k+N/2)}
+= e^{-i \frac{2\pi k}{N}} \cdot e^{-i \pi}.
+\]
+Or $e^{-i \pi}=-1$, donc :
+\[
+W_N^{k+N/2} = - W_N^k.
+\]
+
+---
+
+À partir de la décomposition précédente, on a pour l’indice $k+N/2$ :
+\begin{align}
+X\left[k+\frac{N}{2}\right] 
+&= E\left[k+\frac{N}{2}\right] 
+  + W_N^{k+\frac{N}{2}} \cdot O\left[k+\frac{N}{2}\right].
+\end{align}
+
+\textbf{1. Simplification de $E\left[k+\frac{N}{2}\right]$:}
+\begin{align}
+E\left[k+\frac{N}{2}\right]
+&= \sum_{m=0}^{N/2-1} x[2m] \,
+   W_{N/2}^{\left(k+\frac{N}{2}\right)m} \\
+&= \sum_{m=0}^{N/2-1} x[2m] \,
+   \left(W_{N/2}^{km} \cdot W_{N/2}^{\frac{N}{2}m}\right).
+\end{align}
+
+Or $W_{N/2}^{\frac{N}{2}m}
+= \left(e^{-i\frac{4\pi}{N}}\right)^{\frac{N}{2}m}
+= e^{-i 2\pi m} = 1$ car $m$ est entier.  
+Donc :
+\[
+E\left[k+\frac{N}{2}\right] = E[k].
+\]
+
+\textbf{2. Même simplification pour $O[k+N/2]$:}
+\[
+O\left[k+\frac{N}{2}\right] = O[k].
+\]
+
+\textbf{3. En utilisant la relation $W_N^{k+N/2} = -W_N^k$, on obtient alors :}
+\begin{align}
+X\left[k+\frac{N}{2}\right] 
+&= E[k] + (-W_N^k)\cdot O[k] \\
+&= E[k] - W_N^k \cdot O[k].
+\end{align}
+
+---
+
+Ainsi, les deux résultats finaux sont :
+\begin{align}
+X[k] &= E[k] + W_N^k \cdot O[k], \\[0.5em]
+X\left[k+\frac{N}{2}\right] &= E[k] - W_N^k \cdot O[k].
+\end{align}
+
+Cette relation de symétrie est au cœur de l’algorithme FFT : elle permet de calculer les coefficients pour $k$ et $k+N/2$ à partir des mêmes sous-transformées $E[k]$ et $O[k]$, réduisant le nombre d’opérations.
+
+%%%%%%%% Draft
+% \textbf{Décomposition de la TFD et principe de la FFT}
+
+% Le principe fondamental de l’algorithme FFT (\textit{Fast Fourier Transform}) consiste 
+% à décomposer une transformée de Fourier discrète (TFD) de taille $N$ 
+% en deux TFD de taille $N/2$. 
+% La TFD est définie par :
+
+% \begin{equation}
+% X[k] = \sum_{n=0}^{N-1} x[n] W_N^{kn},
+% \end{equation}
+
+% où 
+% \(
+% W_N = e^{-i2\pi/N}
+% \)
+% est le facteur de rotation (racine $N$-ième de l’unité).
+
+% \textbf{Séparation des indices pairs et impairs:}
+% On sépare les échantillons en indices pairs $x[2m]$ et impairs $x[2m+1]$ :
+% \begin{align}
+% X[k] &= \sum_{m=0}^{N/2-1} x[2m] \, W_N^{k(2m)}
+%       + \sum_{m=0}^{N/2-1} x[2m+1] \, W_N^{k(2m+1)} \\[1em]
+%      &= \sum_{m=0}^{N/2-1} x[2m] \, (W_N^2)^{km}
+%       + W_N^k \sum_{m=0}^{N/2-1} x[2m+1] \, (W_N^2)^{km} \\[1em]
+%      &= \sum_{m=0}^{N/2-1} x[2m] \, W_{N/2}^{km}
+%       + W_N^k \sum_{m=0}^{N/2-1} x[2m+1] \, W_{N/2}^{km}.
+% \end{align}
+
+% En introduisant
+% \[
+% E[k] = \sum_{m=0}^{N/2-1} x[2m] W_{N/2}^{km}, \qquad
+% O[k] = \sum_{m=0}^{N/2-1} x[2m+1] W_{N/2}^{km},
+% \]
+% on obtient :
+% \begin{equation}
+% X[k] = E[k] + W_N^k \cdot O[k].
+% \end{equation}
+
+% \textbf{Périodicité du facteur de rotation:}
+% Le facteur de rotation $W_N$ vérifie les propriétés :
+% \begin{equation}
+% W_N^{k+N} = W_N^k, \qquad 
+% W_N^{k+N/2} = -W_N^k.
+% \end{equation}
+
+% La deuxième relation se démontre comme suit :
+% \[
+% W_N^{k+N/2}
+% = e^{-i \frac{2\pi}{N} (k+N/2)}
+% = e^{-i \frac{2\pi k}{N}} \cdot e^{-i \frac{2\pi (N/2)}{N}}
+% = W_N^k \cdot e^{-i \pi}
+% = - W_N^k,
+% \]
+% car \( e^{-i \pi} = -1 \).
+
+% \textbf{Conséquences pour les indices $k$ et $k+N/2$.}
+% En utilisant cette périodicité, on peut exprimer :
+% \begin{align}
+% X[k] &= E[k] + W_N^k \cdot O[k], \\[1em]
+% X\left[k+\frac{N}{2}\right] &= E[k] - W_N^k \cdot O[k],
+% \end{align}
+% pour \( 0 \leq k < \frac{N}{2} \).
+
+% Ainsi, le même couple $(E[k],O[k])$ permet de calculer simultanément 
+% deux valeurs de la TFD, $X[k]$ et $X[k+N/2]$, réduisant fortement le nombre d’opérations.
+
+% \textbf{Principe du papillon:}
+% Cette relation est au cœur du \textit{butterfly}, 
+% l’étape de combinaison de l’algorithme FFT : 
+% les sous-résultats sont combinés en exploitant la symétrie et la périodicité
+% du facteur de rotation, ce qui permet de passer d’une complexité quadratique 
+% $O(N^2)$ à une complexité $O(N \log N)$.
+
+%%%%%%%%%%%%%% End Correction 
+% %%%%%%% Algorithme
+Le pseudo-code suivant illustre l’implémentation récursive classique de l’algorithme FFT (Algo \ref{alg:fft-algo}):\\
+
+% \begin{algorithm}[H]
+% \caption{FFT Cooley-Tukey}
+% \SetAlgoLined
+% \SetKwFunction{FFT}{FFT}
+% \SetKwProg{Fn}{Function}{:}{}
+% \SetKwInput{KwIn}{Entrée}
+% \SetKwInput{KwOut}{Sortie}
+
+% \KwIn{Un vecteur $x$ de taille $N = 2^m$}
+% \KwOut{Le vecteur $X$ contenant les coefficients de la TFD}
+
+% \Fn{\FFT{$x$}}{
+%     $N \gets \text{length}(x)$\;
+    
+%     \If{$N = 1$}{
+%         \Return $x$\tcp*{Cas de base : un seul point}
+%     }
+
+%     \tcc{Séparation des indices pairs et impairs}
+%     $x_{\text{pair}} \gets \text{éléments pairs de } x$\;
+%     $x_{\text{impair}} \gets \text{éléments impairs de } x$\;
+
+%     \tcc{Appel récursif sur les sous-signaux}
+%     $X_{\text{pair}} \gets \FFT(x_{\text{pair}})$\;
+%     $X_{\text{impair}} \gets \FFT(x_{\text{impair}})$\;
+
+%     \tcc{Combinaison des résultats}
+%     \For{$k \gets 0$ \KwTo $N/2 - 1$}{
+%         $W \gets e^{-2\pi i k / N}$\;
+%         $X[k] \gets X_{\text{pair}}[k] + W \cdot X_{\text{impair}}[k]$\;
+%         $X[k + N/2] \gets X_{\text{pair}}[k] - W \cdot X_{\text{impair}}[k]$\;
+%     }
+
+%     \Return $X$\;
+% }
+% \end{algorithm}
+
+\begin{algorithm}[H]
+\label{alg:fft-algo}
+\caption{\textbf{Algorithme FFT}}
+\KwIn{Un vecteur $x$ de taille $N$, avec $N = 2^m$ (puissance de 2)}
+\KwOut{Le vecteur transformé $X$ contenant les composantes fréquentielles}
+
+\SetKwFunction{FFT}{FFT}
+\SetKwProg{Fn}{Fonction}{ :}{}
+\SetKwComment{Comment}{$\triangleright$\ }{}
+\SetKwInOut{Input}{Entrée}
+\SetKwInOut{Output}{Sortie}
+
+\Fn{\FFT{$x$}}{
+    $N \leftarrow \text{longueur}(x)$\;
+    \If{$N = 1$}{
+        \Return $x$ \tcp*[r]{cas de base}
+    }
+
+    \Comment{Diviser le signal en sous-signaux pairs et impairs}
+    $x_{\text{pair}} \leftarrow x[0], x[2], x[4], \dots,x[N-2]$\;
+    $x_{\text{impair}} \leftarrow x[1], x[3], x[5], \dots,x[N-1]$\;
+
+    \Comment{Appels récursifs}
+    $X_{\text{pair}} \leftarrow \FFT(x_{\text{pair}})$\;
+    $X_{\text{impair}} \leftarrow \FFT(x_{\text{impair}})$\;
+
+    \Comment{Combiner les résultats}
+    \For{$k \leftarrow 0$ \KwTo $N/2 - 1$}{
+        $W \leftarrow e^{-2\pi i k / N}$ \tcp*{facteur de rotation}
+        $X[k] \leftarrow X_{\text{pair}}[k] + W \cdot X_{\text{impair}}[k]$\;
+        $X[k + N/2] \leftarrow X_{\text{pair}}[k] - W \cdot X_{\text{impair}}[k]$\;
+    }
+
+    \Return $X$\;
+}
+\end{algorithm}
+
+%%%%%% Algorithme 
+\vspace{0.5cm}
+%%%%%%%%% Complexité
+L'algorithme divise une TFD de taille \( N \) en deux TFD de taille \( N/2 \), avec un travail supplémentaire de \( \mathcal{O}(N) \) pour combiner les résultats (opérations \textit{butterfly}). La relation de récurrence est :
+    \[
+    T(N) = 2T\left(\frac{N}{2}\right) + \mathcal{O}\left(\frac{N}{2}\right)
+    \]
+    En résolvant cette récurrence, on obtient :
+    \[
+    T(N) = \mathcal{O}(N \log N)
+    \]
+
+Cette complexité temporelle \( \mathcal{O}(N \log N) \) rend la FFT particulièrement adaptée au traitement de signaux de grande taille, offrant une accélération significative par rapport à la TFD classique, surtout pour des grandes valeurs de \( N \).
+%%%%% Exemple 
+% \subsubsection*{Application de la FFT sur l'exemple précédent}{}
+% Reprenons notre exemple avec $x[n] = [1, 0, 1, 0]$ et $N = 4$.
+
+% \textbf{Étape 1 :} Séparation pairs/impairs
+% \begin{align}
+% \text{Pairs : } &x_{\text{pair}}[m] = [x[0], x[2]] = [1, 1] \\
+% \text{Impairs : } &x_{\text{impair}}[m] = [x[1], x[3]] = [0, 0]
+% \end{align}
+
+% \textbf{Étape 2 :} Calcul des TFD de taille 2
+% \begin{align}
+% E[0] &= 1 \cdot W_2^0 + 1 \cdot W_2^0 = 1 + 1 = 2 \\
+% E[1] &= 1 \cdot W_2^0 + 1 \cdot W_2^1 = 1 + 1 \cdot (-1) = 0 \\
+% O[0] &= 0 \cdot W_2^0 + 0 \cdot W_2^0 = 0 \\
+% O[1] &= 0 \cdot W_2^0 + 0 \cdot W_2^1 = 0
+% \end{align}
+
+% \textbf{Étape 3 :} Combinaison avec $W_4^k = e^{-i\pi k/2}$
+% \begin{align}
+% X[0] &= E[0] + W_4^0 \cdot O[0] = 2 + 1 \cdot 0 = 2 \\
+% X[1] &= E[1] + W_4^1 \cdot O[1] = 0 + (-i) \cdot 0 = 0 \\
+% X[2] &= E[0] + W_4^2 \cdot O[0] = 2 + (-1) \cdot 0 = 2 \\
+% X[3] &= E[1] + W_4^3 \cdot O[1] = 0 + (i) \cdot 0 = 0
+% \end{align}
+
+% \textbf{Comparaison des complexités :}
+% \begin{itemize}
+% \item TFD directe : $4^2 = 16$ multiplications complexes
+% \item FFT : $4 \log_2(4) = 8$ multiplications complexes
+% \end{itemize}
+
+% L'avantage de la FFT devient considérable pour des tailles importantes : pour $N = 1024$, la TFD nécessite plus d'un million de multiplications, tandis que la FFT n'en nécessite qu'environ 10000.
+
+\subsection{Quelques domaines d'application de la TF}
+L'efficacité de la FFT élargit considérablement le champ d'application de la transformée de Fourier, en permettant l'analyse fréquentielle rapide de signaux volumineux. Voici les principaux domaines où la transformée de Fourier, optimisée par la FFT, est utilisée:
+\begin{itemize}
+    \item \textbf{Traitement du signal} : Analyse des fréquences dans les signaux audio, filtrage numérique, détection de motifs, et compression de données;
+    \item \textbf{Télécommunications} : Modulation et démodulation des signaux (par exemple, dans les réseaux 4G/5G), analyse de la bande passante, et réduction du bruit;
+    \item \textbf{Imagerie et vision par ordinateur} : Traitement d'images pour la compression (JPEG), le filtrage, l'analyse de textures, et la reconstruction en tomographie (IRM, scanner;
+    \item \textbf{Acoustique et audio} : Analyse spectrale pour l'égalisation, la reconnaissance vocale, et la synthèse sonore;
+    \item \textbf{Analyse des signaux} : La FFT est utilisée pour analyser les signaux d'électrocardiogramme (ECG) et d'électroencéphalogramme (EEG), facilitant ainsi le diagnostic de maladies telles que l'arythmie et les troubles du sommeil;
+    \item \textbf{Informatique et cryptographie} : Utilisation dans les algorithmes de multiplication rapide de polynômes et l'analyse spectrale pour la sécurité des données.
+\end{itemize}
+
+Les applications de la transformée de Fourier englobent aujourd'hui un vaste éventail de domaines, illustrant sa polyvalence et son efficacité dans la résolution de problèmes complexes en traitement du signal, télécommunications, imagerie, et bien au-delà.
+
+% \subsection{La TF comme benchmark}{}
+% La transformée de Fourier est largement utilisée comme benchmark algorithmique dans le domaine de l’optimisation, de la parallélisation et de la composition de services. En raison de sa structure régulière, de ses dépendances bien définies et de sa complexité maîtrisée, elle constitue un cas d’étude idéal pour tester des approches de calcul incrémental ou distribué. Dans le cadre de ton mémoire, elle servira à évaluer l’efficacité d’architectures de composition incrémentale de services.
+
+
+% ====section=====
+% ====section=====
+\mySection{Conclusion}{}
+Dans ce premier chapitre, nous avons posé les fondements conceptuels et technologiques nécessaires à la compréhension du travail présenté dans ce mémoire. Nous avons tout d’abord retracé l’évolution des paradigmes de développement logiciel, depuis les approches procédurales jusqu’aux architectures orientées services et microservices, qui constituent aujourd’hui les bases de nombreux systèmes distribués modernes.
+
+Nous avons ensuite examiné les différentes formes de composition des services, qu’elles soient statiques ou dynamiques, tout en soulignant les limites de ces approches dans des environnements fortement distribués, évolutifs et réactifs. Cette analyse a permis de motiver l’intérêt croissant pour la composition incrémentale, qui sera explorée plus en profondeur dans le chapitre suivant.
+
+Parallèlement, ce chapitre a permis d’introduire les infrastructures techniques sur lesquelles reposent les architectures cloud-native actuelles : la virtualisation, la conteneurisation, et leur orchestration via des plateformes comme Kubernetes. %Nous avons également présenté Vagrant, outil essentiel dans notre démarche de simulation reproductible d’un cluster distribué en environnement local.
+
+Enfin, nous avons présenté les notions fondamentales liées aux signaux numériques et à la transformée de Fourier, en insistant sur les propriétés structurelles de l’algorithme FFT qui en font un excellent candidat pour un benchmark de composition de services. La granularité, le parallélisme naturel et la structure récursive de la FFT en font un cas d’étude particulièrement adapté à une exécution paresseuse et guidée par les données.
+
+Le cadre ainsi posé nous permet, dans le chapitre suivant, d’examiner l’état de l’art des approches de composition incrémentale, en mettant en lumière les modèles formels qui la sous-tendent, les travaux existants et les systèmes expérimentaux déjà proposés.
