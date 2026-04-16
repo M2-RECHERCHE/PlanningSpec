@@ -171,8 +171,7 @@ export async function solvePlanningSource(source: string, solver: string): Promi
     try {
         const mznPath = generator.generateToFile(analysis.document as never, analysis.tmpDir);
         const { stdout, stderr } = await execFileAsync('minizinc', ['--solver', solver, mznPath], {
-            timeout: 30_000,
-            maxBuffer: 1024 * 1024
+            maxBuffer: 8 * 1024 * 1024
         });
 
         const trimmedOutput = stdout.trim();
@@ -233,6 +232,6 @@ export async function solvePlanningSource(source: string, solver: string): Promi
             }
         };
     } finally {
-        rmSync(analysis.tmpDir, { recursive: true, force: true });
+        // rmSync(analysis.tmpDir, { recursive: true, force: true });
     }
 }

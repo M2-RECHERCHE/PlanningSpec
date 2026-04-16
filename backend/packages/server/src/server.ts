@@ -160,7 +160,9 @@ type SupportedConstraintType =
     | 'forbidden_assignment'
     | 'temporal_precedence'
     | 'time_window'
-    | 'mandatory_roles';
+    | 'mandatory_roles'
+    | 'instance_precedence'
+    | 'required_resource';
 
 type SupportedPreferenceType =
     | 'avoid_participation_on_date'
@@ -342,6 +344,22 @@ function serializeConstraintToDsl(constraint: Record<string, unknown>): string {
         return stringifyDslObject([
             ["type", stringifyDslValue(type)],
             ["activity", stringifyDslValue(constraint.activity)]
+        ], 4);
+    }
+
+    if (type === "instance_precedence") {
+        return stringifyDslObject([
+            ["type", stringifyDslValue(type)],
+            ["beforeActivityInstance", stringifyDslValue(constraint.beforeActivityInstance)],
+            ["afterActivityInstance", stringifyDslValue(constraint.afterActivityInstance)]
+        ], 4);
+    }
+
+    if (type === "required_resource") {
+        return stringifyDslObject([
+            ["type", stringifyDslValue(type)],
+            ["activityInstance", stringifyDslValue(constraint.activityInstance)],
+            ["resource", stringifyDslValue(constraint.resource)]
         ], 4);
     }
 
@@ -921,7 +939,7 @@ function validatePlanningDataForSolve(data: unknown): { value?: SolveReadyData; 
             }
 
             const constraintType = constraint.type as SupportedConstraintType;
-            if (!["cardinality_per_activity", "resource_exclusivity", "fixed_assignment", "forbidden_assignment", "temporal_precedence", "time_window", "mandatory_roles"].includes(constraintType)) {
+            if (!["cardinality_per_activity", "resource_exclusivity", "fixed_assignment", "forbidden_assignment", "temporal_precedence", "time_window", "mandatory_roles", "instance_precedence", "required_resource"].includes(constraintType)) {
                 fieldErrors[`constraints.${index}.type`] = `Le type de contrainte "${constraint.type}" n'est pas supporté.`;
                 return;
             }
@@ -1034,6 +1052,39 @@ function validatePlanningDataForSolve(data: unknown): { value?: SolveReadyData; 
                     fieldErrors[`constraints.${index}.activity`] = "L'activité de mandatory_roles doit exister.";
                 } else if (!roleNamesByActivity.get(constraint.activity)?.size) {
                     fieldErrors[`constraints.${index}.activity`] = "mandatory_roles exige une activité ayant au moins un rôle déclaré.";
+                }
+            }
+
+            if (constraintType === "instance_precedence") {
+                const beforeActivityInstance = typeof constraint.beforeActivityInstance === "string" ? constraint.beforeActivityInstance : '';
+                const afterActivityInstance = typeof constraint.afterActivityInstance === "string" ? constraint.afterActivityInstance : '';
+                if (!beforeActivityInstance.trim()) {
+                    fieldErrors[`constraints.${index}.beforeActivityInstance`] = "L'instance source est requise.";
+                } else if (!activityInstanceSet.has(beforeActivityInstance)) {
+                    fieldErrors[`constraints.${index}.beforeActivityInstance`] = "L'instance source n'existe pas.";
+                }
+                if (!afterActivityInstance.trim()) {
+                    fieldErrors[`constraints.${index}.afterActivityInstance`] = "L'instance cible est requise.";
+                } else if (!activityInstanceSet.has(afterActivityInstance)) {
+                    fieldErrors[`constraints.${index}.afterActivityInstance`] = "L'instance cible n'existe pas.";
+                }
+                if (beforeActivityInstance && beforeActivityInstance === afterActivityInstance) {
+                    fieldErrors[`constraints.${index}.afterActivityInstance`] = "Les deux instances doivent être différentes.";
+                }
+            }
+
+            if (constraintType === "required_resource") {
+                const activityInstance = typeof constraint.activityInstance === "string" ? constraint.activityInstance : '';
+                const resource = typeof constraint.resource === "string" ? constraint.resource : '';
+                if (!activityInstance.trim()) {
+                    fieldErrors[`constraints.${index}.activityInstance`] = "L'instance d'activité est requise.";
+                } else if (!activityInstanceSet.has(activityInstance)) {
+                    fieldErrors[`constraints.${index}.activityInstance`] = "L'instance d'activité ciblée n'existe pas.";
+                }
+                if (!resource.trim()) {
+                    fieldErrors[`constraints.${index}.resource`] = "La ressource est requise.";
+                } else if (!resourceInstanceSet.has(resource)) {
+                    fieldErrors[`constraints.${index}.resource`] = "La ressource ciblée n'existe pas.";
                 }
             }
         });
@@ -1188,6 +1239,16 @@ function analyzePotentialCapacityRisks(data: SolveReadyData): string[] {
             if (!data.roles[rawConstraint.activity] || Object.keys(data.roles[rawConstraint.activity]).length === 0) {
                 warnings.push(
                     `mandatory_roles a été demandé pour "${rawConstraint.activity}", mais aucun rôle n'est défini pour cette activité.`
+                );
+            }
+        }
+
+        if (rawConstraint.type === "required_resource" && typeof rawConstraint.resource === "string") {
+            const requiredResource = rawConstraint.resource;
+            const resourceExists = Object.values(data.resources).some((instances) => Array.isArray(instances) && instances.includes(requiredResource));
+            if (!resourceExists) {
+                warnings.push(
+                    `required_resource cible la ressource "${requiredResource}", mais elle n'existe pas dans le modèle.`
                 );
             }
         }

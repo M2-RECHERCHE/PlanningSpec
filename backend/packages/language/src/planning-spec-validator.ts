@@ -7,7 +7,8 @@ import type {
     MaxPerScope,
     PreferredResource,
     ResourceExclusivity,
-    TimeWindow
+    TimeWindow,
+    InstancePrecedence
 } from './generated/ast.js';
 import type { PlanningSpecServices } from './planning-spec-module.js';
 
@@ -20,6 +21,7 @@ export function registerValidationChecks(services: PlanningSpecServices) {
         CardinalityPerActivity: validator.checkCardinalityBounds,
         ResourceExclusivity: validator.checkExclusiveScope,
         TimeWindow: validator.checkTimeWindowBounds,
+        InstancePrecedence: validator.checkInstancePrecedence,
         AvoidParticipationOnDate: validator.checkAvoidParticipationWeight,
         MaxPerScope: validator.checkMaxPerScope,
         PreferredResource: validator.checkPreferredResourceWeight
@@ -70,6 +72,19 @@ export class PlanningSpecValidator {
                 'warning',
                 'scope should be either "slot" or "day" to be handled by the solver.',
                 { node: constraint, property: 'scope' }
+            );
+        }
+    }
+
+    checkInstancePrecedence(
+        constraint: InstancePrecedence,
+        accept: ValidationAcceptor
+    ): void {
+        if (constraint.beforeActivityInstance.replace(/"/g, '') === constraint.afterActivityInstance.replace(/"/g, '')) {
+            accept(
+                'error',
+                'beforeActivityInstance and afterActivityInstance must be different.',
+                { node: constraint }
             );
         }
     }

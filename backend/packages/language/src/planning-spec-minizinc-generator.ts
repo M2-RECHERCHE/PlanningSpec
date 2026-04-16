@@ -374,6 +374,28 @@ export class PlanningSpecMiniZincGenerator {
           code += `);\n\n`;
         }
       }
+
+      // ---------------------------
+      // InstancePrecedence
+      // ---------------------------
+      if (c.$type === 'InstancePrecedence') {
+        const beforeInst = this.id(c.beforeActivityInstance);
+        const afterInst = this.id(c.afterActivityInstance);
+
+        code += `% InstancePrecedence: ${beforeInst} before ${afterInst}\n`;
+        code += `constraint start_time[${beforeInst}] + duration[${beforeInst}] <= start_time[${afterInst}];\n\n`;
+      }
+
+      // ---------------------------
+      // RequiredResource
+      // ---------------------------
+      if (c.$type === 'RequiredResource') {
+        const ai = this.id(c.activityInstance);
+        const res = this.id(c.resource);
+
+        code += `% RequiredResource: ${ai} requires ${res}\n`;
+        code += `constraint assignment[${ai}, ${res}] = true;\n\n`;
+      }
     });
 
     // ------------------------------------------------
@@ -444,7 +466,11 @@ export class PlanningSpecMiniZincGenerator {
       code += `var int: penalty =\n  ${penaltyTerms.join('\n  + ')};\n`;
     }
 
-    code += `\nsolve minimize penalty;\n\n`;
+    code += `var int: makespan;\n`;
+    code += `constraint makespan = max(i in ACT_INST)(start_time[i] + duration[i] - 1);\n`;
+    code += `var int: objective = penalty * (TOTAL_SLOTS + 1) + makespan;\n`;
+
+    code += `\nsolve minimize objective;\n\n`;
 
     // ------------------------------------------------
     // 11) OUTPUT — format structuré parseable par le module de rapport

@@ -28,6 +28,8 @@ const CONSTRAINT_TYPES = [
   { value: 'temporal_precedence', label: 'Précédence temporelle' },
   { value: 'time_window', label: 'Fenêtre temporelle' },
   { value: 'mandatory_roles', label: 'Rôles obligatoires' },
+  { value: 'instance_precedence', label: 'Précédence entre instances' },
+  { value: 'required_resource', label: 'Ressource requise' },
 ] as const;
 
 type ConstraintType = typeof CONSTRAINT_TYPES[number]['value'];
@@ -77,6 +79,8 @@ interface EditorConstraint {
   resource?: string;
   beforeActivity?: string;
   afterActivity?: string;
+  beforeActivityInstance?: string;
+  afterActivityInstance?: string;
   minSlot?: number;
   maxSlot?: number;
 }
@@ -142,7 +146,9 @@ const isConstraintType = (value: unknown): value is ConstraintType =>
   value === 'forbidden_assignment' ||
   value === 'temporal_precedence' ||
   value === 'time_window' ||
-  value === 'mandatory_roles';
+  value === 'mandatory_roles' ||
+  value === 'instance_precedence' ||
+  value === 'required_resource';
 
 const normalizeIdentifier = (value: string) =>
   value.trim().replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]/g, '_');
@@ -226,6 +232,8 @@ const emptyConstraint = (): EditorConstraint => ({
   resource: '',
   beforeActivity: '',
   afterActivity: '',
+  beforeActivityInstance: '',
+  afterActivityInstance: '',
   minSlot: 1,
   maxSlot: 1,
 });
@@ -262,6 +270,8 @@ const normalizeConstraint = (constraint: Record<string, any>): EditorConstraint 
   resource: typeof constraint.resource === 'string' ? constraint.resource : '',
   beforeActivity: typeof constraint.beforeActivity === 'string' ? constraint.beforeActivity : '',
   afterActivity: typeof constraint.afterActivity === 'string' ? constraint.afterActivity : '',
+  beforeActivityInstance: typeof constraint.beforeActivityInstance === 'string' ? constraint.beforeActivityInstance : '',
+  afterActivityInstance: typeof constraint.afterActivityInstance === 'string' ? constraint.afterActivityInstance : '',
   minSlot: Number.isFinite(Number(constraint.minSlot)) ? Number(constraint.minSlot) : 1,
   maxSlot: Number.isFinite(Number(constraint.maxSlot)) ? Number(constraint.maxSlot) : 1,
 });
@@ -351,6 +361,12 @@ const describeConstraint = (constraint: EditorConstraint) => {
   }
   if (constraint.type === 'time_window') {
     return `${constraint.activityInstance || 'Instance'} entre les slots ${constraint.minSlot ?? 1} et ${constraint.maxSlot ?? 1}`;
+  }
+  if (constraint.type === 'instance_precedence') {
+    return `${constraint.beforeActivityInstance || 'Instance A'} avant ${constraint.afterActivityInstance || 'instance B'}`;
+  }
+  if (constraint.type === 'required_resource') {
+    return `${constraint.activityInstance || 'Instance'} nécessite ${constraint.resource || 'une ressource'}`;
   }
   return `Tous les rôles de ${constraint.activity || 'l’activité'} doivent être affectés`;
 };
@@ -546,6 +562,22 @@ const buildSolvePayload = (formData: EditorFormData) => {
         };
       }
 
+      if (constraint.type === 'instance_precedence') {
+        return {
+          type: constraint.type,
+          beforeActivityInstance: constraint.beforeActivityInstance?.trim() || '',
+          afterActivityInstance: constraint.afterActivityInstance?.trim() || '',
+        };
+      }
+
+      if (constraint.type === 'required_resource') {
+        return {
+          type: constraint.type,
+          activityInstance: constraint.activityInstance?.trim() || '',
+          resource: constraint.resource?.trim() || '',
+        };
+      }
+
       return {
         type: constraint.type,
         activity: constraint.activity?.trim() || '',
@@ -684,6 +716,22 @@ const serializeConstraintToDsl = (constraint: Record<string, unknown>) => {
     return stringifyDslObject([
       ['type', stringifyDslValue(type)],
       ['activity', stringifyDslValue(constraint.activity)],
+    ], 4);
+  }
+
+  if (type === 'instance_precedence') {
+    return stringifyDslObject([
+      ['type', stringifyDslValue(type)],
+      ['beforeActivityInstance', stringifyDslValue(constraint.beforeActivityInstance)],
+      ['afterActivityInstance', stringifyDslValue(constraint.afterActivityInstance)],
+    ], 4);
+  }
+
+  if (type === 'required_resource') {
+    return stringifyDslObject([
+      ['type', stringifyDslValue(type)],
+      ['activityInstance', stringifyDslValue(constraint.activityInstance)],
+      ['resource', stringifyDslValue(constraint.resource)],
     ], 4);
   }
 
@@ -1002,6 +1050,22 @@ const buildPlanningSchema = (formData: EditorFormData) => {
               activity: activityNames[0] ?? 'Activite',
             }],
           },
+          {
+            label: 'Précédence entre instances',
+            body: [{
+              type: 'instance_precedence',
+              beforeActivityInstance: activityInstances[0] ?? 'Activite_1',
+              afterActivityInstance: activityInstances[1] ?? activityInstances[0] ?? 'Activite_2',
+            }],
+          },
+          {
+            label: 'Ressource requise',
+            body: [{
+              type: 'required_resource',
+              activityInstance: activityInstances[0] ?? 'Activite_1',
+              resource: resourceNames[0] ?? 'Ressource_1',
+            }],
+          },
         ],
         items: {
           oneOf: [
@@ -1080,6 +1144,26 @@ const buildPlanningSchema = (formData: EditorFormData) => {
               properties: {
                 type: { const: 'mandatory_roles' },
                 activity: { type: 'string', enum: activityNames.length > 0 ? activityNames : undefined },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'beforeActivityInstance', 'afterActivityInstance'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'instance_precedence' },
+                beforeActivityInstance: { type: 'string', enum: activityInstances.length > 0 ? activityInstances : undefined },
+                afterActivityInstance: { type: 'string', enum: activityInstances.length > 0 ? activityInstances : undefined },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'activityInstance', 'resource'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'required_resource' },
+                activityInstance: { type: 'string', enum: activityInstances.length > 0 ? activityInstances : undefined },
+                resource: { type: 'string', enum: resourceNames.length > 0 ? resourceNames : undefined },
               },
             },
           ],
@@ -1305,6 +1389,21 @@ const getStepError = (step: number, data: EditorFormData): string | null => {
           Number(constraint.minSlot) < 1 ||
           Number(constraint.maxSlot) < Number(constraint.minSlot) ||
           Number(constraint.maxSlot) > totalSlots;
+      }
+
+      if (constraint.type === 'instance_precedence') {
+        return !constraint.beforeActivityInstance?.trim() ||
+          !constraint.afterActivityInstance?.trim() ||
+          !activityInstanceToName.has(constraint.beforeActivityInstance.trim()) ||
+          !activityInstanceToName.has(constraint.afterActivityInstance.trim()) ||
+          constraint.beforeActivityInstance.trim() === constraint.afterActivityInstance.trim();
+      }
+
+      if (constraint.type === 'required_resource') {
+        return !constraint.activityInstance?.trim() ||
+          !activityInstanceToName.has(constraint.activityInstance.trim()) ||
+          !constraint.resource?.trim() ||
+          !resourceInstances.has(constraint.resource.trim());
       }
 
       return !constraint.activity?.trim() ||
@@ -1863,6 +1962,22 @@ const Step6: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => v
       };
     }
 
+    if (type === 'instance_precedence') {
+      return {
+        type,
+        beforeActivityInstance: defaultInstance,
+        afterActivityInstance: activityInstanceOptions[1]?.value || defaultInstance,
+      };
+    }
+
+    if (type === 'required_resource') {
+      return {
+        type,
+        activityInstance: defaultInstance,
+        resource: resourceInstanceOptions[0]?.value || '',
+      };
+    }
+
     return {
       type,
       activity: defaultActivity,
@@ -1968,6 +2083,32 @@ const Step6: React.FC<{ data: EditorFormData; onChange: (d: EditorFormData) => v
           />
           <NumberInput label="Slot min" value={constraint.minSlot ?? 1} onChange={value => updateConstraint(constraint.id, { minSlot: value })} min={1} max={totalSlots} />
           <NumberInput label="Slot max" value={constraint.maxSlot ?? totalSlots} onChange={value => updateConstraint(constraint.id, { maxSlot: value })} min={1} max={totalSlots} />
+        </div>
+      );
+    }
+
+    if (constraint.type === 'instance_precedence') {
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', alignItems: 'end' }}>
+          <Select label="Instance avant" value={constraint.beforeActivityInstance || ''} onChange={value => updateConstraint(constraint.id, { beforeActivityInstance: value })}
+            options={[{ value: '', label: '— Instance —' }, ...activityInstanceOptions]}
+          />
+          <Select label="Instance après" value={constraint.afterActivityInstance || ''} onChange={value => updateConstraint(constraint.id, { afterActivityInstance: value })}
+            options={[{ value: '', label: '— Instance —' }, ...activityInstanceOptions]}
+          />
+        </div>
+      );
+    }
+
+    if (constraint.type === 'required_resource') {
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', alignItems: 'end' }}>
+          <Select label="Instance d’activité" value={constraint.activityInstance || ''} onChange={value => updateConstraint(constraint.id, { activityInstance: value })}
+            options={[{ value: '', label: '— Instance —' }, ...activityInstanceOptions]}
+          />
+          <Select label="Ressource requise" value={constraint.resource || ''} onChange={value => updateConstraint(constraint.id, { resource: value })}
+            options={[{ value: '', label: '— Ressource —' }, ...resourceInstanceOptions]}
+          />
         </div>
       );
     }

@@ -50,7 +50,7 @@ Constraints:
     '[' (constraints+=Constraint (',' constraints+=Constraint)*)? ']';
 
 Constraint:
-    CardinalityPerActivity | ResourceExclusivity | FixedAssignment | ForbiddenAssignment | TemporalPrecedence | TimeWindow | MandatoryRoles;
+    CardinalityPerActivity | ResourceExclusivity | FixedAssignment | ForbiddenAssignment | TemporalPrecedence | TimeWindow | MandatoryRoles | InstancePrecedence | RequiredResource;
 
 CardinalityPerActivity:
     '{'
@@ -105,6 +105,20 @@ MandatoryRoles:
     '{'
         '"type"' ':' '"mandatory_roles"' ','
         '"activity"' ':' activity=STRING
+    '}';
+
+InstancePrecedence:
+    '{'
+        '"type"' ':' '"instance_precedence"' ','
+        '"beforeActivityInstance"' ':' beforeActivityInstance=STRING ','
+        '"afterActivityInstance"' ':' afterActivityInstance=STRING
+    '}';
+
+RequiredResource:
+    '{'
+        '"type"' ':' '"required_resource"' ','
+        '"activityInstance"' ':' activityInstance=STRING ','
+        '"resource"' ':' resource=STRING
     '}';
 
 
