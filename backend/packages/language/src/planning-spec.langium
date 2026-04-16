@@ -50,7 +50,7 @@ Constraints:
     '[' (constraints+=Constraint (',' constraints+=Constraint)*)? ']';
 
 Constraint:
-    CardinalityPerActivity | ResourceExclusivity | FixedAssignment | ForbiddenAssignment;
+    CardinalityPerActivity | ResourceExclusivity | FixedAssignment | ForbiddenAssignment | TemporalPrecedence | TimeWindow | MandatoryRoles;
 
 CardinalityPerActivity:
     '{'
@@ -86,11 +86,33 @@ ForbiddenAssignment:
         '"resource"' ':' resource=STRING
     '}';
 
+TemporalPrecedence:
+    '{'
+        '"type"' ':' '"temporal_precedence"' ','
+        '"beforeActivity"' ':' beforeActivity=STRING ','
+        '"afterActivity"' ':' afterActivity=STRING
+    '}';
+
+TimeWindow:
+    '{'
+        '"type"' ':' '"time_window"' ','
+        '"activityInstance"' ':' activityInstance=STRING ','
+        '"minSlot"' ':' minSlot=INT ','
+        '"maxSlot"' ':' maxSlot=INT
+    '}';
+
+MandatoryRoles:
+    '{'
+        '"type"' ':' '"mandatory_roles"' ','
+        '"activity"' ':' activity=STRING
+    '}';
+
+
 Preferences:
     '[' (preferences+=Preference (',' preferences+=Preference)*)? ']';
 
 Preference:
-    AvoidParticipationOnDate | MaxPerScope;
+    AvoidParticipationOnDate | MaxPerScope | PreferredResource;
 
 AvoidParticipationOnDate:
     '{'
@@ -103,9 +125,19 @@ AvoidParticipationOnDate:
 MaxPerScope:
     '{'
         '"type"' ':' '"max_per_scope"' ','
+        '"resourceType"' ':' resourceType=STRING ','
         '"activity"' ':' activity=STRING ','
         '"scope"' ':' scope=STRING ','
         '"max"' ':' max=INT ','
+        '"weight"' ':' weight=INT
+    '}';
+
+PreferredResource:
+    '{'
+        '"type"' ':' '"preferred_resource"' ','
+        '"activityInstance"' ':' activityInstance=STRING ','
+        '"role"' ':' role=STRING ','
+        '"resource"' ':' resource=STRING ','
         '"weight"' ':' weight=INT
     '}';
 

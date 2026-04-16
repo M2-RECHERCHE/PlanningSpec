@@ -334,6 +334,46 @@ export class PlanningSpecMiniZincGenerator {
           code += `% NOTE: scope=${scope} not implemented (supported: slot, day)\n\n`;
         }
       }
+      // ---------------------------
+      // TemporalPrecedence
+      // ---------------------------
+      if (c.$type === 'TemporalPrecedence') {
+        const actBeforeList = activityInstances.filter(ai => ai.original === this.s(c.beforeActivity)).map(ai => ai.enumName);
+        const actAfterList = activityInstances.filter(ai => ai.original === this.s(c.afterActivity)).map(ai => ai.enumName);
+        
+        code += `% TemporalPrecedence: ${this.s(c.beforeActivity)} MUST END BEFORE ${this.s(c.afterActivity)}\n`;
+        // Exiger que TOUTES les instances de before finissent avant que N'IMPORTE QUELLE instance de after ne commence
+        // Ou que la première instance de after commence après la dernière de before
+        code += `constraint forall(b in ${this.mznSetOfEnum(actBeforeList)}, a in ${this.mznSetOfEnum(actAfterList)}) (\n`;
+        code += `  start_time[b] + duration[b] <= start_time[a]\n`;
+        code += `);\n\n`;
+      }
+
+      // ---------------------------
+      // TimeWindow
+      // ---------------------------
+      if (c.$type === 'TimeWindow') {
+        const ai = this.id(c.activityInstance);
+        const minSlot = c.minSlot;
+        const maxSlot = c.maxSlot;
+        
+        code += `% TimeWindow for ${ai}: [${minSlot}, ${maxSlot}]\n`;
+        code += `constraint start_time[${ai}] >= ${minSlot};\n`;
+        code += `constraint start_time[${ai}] + duration[${ai}] - 1 <= ${maxSlot};\n\n`;
+      }
+
+      // ---------------------------
+      // MandatoryRoles
+      // ---------------------------
+      if (c.$type === 'MandatoryRoles') {
+        if (hasRoles) {
+          const actName = this.id(c.activity);
+          code += `% MandatoryRoles for activity ${actName}\n`;
+          code += `constraint forall(a in ACT_INST where act_type[a] == ${actName}, ro in ROLE where role_applicable[a, ro]) (\n`;
+          code += `  sum(r in RESOURCE) (bool2int(role_assignment[a, ro, r])) >= 1\n`;
+          code += `);\n\n`;
+        }
+      }
     });
 
     // ------------------------------------------------
@@ -353,15 +393,16 @@ export class PlanningSpecMiniZincGenerator {
         if (dayIndex <= 0) {
           code += `% WARNING: date "${dateStr}" not found in days list -> ignored\n`;
         } else {
-          // penalize if resource is assigned to any activity whose start_time is on that day
+          // penalize if resource is assigned to any activity whose start_time is on that day (flat penalty)
           penaltyTerms.push(
-            `${weight} * sum(a in ACT_INST) (bool2int(assignment[a, ${res}] /\\ dayOf(start_time[a]) == ${dayIndex}))`
+            `${weight} * bool2int(sum(a in ACT_INST) (bool2int(assignment[a, ${res}] /\\ dayOf(start_time[a]) == ${dayIndex})) > 0)`
           );
         }
       }
 
       // MaxPerScope (soft cap on number of overlapping activities of a type in a scope)
       if (p.$type === 'MaxPerScope') {
+        const rt = this.s(p.resourceType);
         const actName = this.s(p.activity);
         const scope = this.s(p.scope);
         const max = p.max;
@@ -370,16 +411,29 @@ export class PlanningSpecMiniZincGenerator {
         const actFilter = `act_type[a] == ${this.id(actName)}`;
 
         if (scope === 'slot') {
-          // count overlaps per slot, penalize excess
+          // count overlaps per slot per resource, penalize excess
           penaltyTerms.push(
-            `sum(t in 1..TOTAL_SLOTS) ( ${weight} * max(0, (sum(a in ACT_INST where ${actFilter}) (bool2int(start_time[a] <= t /\\ t < start_time[a] + duration[a]))) - ${max}) )`
+            `sum(r in RES_${this.id(rt)}, t in 1..TOTAL_SLOTS) ( ${weight} * max(0, (sum(a in ACT_INST where ${actFilter}) (bool2int(assignment[a, r] /\\ start_time[a] <= t /\\ t < start_time[a] + duration[a]))) - ${max}) )`
           );
         } else if (scope === 'day') {
           penaltyTerms.push(
-            `sum(d in 1..NUM_DAYS) ( ${weight} * max(0, (sum(a in ACT_INST where ${actFilter}) (bool2int(dayOf(start_time[a]) == d))) - ${max}) )`
+            `sum(r in RES_${this.id(rt)}, d in 1..NUM_DAYS) ( ${weight} * max(0, (sum(a in ACT_INST where ${actFilter}) (bool2int(assignment[a, r] /\\ dayOf(start_time[a]) == d))) - ${max}) )`
           );
         } else {
           code += `% NOTE: MaxPerScope scope=${scope} not implemented (supported: slot, day)\n`;
+        }
+      }
+
+      // PreferredResource (soft assignment)
+      if (p.$type === 'PreferredResource') {
+        const ai = this.id(p.activityInstance);
+        const role = this.s(p.role);
+        const res = this.id(p.resource);
+        const weight = p.weight;
+        if (hasRoles) {
+          penaltyTerms.push(`${weight} * bool2int(not role_assignment[${ai}, ${this.id(role)}, ${res}])`);
+        } else {
+          penaltyTerms.push(`${weight} * bool2int(not assignment[${ai}, ${res}])`);
         }
       }
     });

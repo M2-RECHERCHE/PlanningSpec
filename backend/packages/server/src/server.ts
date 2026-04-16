@@ -157,11 +157,15 @@ type SupportedConstraintType =
     | 'cardinality_per_activity'
     | 'resource_exclusivity'
     | 'fixed_assignment'
-    | 'forbidden_assignment';
+    | 'forbidden_assignment'
+    | 'temporal_precedence'
+    | 'time_window'
+    | 'mandatory_roles';
 
 type SupportedPreferenceType =
     | 'avoid_participation_on_date'
-    | 'max_per_scope';
+    | 'max_per_scope'
+    | 'preferred_resource';
 
 interface SessionPayload {
     token: string;
@@ -317,6 +321,30 @@ function serializeConstraintToDsl(constraint: Record<string, unknown>): string {
         ], 4);
     }
 
+    if (type === "temporal_precedence") {
+        return stringifyDslObject([
+            ["type", stringifyDslValue(type)],
+            ["beforeActivity", stringifyDslValue(constraint.beforeActivity)],
+            ["afterActivity", stringifyDslValue(constraint.afterActivity)]
+        ], 4);
+    }
+
+    if (type === "time_window") {
+        return stringifyDslObject([
+            ["type", stringifyDslValue(type)],
+            ["activityInstance", stringifyDslValue(constraint.activityInstance)],
+            ["minSlot", String(constraint.minSlot)],
+            ["maxSlot", String(constraint.maxSlot)]
+        ], 4);
+    }
+
+    if (type === "mandatory_roles") {
+        return stringifyDslObject([
+            ["type", stringifyDslValue(type)],
+            ["activity", stringifyDslValue(constraint.activity)]
+        ], 4);
+    }
+
     const fallbackEntries = Object.entries(constraint)
         .filter(([, value]) => value !== undefined && value !== null && value !== '')
         .map(([key, value]) => [key, typeof value === "number" ? String(value) : stringifyDslValue(value)] as [string, string]);
@@ -338,9 +366,20 @@ function serializePreferenceToDsl(preference: Record<string, unknown>): string {
     if (type === "max_per_scope") {
         return stringifyDslObject([
             ["type", stringifyDslValue(type)],
+            ["resourceType", stringifyDslValue(preference.resourceType)],
             ["activity", stringifyDslValue(preference.activity)],
             ["scope", stringifyDslValue(preference.scope)],
             ["max", String(preference.max)],
+            ["weight", String(preference.weight)]
+        ], 4);
+    }
+
+    if (type === "preferred_resource") {
+        return stringifyDslObject([
+            ["type", stringifyDslValue(type)],
+            ["activityInstance", stringifyDslValue(preference.activityInstance)],
+            ["role", stringifyDslValue(preference.role)],
+            ["resource", stringifyDslValue(preference.resource)],
             ["weight", String(preference.weight)]
         ], 4);
     }
@@ -814,6 +853,62 @@ function validatePlanningDataForSolve(data: unknown): { value?: SolveReadyData; 
         }
     }
 
+    const activityMap = activities as Record<string, unknown>;
+    const timeDays = isRecord(time) && Array.isArray(time.days) ? time.days.filter((day): day is string => typeof day === "string") : [];
+
+    const activityInstanceSet = new Set<string>();
+    activityNames.forEach((activityName) => {
+        const activityValue = activityMap[activityName];
+        const count = isRecord(activityValue) ? Number(activityValue.count) : 0;
+        if (!Number.isInteger(count) || count <= 0) {
+            return;
+        }
+
+        for (let index = 1; index <= count; index += 1) {
+            activityInstanceSet.add(`${activityName.trim().replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]/g, '_')}_${index}`);
+        }
+    });
+
+    const resourceInstanceSet = new Set<string>();
+    Object.values(resources as Record<string, unknown>).forEach((resourceValues) => {
+        if (!Array.isArray(resourceValues)) {
+            return;
+        }
+        resourceValues.forEach((value) => {
+            if (typeof value === "string" && value.trim()) {
+                resourceInstanceSet.add(value);
+            }
+        });
+    });
+
+    const roleNamesByActivity = new Map<string, Set<string>>();
+    if (isRecord(roles)) {
+        Object.entries(roles).forEach(([activityName, roleMap]) => {
+            if (!isRecord(roleMap)) {
+                return;
+            }
+            roleNamesByActivity.set(activityName, new Set(Object.keys(roleMap).filter((roleName) => roleName.trim())));
+        });
+    }
+
+    const activityNameByInstance = new Map<string, string>();
+    activityNames.forEach((activityName) => {
+        const activityValue = activityMap[activityName];
+        const count = isRecord(activityValue) ? Number(activityValue.count) : 0;
+        if (!Number.isInteger(count) || count <= 0) {
+            return;
+        }
+
+        for (let index = 1; index <= count; index += 1) {
+            const instanceName = `${activityName.trim().replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]/g, '_')}_${index}`;
+            activityNameByInstance.set(instanceName, activityName);
+        }
+    });
+
+    const totalSlots = slotsPerDayValue !== null && isRecord(time)
+        ? ((time.days as string[])?.length ?? 0) * slotsPerDayValue
+        : null;
+
     const constraints = safeData.constraints;
     if (!Array.isArray(constraints) || constraints.length === 0) {
         fieldErrors.constraints = "Au moins une contrainte est requise.";
@@ -826,23 +921,32 @@ function validatePlanningDataForSolve(data: unknown): { value?: SolveReadyData; 
             }
 
             const constraintType = constraint.type as SupportedConstraintType;
-            if (!["cardinality_per_activity", "resource_exclusivity", "fixed_assignment", "forbidden_assignment"].includes(constraintType)) {
+            if (!["cardinality_per_activity", "resource_exclusivity", "fixed_assignment", "forbidden_assignment", "temporal_precedence", "time_window", "mandatory_roles"].includes(constraintType)) {
                 fieldErrors[`constraints.${index}.type`] = `Le type de contrainte "${constraint.type}" n'est pas supporté.`;
                 return;
             }
 
             if (constraintType === "cardinality_per_activity") {
-                if (typeof constraint.activity !== "string" || !activityNames.includes(constraint.activity)) {
+                const activity = typeof constraint.activity === "string" ? constraint.activity : '';
+                if (!activityNames.includes(activity)) {
                     fieldErrors[`constraints.${index}.activity`] = "La contrainte de cardinalité doit cibler une activité existante.";
                 }
                 if (typeof constraint.role !== "string" && typeof constraint.target !== "string") {
                     fieldErrors[`constraints.${index}.role`] = "La contrainte de cardinalité doit cibler soit un rôle, soit une cible.";
                 }
-                if (constraint.role !== undefined && (typeof constraint.role !== "string" || !constraint.role.trim())) {
-                    fieldErrors[`constraints.${index}.role`] = "Le rôle de cardinalité est invalide.";
+                if (constraint.role !== undefined) {
+                    if (typeof constraint.role !== "string" || !constraint.role.trim()) {
+                        fieldErrors[`constraints.${index}.role`] = "Le rôle de cardinalité est invalide.";
+                    } else if (activity && !roleNamesByActivity.get(activity)?.has(constraint.role.trim())) {
+                        fieldErrors[`constraints.${index}.role`] = "Le rôle ciblé n'existe pas pour cette activité.";
+                    }
                 }
-                if (constraint.target !== undefined && (typeof constraint.target !== "string" || !constraint.target.trim())) {
-                    fieldErrors[`constraints.${index}.target`] = "La cible de cardinalité est invalide.";
+                if (constraint.target !== undefined) {
+                    if (typeof constraint.target !== "string" || !constraint.target.trim()) {
+                        fieldErrors[`constraints.${index}.target`] = "La cible de cardinalité est invalide.";
+                    } else if (constraint.target !== "slot" && !resourceTypes.includes(constraint.target)) {
+                        fieldErrors[`constraints.${index}.target`] = "La cible de cardinalité doit être \"slot\" ou un type de ressource existant.";
+                    }
                 }
                 const min = Number(constraint.min);
                 const max = Number(constraint.max);
@@ -861,8 +965,8 @@ function validatePlanningDataForSolve(data: unknown): { value?: SolveReadyData; 
                 if (typeof constraint.activity !== "string" || !activityNames.includes(constraint.activity)) {
                     fieldErrors[`constraints.${index}.activity`] = "L'activité de l'exclusivité doit exister.";
                 }
-                if (typeof constraint.scope !== "string" || !constraint.scope.trim()) {
-                    fieldErrors[`constraints.${index}.scope`] = "Le scope de l'exclusivité est requis.";
+                if (typeof constraint.scope !== "string" || !["slot", "day"].includes(constraint.scope)) {
+                    fieldErrors[`constraints.${index}.scope`] = "Le scope de l'exclusivité doit être \"slot\" ou \"day\".";
                 }
                 const max = Number(constraint.max);
                 if (!Number.isInteger(max) || max < 0) {
@@ -871,14 +975,65 @@ function validatePlanningDataForSolve(data: unknown): { value?: SolveReadyData; 
             }
 
             if (constraintType === "fixed_assignment" || constraintType === "forbidden_assignment") {
-                if (typeof constraint.activityInstance !== "string" || !constraint.activityInstance.trim()) {
+                const activityInstance = typeof constraint.activityInstance === "string" ? constraint.activityInstance : '';
+                const role = typeof constraint.role === "string" ? constraint.role : '';
+                const resource = typeof constraint.resource === "string" ? constraint.resource : '';
+                if (!activityInstance.trim()) {
                     fieldErrors[`constraints.${index}.activityInstance`] = "L'instance d'activité est requise.";
+                } else if (!activityInstanceSet.has(activityInstance)) {
+                    fieldErrors[`constraints.${index}.activityInstance`] = "L'instance d'activité ciblée n'existe pas.";
                 }
-                if (typeof constraint.role !== "string" || !constraint.role.trim()) {
+                if (!role.trim()) {
                     fieldErrors[`constraints.${index}.role`] = "Le rôle est requis.";
+                } else {
+                    const activityName = activityNameByInstance.get(activityInstance);
+                    if (activityName && !roleNamesByActivity.get(activityName)?.has(role)) {
+                        fieldErrors[`constraints.${index}.role`] = "Le rôle ciblé n'existe pas pour cette instance d'activité.";
+                    }
                 }
-                if (typeof constraint.resource !== "string" || !constraint.resource.trim()) {
+                if (!resource.trim()) {
                     fieldErrors[`constraints.${index}.resource`] = "La ressource est requise.";
+                } else if (!resourceInstanceSet.has(resource)) {
+                    fieldErrors[`constraints.${index}.resource`] = "La ressource ciblée n'existe pas.";
+                }
+            }
+
+            if (constraintType === "temporal_precedence") {
+                if (typeof constraint.beforeActivity !== "string" || !activityNames.includes(constraint.beforeActivity)) {
+                    fieldErrors[`constraints.${index}.beforeActivity`] = "L'activité source de la précédence doit exister.";
+                }
+                if (typeof constraint.afterActivity !== "string" || !activityNames.includes(constraint.afterActivity)) {
+                    fieldErrors[`constraints.${index}.afterActivity`] = "L'activité cible de la précédence doit exister.";
+                }
+                if (constraint.beforeActivity === constraint.afterActivity && typeof constraint.beforeActivity === "string") {
+                    fieldErrors[`constraints.${index}.afterActivity`] = "Une activité ne peut pas être en précédence avec elle-même.";
+                }
+            }
+
+            if (constraintType === "time_window") {
+                const activityInstance = typeof constraint.activityInstance === "string" ? constraint.activityInstance : '';
+                const minSlot = Number(constraint.minSlot);
+                const maxSlot = Number(constraint.maxSlot);
+                if (!activityInstance.trim()) {
+                    fieldErrors[`constraints.${index}.activityInstance`] = "L'instance d'activité est requise.";
+                } else if (!activityInstanceSet.has(activityInstance)) {
+                    fieldErrors[`constraints.${index}.activityInstance`] = "L'instance d'activité ciblée n'existe pas.";
+                }
+                if (!Number.isInteger(minSlot) || minSlot < 1) {
+                    fieldErrors[`constraints.${index}.minSlot`] = "Le slot minimal doit être un entier supérieur ou égal à 1.";
+                }
+                if (!Number.isInteger(maxSlot) || maxSlot < minSlot) {
+                    fieldErrors[`constraints.${index}.maxSlot`] = "Le slot maximal doit être un entier supérieur ou égal au slot minimal.";
+                } else if (totalSlots !== null && maxSlot > totalSlots) {
+                    fieldErrors[`constraints.${index}.maxSlot`] = `Le slot maximal dépasse l'horizon temporel disponible (${totalSlots}).`;
+                }
+            }
+
+            if (constraintType === "mandatory_roles") {
+                if (typeof constraint.activity !== "string" || !activityNames.includes(constraint.activity)) {
+                    fieldErrors[`constraints.${index}.activity`] = "L'activité de mandatory_roles doit exister.";
+                } else if (!roleNamesByActivity.get(constraint.activity)?.size) {
+                    fieldErrors[`constraints.${index}.activity`] = "mandatory_roles exige une activité ayant au moins un rôle déclaré.";
                 }
             }
         });
@@ -894,8 +1049,70 @@ function validatePlanningDataForSolve(data: unknown): { value?: SolveReadyData; 
             }
 
             const preferenceType = preference.type as SupportedPreferenceType;
-            if (!["avoid_participation_on_date", "max_per_scope"].includes(preferenceType)) {
+            if (!["avoid_participation_on_date", "max_per_scope", "preferred_resource"].includes(preferenceType)) {
                 fieldErrors[`preferences.${index}.type`] = `Le type de préférence "${preference.type}" n'est pas supporté.`;
+                return;
+            }
+
+            if (preferenceType === "avoid_participation_on_date") {
+                if (typeof preference.resource !== "string" || !resourceInstanceSet.has(preference.resource)) {
+                    fieldErrors[`preferences.${index}.resource`] = "La ressource ciblée n'existe pas.";
+                }
+                if (typeof preference.date !== "string" || !timeDays.includes(preference.date)) {
+                    fieldErrors[`preferences.${index}.date`] = "La date ciblée doit faire partie des jours définis.";
+                }
+                const weight = Number(preference.weight);
+                if (!Number.isInteger(weight) || weight < 1) {
+                    fieldErrors[`preferences.${index}.weight`] = "Le poids doit être un entier strictement positif.";
+                }
+            }
+
+            if (preferenceType === "max_per_scope") {
+                if (typeof preference.resourceType !== "string" || !resourceTypes.includes(preference.resourceType)) {
+                    fieldErrors[`preferences.${index}.resourceType`] = "Le type de ressource ciblé n'existe pas.";
+                }
+                if (typeof preference.activity !== "string" || !activityNames.includes(preference.activity)) {
+                    fieldErrors[`preferences.${index}.activity`] = "L'activité ciblée n'existe pas.";
+                }
+                if (typeof preference.scope !== "string" || !["slot", "day"].includes(preference.scope)) {
+                    fieldErrors[`preferences.${index}.scope`] = "Le scope doit être \"slot\" ou \"day\".";
+                }
+                const max = Number(preference.max);
+                const weight = Number(preference.weight);
+                if (!Number.isInteger(max) || max < 1) {
+                    fieldErrors[`preferences.${index}.max`] = "Le maximum doit être un entier strictement positif.";
+                }
+                if (!Number.isInteger(weight) || weight < 1) {
+                    fieldErrors[`preferences.${index}.weight`] = "Le poids doit être un entier strictement positif.";
+                }
+            }
+
+            if (preferenceType === "preferred_resource") {
+                const activityInstance = typeof preference.activityInstance === "string" ? preference.activityInstance : '';
+                const role = typeof preference.role === "string" ? preference.role : '';
+                const resource = typeof preference.resource === "string" ? preference.resource : '';
+                if (!activityInstance.trim()) {
+                    fieldErrors[`preferences.${index}.activityInstance`] = "L'instance d'activité est requise.";
+                } else if (!activityInstanceSet.has(activityInstance)) {
+                    fieldErrors[`preferences.${index}.activityInstance`] = "L'instance d'activité ciblée n'existe pas.";
+                }
+                if (!role.trim()) {
+                    fieldErrors[`preferences.${index}.role`] = "Le rôle est requis.";
+                } else {
+                    const activityName = activityNameByInstance.get(activityInstance);
+                    if (activityName && !roleNamesByActivity.get(activityName)?.has(role)) {
+                        fieldErrors[`preferences.${index}.role`] = "Le rôle ciblé n'existe pas pour cette instance d'activité.";
+                    }
+                }
+                if (!resource.trim()) {
+                    fieldErrors[`preferences.${index}.resource`] = "La ressource est requise.";
+                } else if (!resourceInstanceSet.has(resource)) {
+                    fieldErrors[`preferences.${index}.resource`] = "La ressource ciblée n'existe pas.";
+                }
+                const weight = Number(preference.weight);
+                if (!Number.isInteger(weight) || weight < 1) {
+                    fieldErrors[`preferences.${index}.weight`] = "Le poids doit être un entier strictement positif.";
+                }
             }
         });
     }
@@ -963,6 +1180,38 @@ function analyzePotentialCapacityRisks(data: SolveReadyData): string[] {
             if (!Array.isArray(data.resources[rawConstraint.resourceType]) || data.resources[rawConstraint.resourceType].length === 0) {
                 warnings.push(
                     `L'exclusivité porte sur le type "${rawConstraint.resourceType}", mais aucune ressource de ce type n'est disponible.`
+                );
+            }
+        }
+
+        if (rawConstraint.type === "mandatory_roles" && typeof rawConstraint.activity === "string") {
+            if (!data.roles[rawConstraint.activity] || Object.keys(data.roles[rawConstraint.activity]).length === 0) {
+                warnings.push(
+                    `mandatory_roles a été demandé pour "${rawConstraint.activity}", mais aucun rôle n'est défini pour cette activité.`
+                );
+            }
+        }
+    });
+
+    data.preferences.forEach((rawPreference) => {
+        if (!isRecord(rawPreference) || typeof rawPreference.type !== "string") {
+            return;
+        }
+
+        if (rawPreference.type === "max_per_scope" && typeof rawPreference.resourceType === "string") {
+            if (!Array.isArray(data.resources[rawPreference.resourceType]) || data.resources[rawPreference.resourceType].length === 0) {
+                warnings.push(
+                    `La préférence max_per_scope cible le type "${rawPreference.resourceType}", mais aucune ressource de ce type n'est disponible.`
+                );
+            }
+        }
+
+        if (rawPreference.type === "preferred_resource" && typeof rawPreference.resource === "string") {
+            const preferredResource = rawPreference.resource;
+            const resourceExists = Object.values(data.resources).some((instances) => Array.isArray(instances) && instances.includes(preferredResource));
+            if (!resourceExists) {
+                warnings.push(
+                    `La préférence preferred_resource cible la ressource "${rawPreference.resource}", mais elle n'existe pas dans le modèle.`
                 );
             }
         }

@@ -1,0 +1,563 @@
+PROTOCOLE DE RECHERCHE SYSTEMATIQUE
+Master 2 Recherche
+Conception d'un DSL pour la Specification Declarative
+de Problemes de Planification et leur Resolution
+par des Approches de Satisfaction de Contraintes
+Revue Systematique de Litterature
+DSL • Contraintes • Planification • Solveurs
+Methode PRISMA | Articles 2010-2025 | 14 sources analysees
+Table des Matieres
+Table des Matieres
+2
+1. Contexte de la Revue
+3
+2. Questions de Recherche (RQ)
+4
+RQ1 - Langages et Frameworks Declaratifs
+4
+RQ2 - Mecanismes de Resolution
+4
+RQ3 - Gestion des Contraintes
+4
+RQ4 - Independence vis-a-vis des Solveurs
+4
+RQ5 - Limites des Outils Existants
+5
+RQ6 - Besoin d'un DSL Multi-Solveurs Accessible
+5
+3. Processus PRISMA
+6
+Criteres d'Inclusion
+6
+Criteres d'Exclusion
+6
+4. Articles Analyses - Langages et Outils Formels (2013-2024)
+7
+A1 - Akgun (2013) : Automated Constraint Modelling Toolchain
+7
+Architecture et Mecanisme
+7
+Forces et Limites
+7
+A2 - Rendl et al. (2015) : MiniSearch
+7
+Architecture et Mecanisme
+8
+Forces et Limites
+8
+A3 - Guns et al. (2017) : MiningZinc
+8
+A4 - Nightingale et al. (2017) : Savile Row
+9
+A5 - Akgun et al. (2022) : Conjure
+9
+A6 - Bofill et al. (2020) : SMT Encodings pour RCPSP
+10
+A7 - Google OR-Tools (2024) : Documentation CP-SAT
+10
+5. Methodes Existantes avec l'IA - LLMs et Modelisation CP (2024-2025)
+11
+A8 - Text2Zinc (2025) : Dataset NL -> MiniZinc
+11
+A9 - Constraint Modelling with LLMs Using ICL (CP 2024)
+11
+A10 - ACMG : Framework NL -> CSP + Validation (MDPI 2025)
+12
+A11 - Gala : Global Constraint LLM Agents (arXiv 2025)
+12
+A12 - Do LLMs Understand CP? (Workshop 2025)
+12
+A13 - ConstraintLLM (EMNLP 2025)
+12
+A14 - MCP-Solver (arXiv 2024)
+13
+6. Resultats par Question de Recherche
+14
+RQ1 - Langages et Frameworks Declaratifs : Resultats
+14
+RQ2 - Mecanismes de Resolution : Resultats
+14
+RQ3 - Gestion des Contraintes : Resultats
+14
+RQ4 - Independence vis-a-vis des Solveurs : Resultats
+14
+RQ5 - Limites des Outils Existants : Resultats
+15
+RQ6 - Besoin d'un DSL Multi-Solveurs Accessible : Resultats
+15
+7. Grille Comparative Globale
+16
+8. Synthese et Positionnement Scientifique
+17
+Ce que l'etat de l'art offre
+17
+Ce que l'etat de l'art ne couvre pas
+17
+Positionnement du DSL Propose
+17
+9. Bibliographie
+18
+Articles Scientifiques (Peer-Reviewed)
+18
+Grey Literature et Documentation Technique
+19
+1. Contexte de la Revue
+Cette recherche systematique s'inscrit dans le cadre du projet de Master portant sur la conception d'un DSL (Domain-Specific Language) pour la specification declarative de problemes de planification et leur resolution par des approches de satisfaction de contraintes.
+Objectif central : 
+Analyser les solutions existantes pour identifier les approches actuelles, comprendre leurs mecanismes techniques, etudier leurs forces et limitations, mettre en evidence les lacunes scientifiques et justifier la contribution du DSL propose.
+Les problemes de planification (scheduling, timetabling, rostering) constituent une famille de problemes d'optimisation combinatoire NP-difficiles. Ils apparaissent dans de nombreux contextes applicatifs : gestion hospitaliere, planification universitaire, industrie manufacturiere, logistique, etc. La modelisation formelle de ces problemes exige traditionnellement une expertise avancee en recherche operationnelle ou en programmation par contraintes.
+Face a cette complexite, la communaute scientifique a developpe plusieurs langages et outils dedies, allant des langages de modelisation formels (MiniZinc, Essence Prime) aux approches hybrides exploitant les Large Language Models (LLMs). La presente revue vise a cartographier cet espace de solutions afin de positionner precisement la contribution apportee par le DSL metier propose.
+2. Questions de Recherche (RQ)
+Six questions de recherche structurent cette revue systematique. Elles couvrent l'inventaire des langages existants, les mecanismes de resolution, la gestion des contraintes, l'independance vis-a-vis des solveurs, les limites des outils actuels et la justification du besoin d'un nouveau DSL.
+RQ1 - Langages et Frameworks Declaratifs
+Question : 
+Quels langages ou frameworks existent pour la modelisation declarative de problemes de planification ?
+Requetes bibliographiques utilisees :
+("scheduling" OR "timetabling" OR "rostering" OR "constraint planning")
+AND ("domain specific language" OR "DSL" OR "declarative modeling language" OR "declarative modelling")
+AND ("framework" OR "language" OR "tool")
+RQ2 - Mecanismes de Resolution
+Question : 
+Quels mecanismes de resolution utilisent-ils ? (CP/CSP, MILP, SAT/SMT, heuristiques, approches hybrides)
+("scheduling" OR "timetabling") AND ("constraint programming" OR "CSP" OR "MILP" OR "integer linear programming" OR "SAT" OR "SMT" OR "metaheuristic" OR "hybrid approach")
+RQ3 - Gestion des Contraintes
+Question : 
+Comment ces outils gerent-ils les hard constraints, soft constraints, preferences et l'optimisation multi-critere ?
+("scheduling" OR "timetabling") AND ("hard constraints" OR "soft constraints" OR "preference handling") AND ("constraint programming" OR "optimization")
+RQ4 - Independence vis-a-vis des Solveurs
+Question : 
+Ces outils proposent-ils une independance vis-a-vis des solveurs (solver-agnostic, multi-solver) ?
+("solver independent" OR "solver-agnostic" OR "multi-solver") AND ("modeling language" OR "DSL") AND ("constraint programming" OR "optimization")
+RQ5 - Limites des Outils Existants
+Question : 
+Quelles sont les principales limites des outils et langages existants ?
+("domain specific language" OR "constraint modeling language") AND ("limitations" OR "challenges" OR "usability issues")
+("modeling complexity" OR "expressiveness vs usability") AND ("scheduling DSL")
+("usability evaluation" OR "user study") AND ("constraint modeling language")
+RQ6 - Besoin d'un DSL Multi-Solveurs Accessible
+Question : 
+Existe-t-il un besoin pour un DSL declaratif multi-solveurs accessible aux non-experts ?
+("domain specific language") AND ("non-expert users" OR "end-user modeling") AND ("constraint programming" OR "optimization")
+3. Processus PRISMA
+La methode PRISMA (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) structure la selection et l'analyse des articles. Le processus suit quatre phases standard.
+Etape PRISMA
+Description
+Nombre
+Identification
+Articles identifies via Scopus, ACM DL, IEEE Xplore, arXiv, ResearchGate
+15+
+Suppression doublons
+Elimination des doublons inter-sources
+12+
+Lecture resumé
+Filtrage par pertinence thematique (DSL + planification + contraintes)
+10
+Lecture complete
+Analyse approfondie du contenu et de la contribution
+9
+Articles retenus
+Sources satisfaisant tous les criteres d'inclusion
+9 + grey lit.
+Criteres d'Inclusion
+Articles publies a partir de 2010 (critere temporel)
+Traitant de langages ou outils de modelisation declarative pour contraintes/optimisation
+Abordant le scheduling, timetabling, rostering ou problemes combinatoires
+Peer-reviewed ou grey literature technique de reference (documentation officielle)
+Criteres d'Exclusion
+Articles anterieurs a 2010
+Approches purement heuristiques sans couche declarative
+Travaux sans lien avec la modelisation formelle ou les DSL
+4. Articles Analyses - Langages et Outils Formels (2013-2024)
+A1 - Akgun (2013) : Automated Constraint Modelling Toolchain
+Champ
+Detail
+Reference
+Akgun, O. (2013). An Automated Constraint Modelling and Solving Toolchain.
+Domaine
+Modelisation et resolution automatique de problemes combinatoires (CSP/COP)
+Type
+Article / Toolchain d'automatisation de la modelisation
+Approche technique
+Constraint Programming (CP/CSP), automatisation des choix de modeles
+Independence solveur
+Partielle a forte - abstraction de la modelisation pour l'utilisateur
+Pertinence
+Forte - toolchain + abstraction + accessibilite
+Architecture et Mecanisme
+L'article decrit une chaine outillee ou l'utilisateur specifie un probleme en termes proches du domaine. La toolchain produit automatiquement des modeles adaptes (et potentiellement differents) pour la resolution. Pipeline : specification haut niveau -> generation de modele -> resolution.
+Forces et Limites
+FORCE : Tres aligne avec l'objectif d'abstraire la modelisation pour l'utilisateur
+FORCE : Argument scientifique fort - la modelisation est un goulot d'etranglement
+LIMITE : Moins centre sur un DSL user-friendly au sens syntaxique
+LIMITE : Details UX pour non-experts pas evalues empiriquement
+Gap identifie : 
+Meme si la toolchain automatise des choix de modelisation, il reste un besoin de DSL convivial metier, de validation d'erreurs au niveau DSL, et de compilation vers plusieurs solveurs avec tracabilite claire.
+A2 - Rendl et al. (2015) : MiniSearch
+Champ
+Detail
+Reference
+Rendl, A. et al. (2015). MiniSearch: A solver-independent meta-search language for MiniZinc. CP 2015.
+Domaine
+Langage de meta-recherche independant des solveurs, au-dessus de MiniZinc/FlatZinc
+Type
+Langage / extension (meta-language) + contribution technique
+Approche technique
+CP via MiniZinc/FlatZinc, specification de strategies de recherche (meta-search)
+Independence solveur
+Oui - objectif central de l'article
+Pertinence
+Moyenne a forte - multi-solveurs + abstraction, mais pas metier
+Architecture et Mecanisme
+MiniSearch s'insere au-dessus de FlatZinc pour specifier des strategies de recherche sans dependre d'un solveur particulier. L'architecture propose une separation claire entre le modele (ce que l'on cherche) et la strategie de recherche (comment on cherche). Cette separation constitue un apport conceptuel important.
+Forces et Limites
+FORCE : Demontre qu'on peut standardiser un niveau (recherche) sans enfermer l'utilisateur
+FORCE : Bon support pour discuter separation modele vs. strategie
+LIMITE : Necessite MiniZinc/FlatZinc - pas un DSL metier autonome
+LIMITE : Cible des utilisateurs avances (modelisateurs CP)
+Gap identifie : 
+Meme si MiniSearch standardise la recherche, il manque un DSL metier (ressources/roles/creneaux) et une validation statique orientee utilisateur final.
+A3 - Guns et al. (2017) : MiningZinc
+Champ
+Detail
+Reference
+Guns, T. et al. (2017). MiningZinc: A declarative framework for constraint-based mining. Artificial Intelligence, 244, 6-29.
+Domaine
+Framework declaratif inspire de Zinc/MiniZinc pour le data mining sous contraintes
+Type
+Framework + langage declaratif + mecanisme d'execution
+Approche technique
+Declaratif haut niveau, execution via solveurs, strategies d'execution automatiques
+Independence solveur
+Oui - portabilite entre solveurs/moteurs affichee
+Pertinence
+Forte - structure DSL + execution solver-agnostic
+MiningZinc propose deux composants articules : un langage de modelisation declaratif et un mecanisme d'execution qui selectionne et enchaine des strategies et solveurs. Cette architecture en pipeline constitue un modele de reference direct pour le DSL propose.
+Gap identifie : 
+Le besoin demeure d'un DSL oriente planning (ressources/temps/roles), d'une compilation explicite SAT/CSP/MILP, et d'une validation d'erreurs avec tracabilite au format planning (ex: JSON).
+A4 - Nightingale et al. (2017) : Savile Row
+Champ
+Detail
+Reference
+Nightingale, P. et al. (2017). Automatically improving constraint models in Savile Row. Artificial Intelligence.
+Domaine
+Amelioration automatique et compilation de modeles de contraintes (CP/SAT)
+Type
+Article de recherche + description d'outil (Savile Row)
+Approche technique
+CP et SAT, reformulations automatiques, encodages et transformations
+Independence solveur
+Forte - compile/transforme vers differents solveurs/encodages (CP/SAT/SMT)
+Pertinence
+Forte - compilation + optimisation + toolchain
+Savile Row integre des techniques de reformulation et genere des modeles plus efficaces pour CP/SAT. L'architecture repose sur un pipeline de transformations successives appliquees au modele source, sans intervention manuelle de l'utilisateur.
+Gap identifie : 
+Besoin d'une couche au-dessus (DSL metier planning) + validation + sortie planning structuree (JSON/XML).
+A5 - Akgun et al. (2022) : Conjure
+Champ
+Detail
+Reference
+Akgun, O. et al. (2022). Conjure: Automatic Generation of Constraint Models from High-Level Problem Specifications.
+Domaine
+Generation automatique de modeles de contraintes depuis specifications haut niveau (Essence)
+Type
+Article sur toolchain d'automatisation de modelisation
+Approche technique
+CP (principal), generation automatique de modeles, gestion des symetries
+Independence solveur
+Oui/partielle - reduit la dependance a l'expertise de modelisation
+Pertinence
+Tres forte - decrire haut niveau puis compiler
+Conjure s'inscrit dans une toolchain ou une specification haut niveau est transformee en un modele executable puis resolu. L'outil gere notamment les symetries de modelisation, aspect souvent neglige mais crucial pour la performance des solveurs.
+Gap identifie : 
+Meme avec Conjure, reste a adresser : syntaxe metier plus simple et dediee planning, sortie JSON planning + contraintes non satisfaites, integration applicative (CLI + SDK).
+A6 - Bofill et al. (2020) : SMT Encodings pour RCPSP
+Champ
+Detail
+Reference
+Bofill, M. et al. (2020). SMT encodings for Resource-Constrained Project Scheduling Problems (RCPSP).
+Domaine
+Scheduling (RCPSP) via encodages SMT/SAT
+Type
+Article technique (encodages / formalisation)
+Approche technique
+SMT/SAT, encodage de contraintes de precedence + ressources, analyse de performance
+Independence solveur
+Non - methode/encodage specifique, mais utile pour l'axe SAT/SMT
+Pertinence
+Moyenne - support technique SAT/SMT
+L'architecture de reference : modelisation scheduling -> encodage SMT/SAT -> solveur SMT/SAT. L'article evalue plusieurs encodages et analyse leurs performances comparees sur des benchmarks RCPSP standards.
+Gap identifie : 
+Renforce le besoin d'un DSL qui masque la complexite SAT/SMT et automatise l'encodage optimal selon le probleme fourni.
+A7 - Google OR-Tools (2024) : Documentation CP-SAT
+Champ
+Detail
+Reference
+Google OR-Tools (2024). CP-SAT Solver documentation. Documentation officielle.
+Domaine
+Solveur CP-SAT (optimisation discrete) et modelisation par API
+Type
+Documentation officielle (grey literature)
+Approche
+Hybride CP + SAT, solveur industriel open-source
+Independence solveur
+Non - lie a OR-Tools
+Pertinence
+Utile pour l'implementation et le choix d'un backend open-source performant
+OR-Tools CP-SAT constitue un solveur de reference open-source pour les problemes d'optimisation discrete. Son support robuste des contraintes entieres et ses performances sur des benchmarks industriels en font un backend naturel pour le DSL propose. L'API Python facilite l'integration dans un pipeline de compilation.
+5. Methodes Existantes avec l'IA - LLMs et Modelisation CP (2024-2025)
+Un corpus croissant de travaux recents (2024-2025) explore l'utilisation des Large Language Models (LLMs) pour automatiser ou faciliter la modelisation de problemes de contraintes. Cette tendance est directement pertinente pour l'axe accessibilite du DSL propose.
+Contexte IA : 
+Ces travaux representent une tendance majeure : utiliser des LLMs comme interface entre le langage naturel et les formalismes de contraintes. Ils constituent a la fois une reference de l'etat de l'art et une perspective d'evolution pour le DSL propose.
+A8 - Text2Zinc (2025) : Dataset NL -> MiniZinc
+Champ
+Detail
+Reference
+Text2Zinc (2025). arXiv:2503.10642.
+Probleme traite
+NL -> MiniZinc (satisfaction + optimisation)
+Entree / Sortie
+Texte NL + specs d'instance -> Modele MiniZinc executable
+Methode
+Baselines prompting, Chain-of-Thought, approche compositional, tests d'execution
+Evaluation
+Mesure d'execution correcte + precision de solution selon methodes
+Apport DSL
+Dataset + protocole d'evaluation pour un futur module NL -> DSL/CP
+Text2Zinc propose un dataset cross-domain associant descriptions en langage naturel a des modeles MiniZinc. Ce travail fournit une base empirique reproductible pour evaluer la capacite des LLMs a generer du code de modelisation contraintes.
+A9 - Constraint Modelling with LLMs Using ICL (CP 2024)
+Champ
+Detail
+Reference
+Constraint Modelling with LLMs Using In-Context Learning. CP 2024. LIPIcs, vol. 307, art. 20.
+Probleme traite
+NL -> modele CP formel (souvent MiniZinc)
+Entree / Sortie
+Texte NL -> Blueprint intermediaire + Modele CP
+Methode
+Decomposition 2 etapes : blueprint -> modele ; In-Context Learning (exemples)
+Apport DSL
+Idee cle : representation intermediaire (AST/blueprint) tres proche du pipeline DSL->solveur
+Cet article propose une methode en deux etapes : NL -> blueprint (variables/contraintes/objectifs en notation intermediaire) -> generation du modele CP formel. L'idee de representation intermediaire est directement transposable au pipeline DSL, ou le DSL joue le role de cette representation structuree.
+A10 - ACMG : Framework NL -> CSP + Validation (MDPI 2025)
+Champ
+Detail
+Reference
+ACMG (MDPI 2025). Applied Sciences, 15(12), 6518.
+Probleme traite
+NL -> CSP + validation iterative MiniZinc
+Entree / Sortie
+Texte NL -> Modele CSP + boucle de correction
+Methode
+Extraction entites -> generation contraintes -> validation iterative avec solveur
+Apport DSL
+Renforce l'axe validation precoce + feedback utilisateur non-expert
+A11 - Gala : Global Constraint LLM Agents (arXiv 2025)
+Champ
+Detail
+Reference
+Gala (arXiv 2025). arXiv:2509.08970.
+Probleme traite
+NL -> MiniZinc via agents LLM specialises
+Methode
+Multi-agents specialises par types de global constraints + assemblage final
+Comparaison
+Superieur aux approches one-shot/CoT pour les contraintes globales
+Apport DSL
+Strategie de modularisation analogue a un compilateur DSL avec passes specialisees
+A12 - Do LLMs Understand CP? (Workshop 2025)
+Champ
+Detail
+Reference
+Do LLMs Understand Constraint Programming? (2025, workshop SAT/CP/DP). satcpdp25.github.io.
+Probleme traite
+Evaluation des capacites des LLMs a generer des modeles CP (incl. MiniZinc)
+Methode
+Workflows direct/iteratif, controle du format, analyse des erreurs courantes
+Apport DSL
+Menaces a la validite + metriques (format/correctness) pour le protocole d'evaluation
+A13 - ConstraintLLM (EMNLP 2025)
+Champ
+Detail
+Reference
+ConstraintLLM. EMNLP 2025. ACL Anthology 2025.emnlp-main.809.
+Probleme traite
+LLM specialise pour la modelisation CP (fine-tuning + retrieval)
+Methode
+Fine-tuning supervise + module de retrieval constraint-aware (RAG)
+Apport DSL
+Piste industrialisation : specialiser + RAG pour reduire erreurs de modelisation
+A14 - MCP-Solver (arXiv 2024)
+Champ
+Detail
+Reference
+MCP-Solver (2024). Integrating LLMs with Constraint Programming Systems. arXiv:2501.00539.
+Probleme traite
+Integration LLM <-> CP system (edition guidee, validation continue)
+Methode
+Item-based editing + validation a chaque etape + sessions solving iteratives
+Apport DSL
+Tres aligne outil non-expert : edition guidee + validation continue, proche d'un IDE/CLI DSL
+6. Resultats par Question de Recherche
+RQ1 - Langages et Frameworks Declaratifs : Resultats
+Les principaux langages et frameworks identifies pour la modelisation declarative de problemes de planification sont :
+MiniZinc : langage de modelisation declaratif independant des solveurs, compilant en FlatZinc puis appelant differents solveurs (CP, MILP, SAT, SMT). Reference dominante de l'etat de l'art.
+Essence Prime / Savile Row : langage intermediaire plus riche, solver-independant, supportant CP, SAT et SMT via reformulations automatiques avancees.
+MiniSearch : meta-langage de recherche solver-independant au-dessus de MiniZinc pour specifier des strategies de recherche uniformement.
+MiniBrass : extension de MiniZinc ajoutant des soft constraints et structures de preferences.
+MiningZinc : framework declaratif inspire de Zinc pour le data mining sous contraintes (transposable au planning).
+RQ2 - Mecanismes de Resolution : Resultats
+Constraint Programming (CP/CSP) : mecanisme dominant, supporte par MiniZinc, Essence Prime, Conjure et OR-Tools.
+SAT/SMT : Savile Row genere des encodages SAT/SMT ; Bofill et al. analysent specifiquement les encodages SMT pour RCPSP.
+MILP : MiniZinc supporte des backends MILP (Gurobi, CPLEX via FlatZinc).
+Hybride CP+SAT : OR-Tools CP-SAT constitue un exemple industriel d'approche hybride performante.
+Meta-search : MiniSearch permet de specifier des strategies (LNS, restart, etc.) de facon declarative.
+RQ3 - Gestion des Contraintes : Resultats
+Hard constraints : universellement supportees par tous les langages analyses. Constituees des contraintes qui doivent imperativement etre satisfaites.
+Soft constraints / preferences : support non uniforme. MiniBrass apporte une extension dediee a MiniZinc. Les autres approches traitent les soft constraints via fonctions objectif ou penalites.
+Optimisation multi-critere : MiniZinc et Essence Prime gerent des objectifs composites via agregation ou lexicographie. L'optimisation Pareto reste peu standardisee.
+RQ4 - Independence vis-a-vis des Solveurs : Resultats
+Independence totale : MiniZinc (compile vers FlatZinc -> multiples backends), Essence Prime + Savile Row (compile vers CP, SAT, SMT).
+Independence partielle : MiniSearch (independant pour la strategie, mais attache a FlatZinc), Conjure (reduit la dependance a l'expertise).
+Dependance forte : OR-Tools (API proprietaire), encodages SMT specifiques (Bofill et al.).
+RQ5 - Limites des Outils Existants : Resultats
+Complexite pour non-experts : meme MiniZinc et Essence Prime, bien que declaratifs, exigent une expertise en modelisation de contraintes. Les concepts de propagation, symetries et encodages restent opaques pour un utilisateur metier.
+Absence de couche metier : aucun outil ne propose une syntaxe native orientee planning (ressources, creneaux, roles, competences). L'utilisateur doit mapper manuellement son probleme metier.
+Soft constraints non standardisees : les extensions soft (MiniBrass) restent nichees et peu documentees.
+Absence de validation utilisateur : les outils sont evalues sur benchmarks academiques, rarement avec des profils non-experts.
+RQ6 - Besoin d'un DSL Multi-Solveurs Accessible : Resultats
+Cote langages formels (MiniZinc, Essence Prime) : expressivite et solver-agnosticism attestes, mais barriere d'entree elevee pour les utilisateurs metier. L'accessibilite non-expert reste un gap non adresse.
+Cote LLMs (Text2Zinc, ACMG, MCP-Solver) : les approches NL -> CP emergent mais restent experimentales. La fiabilite, la tracabilite et l'explicabilite ne sont pas encore au niveau industriel.
+Conclusion RQ6 : 
+Un DSL declaratif multi-solveurs avec syntaxe metier, validation statique, compilation explicite et sortie structuree constitue un chainon manquant entre les langages formels experts et les approches LLM experimentales.
+7. Grille Comparative Globale
+Outil / Article
+DSL
+Multi-solv.
+Hard/Soft
+Public cible
+IA
+Limites
+MiniZinc (2008+)
+Oui
+Oui fort
+Hard+Soft ext.
+Chercheurs CP
+Non
+Apprentissage eleve
+Essence Prime + Savile Row (2017)
+Oui
+Oui fort
+Hard+Opt
+Modelisateurs
+Non
+Pipeline complexe
+MiniSearch (2015)
+Meta
+Oui partiel
+Hard+Search
+Chercheurs CP
+Non
+Pas metier
+MiniBrass (2019)
+Extension
+Oui
+Hard+Soft
+Modelisateurs
+Non
+Niche, peu doc.
+MiningZinc (2017)
+Oui
+Oui
+Hard+Opt
+Data Mining
+Non
+Domaine mining
+Conjure (2022)
+Oui
+Partiel
+Hard+Opt
+Chercheurs
+Non
+Ecosysteme requis
+OR-Tools CP-SAT (2024)
+Non (API)
+Non
+Hard+Opt
+Developpeurs
+Non
+Pas DSL
+Text2Zinc (2025)
+Non
+Non
+Hard+Soft
+Chercheurs NLP
+Oui LLM
+Experimental
+ACMG (2025)
+Non
+Partiel
+Hard+Soft
+Chercheurs NLP
+Oui LLM
+Fiabilite
+MCP-Solver (2024)
+Non
+Non
+Hard+Soft
+Non-exp. proto
+Oui LLM
+Prototype
+ConstraintLLM (2025)
+Non
+Partiel
+Hard+Soft
+Chercheurs NLP
+Oui LLM+RAG
+Industria.
+DSL propose (ce projet)
+Oui metier
+Oui cible
+Hard+Soft+Pref
+Non-exp. metier
+Hybride
+En dev.
+8. Synthese et Positionnement Scientifique
+Ce que l'etat de l'art offre
+Des langages de modelisation formels matures (MiniZinc, Essence Prime) avec independance solveur prouvee
+Des techniques de reformulation et compilation automatiques (Savile Row, Conjure)
+Des approches LLM prometteuses pour la traduction langage naturel -> modele formel
+Des solveurs industriels performants en open-source (OR-Tools CP-SAT, Chuffed, Gecode)
+Ce que l'etat de l'art ne couvre pas
+Un DSL a syntaxe metier : aucun outil ne propose de notation native en termes de ressources, creneaux, roles, competences - concepts directs du domaine planning
+Une validation statique orientee non-expert : les erreurs de modelisation sont detectees tardivement (au solveur), pas au niveau syntaxique/semantique DSL
+Une compilation explicite vers plusieurs formalismes (CSP, SAT, MILP) depuis une meme source DSL
+Une sortie structuree (JSON/XML) du planning resolu avec tracabilite des contraintes non satisfaites
+Une integration applicative simple (CLI + SDK Python/Java) pour des utilisateurs non chercheurs
+Positionnement du DSL Propose
+Le DSL propose se positionne a l'intersection de trois espaces scientifiques complementaires :
+Langages formels (MiniZinc, Essence) : on herite de la declarativite et de l'independance solveur
+Approches metier : on ajoute une syntaxe orientee domaine (ressources/contraintes de planning)
+Accessibilite non-expert : on offre validation precoce, messages d'erreur lisibles, et potentiellement une couche NL-to-DSL via LLM (perspective)
+Contribution scientifique : 
+Le DSL propose constitue un chainon manquant entre les langages de modelisation formels (trop techniques) et les approches LLM (trop peu fiables). Il offre une abstraction metier, une compilation multi-solveurs et une accessibilite utilisateur non-expert dans un seul outil coherent.
+9. Bibliographie
+Articles Scientifiques (Peer-Reviewed)
+[A1] Akgun, O. (2013). An Automated Constraint Modelling and Solving Toolchain. Doctoral thesis / article.
+[A2] Rendl, A., Guns, T., Stuckey, P., & Tack, G. (2015). MiniSearch: A Solver-Independent Meta-Search Language for MiniZinc. In Proceedings of CP 2015. Springer.
+[A3] Guns, T., Dries, A., Nijssen, S., Tack, G., & De Raedt, L. (2017). MiningZinc: A declarative framework for constraint-based mining. Artificial Intelligence, 244, 6-29. Elsevier.
+[A4] Nightingale, P., Akgun, O., Gent, I.P., Jefferson, C., Miguel, I., & Spracklen, P. (2017). Automatically improving constraint models in Savile Row. Artificial Intelligence, 251, 35-61. Elsevier.
+[A5] Akgun, O., Atkinson, M., Dang, T., Frisch, A., Jefferson, C., Miguel, I., Nee, A., & Spracklen, P. (2022). Conjure: Automatic Generation of Constraint Models from High-Level Problem Specifications. Artificial Intelligence. ScienceDirect.
+[A6] Bofill, M. et al. (2020). SMT encodings for Resource-Constrained Project Scheduling Problems. CIE conference proceedings.
+[A8] Text2Zinc (2025). A dataset and baseline for NL to MiniZinc translation. arXiv:2503.10642. https://arxiv.org/abs/2503.10642
+[A9] Constraint Modelling with LLMs Using In-Context Learning (2024). In Proceedings of CP 2024. LIPIcs, vol. 307, article 20. https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.CP.2024.20
+[A10] ACMG (2025). Automated Constraint Model Generation via LLMs. Applied Sciences, 15(12), 6518. MDPI. https://www.mdpi.com/2076-3417/15/12/6518
+[A11] Gala (2025). Global Constraint Agents for LLM-based Constraint Programming. arXiv:2509.08970. https://arxiv.org/abs/2509.08970
+[A12] Do LLMs Understand Constraint Programming? (2025). Workshop at SAT/CP/DP 2025. https://satcpdp25.github.io/submissions/satcpdp-25_paper_24.pdf
+[A13] ConstraintLLM (2025). In Proceedings of EMNLP 2025. ACL Anthology. https://aclanthology.org/2025.emnlp-main.809.pdf
+[A14] MCP-Solver (2024). Integrating LLMs with Constraint Programming Systems. arXiv:2501.00539. https://arxiv.org/abs/2501.00539
+Grey Literature et Documentation Technique
+[GL1] MiniZinc. (2024). MiniZinc Language Specification and Publications. https://www.minizinc.org/publications
+[GL2] Wikipedia contributors. (2024). MiniZinc. Wikipedia, The Free Encyclopedia. https://en.wikipedia.org/wiki/MiniZinc
+[GL3] Google. (2024). OR-Tools CP-SAT Solver Documentation. Google Developers. https://developers.google.com/optimization
+[GL4] MiniBrass. (2019). Soft Constraints for MiniZinc. Publication reference: https://d-nb.info/1218972122/34
+[GL5] Nightingale, P. et al. (2023). Savile Row Manual. University of St Andrews Research Repository. https://research-repository.st-andrews.ac.uk/bitstream/handle/10023/28735/PTHG-2023.pdf
