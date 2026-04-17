@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const PAGE_X  = 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-1';
-const PAGE_PAD = `${PAGE_X} py-1`;
 
 const NAV_SECTIONS = [
   { href: '#use-cases',    label: "Cas d'usage"       },
@@ -422,7 +421,7 @@ export const LandingPage: React.FC = () => {
         }}
       >
         <div className={`${PAGE_X} h-16 flex items-center gap-4`}>
-          <a href="#" className="flex-shrink-0"><LogoBrand /></a>
+          <button onClick={() => window.scrollTo(0,0)} className="flex-shrink-0" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}><LogoBrand /></button>
 
           {/* Desktop links */}
           <div className="hidden md:flex items-center gap-0.5 ml-6">
@@ -807,7 +806,7 @@ export const LandingPage: React.FC = () => {
               <h3 className="text-[12px] font-bold uppercase tracking-widest text-slate-500 mb-4">Ressources</h3>
               <div className="flex flex-col gap-2.5">
                 {['Documentation', 'API', 'Support', 'Contact'].map(l => (
-                  <a key={l} href="#" className="text-[13.5px] text-slate-600 hover:text-slate-300 transition-colors">{l}</a>
+                  <button key={l} className="text-[13.5px] text-slate-600 hover:text-slate-300 transition-colors" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>{l}</button>
                 ))}
               </div>
             </div>
@@ -817,7 +816,7 @@ export const LandingPage: React.FC = () => {
               <h3 className="text-[12px] font-bold uppercase tracking-widest text-slate-500 mb-4">Légal</h3>
               <div className="flex flex-col gap-2.5">
                 {['Confidentialité', 'Conditions', 'Mentions légales'].map(l => (
-                  <a key={l} href="#" className="text-[13.5px] text-slate-600 hover:text-slate-300 transition-colors">{l}</a>
+                  <button key={l} className="text-[13.5px] text-slate-600 hover:text-slate-300 transition-colors" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>{l}</button>
                 ))}
               </div>
             </div>

@@ -194,7 +194,7 @@ export const Topbar: React.FC<{ title: string; subtitle?: string; actions?: Reac
   title, subtitle, actions
 }) => {
   const { setSidebarOpen, sidebarOpen } = useApp();
-  const { isMobile, isCompact } = useResponsive();
+  const { isMobile } = useResponsive();
 
   return (
     <div style={{

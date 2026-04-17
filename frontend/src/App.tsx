@@ -6,7 +6,8 @@ import { DashboardPage } from './views/DashboardPage';
 import { PlanningsPage } from './views/PlanningsPage';
 import { PlanningEditorPage } from './views/PlanningEditorPage';
 import { ProfilePage, NewPlanningPage } from './views/OtherPages';
-import { ReportWorkshopPage } from './views/ReportWorkshopPage';
+import { ReportPage } from './views/report';
+import { ReportDesignerPage } from './views/report/designer';
 import { FullScreenLoader } from './components/ui';
 import { ToastContainer } from './components/ui/Toast';
 
@@ -17,7 +18,8 @@ const PAGE_MAP: Record<string, React.FC> = {
   dashboard:     DashboardPage,
   plannings:     PlanningsPage,
   editor:        PlanningEditorPage,
-  report:        ReportWorkshopPage,
+  report:        ReportPage,
+  reportDesigner: ReportDesignerPage,
   profile:       ProfilePage,
   newPlanning:   NewPlanningPage,
 };

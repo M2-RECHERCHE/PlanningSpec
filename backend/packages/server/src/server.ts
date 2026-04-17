@@ -42,6 +42,7 @@ import {
 } from './db.js';
 import { createSessionToken, hashPassword, hashSessionToken, normalizeEmail, verifyPassword } from './auth.js';
 import { env } from './env.js';
+import { buildPlanningReport, generateMarkdown, generatePrintHTML } from './report.js';
 import { solvePlanningSource, validatePlanningSource } from './solver.js';
 
 // ---------------------------------------------------------------------------
@@ -2047,6 +2048,67 @@ app.delete('/api/tags/:id', authenticateRequest, async (req, res) => {
 
 app.get('/api/solvers', (_req, res) => {
     return sendSuccess(res, { solvers: cachedSolvers });
+});
+
+// ---------------------------------------------------------------------------
+// Report routes
+// ---------------------------------------------------------------------------
+
+app.get('/api/plannings/:id/report', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planning = await getPlanningById(getSingleParam(req.params.id), auth.user.id);
+        if (!planning) {
+            return sendError(res, 404, { code: 'NOT_FOUND', message: 'Planification introuvable.' });
+        }
+        const report = buildPlanningReport(planning);
+        if (!report) {
+            return sendError(res, 422, { code: 'NO_SOLUTION', message: 'Cette planification n\'a pas encore été résolue.' });
+        }
+        return sendSuccess(res, report);
+    } catch (error) {
+        return sendError(res, 500, { code: 'SERVER_ERROR', message: error instanceof Error ? error.message : 'Erreur serveur.' });
+    }
+});
+
+app.get('/api/plannings/:id/report/markdown', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planning = await getPlanningById(getSingleParam(req.params.id), auth.user.id);
+        if (!planning) {
+            return sendError(res, 404, { code: 'NOT_FOUND', message: 'Planification introuvable.' });
+        }
+        const report = buildPlanningReport(planning);
+        if (!report) {
+            return sendError(res, 422, { code: 'NO_SOLUTION', message: 'Cette planification n\'a pas encore été résolue.' });
+        }
+        const md = generateMarkdown(report);
+        const filename = `rapport-${planning.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.md`;
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        return res.send(md);
+    } catch (error) {
+        return sendError(res, 500, { code: 'SERVER_ERROR', message: error instanceof Error ? error.message : 'Erreur serveur.' });
+    }
+});
+
+app.get('/api/plannings/:id/report/print', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planning = await getPlanningById(getSingleParam(req.params.id), auth.user.id);
+        if (!planning) {
+            return sendError(res, 404, { code: 'NOT_FOUND', message: 'Planification introuvable.' });
+        }
+        const report = buildPlanningReport(planning);
+        if (!report) {
+            return sendError(res, 422, { code: 'NO_SOLUTION', message: 'Cette planification n\'a pas encore été résolue.' });
+        }
+        const html = generatePrintHTML(report);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(html);
+    } catch (error) {
+        return sendError(res, 500, { code: 'SERVER_ERROR', message: error instanceof Error ? error.message : 'Erreur serveur.' });
+    }
 });
 
 app.get('/', (_req, res) => {

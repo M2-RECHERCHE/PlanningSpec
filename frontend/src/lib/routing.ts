@@ -54,6 +54,10 @@ export const parseRoute = (hash: string): AppRoute => {
       return { page: 'editor', planningId: segments[1] };
     }
 
+    if (segments[1] && segments[2] === 'report' && segments[3] === 'designer') {
+      return { page: 'reportDesigner', planningId: segments[1] };
+    }
+
     if (segments[1] && segments[2] === 'report') {
       return { page: 'report', planningId: segments[1] };
     }
@@ -82,6 +86,8 @@ export const buildRoute = (page: string, params?: { projectId?: string; planning
       return params?.planningId ? `/plannings/${encodeURIComponent(params.planningId)}/editor` : '/plannings';
     case 'report':
       return params?.planningId ? `/plannings/${encodeURIComponent(params.planningId)}/report` : '/plannings';
+    case 'reportDesigner':
+      return params?.planningId ? `/plannings/${encodeURIComponent(params.planningId)}/report/designer` : '/plannings';
     case 'profile':
       return '/profile';
     case 'newPlanning':

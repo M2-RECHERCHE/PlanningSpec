@@ -245,6 +245,6 @@ export async function solvePlanningSource(source: string, solver: string): Promi
             }
         };
     } finally {
-        // rmSync(analysis.tmpDir, { recursive: true, force: true });
+        rmSync(analysis.tmpDir, { recursive: true, force: true });
     }
 }
