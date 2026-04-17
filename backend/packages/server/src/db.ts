@@ -74,6 +74,7 @@ export interface PlanningRecord {
     badges: Badge[];
     solutionOutput?: string;
     solutionWarnings?: string[];
+    solutionSolveTimeMs?: number;
     lastErrorMessage?: string;
     errorDetails?: string[];
     errorHint?: string;
@@ -136,6 +137,7 @@ interface PlanningRow extends RowDataPacket {
     badges: unknown;
     solution_output: string | null;
     solution_warnings: unknown;
+    solution_solve_time_ms: number | null;
     last_error: unknown;
 }
 
@@ -199,6 +201,7 @@ export interface PlanningUpdateInput {
     badges?: Badge[];
     solutionOutput?: string | null;
     solutionWarnings?: string[] | null;
+    solutionSolveTimeMs?: number | null;
     lastError?: { message: string; details?: string[]; hint?: string } | null;
 }
 
@@ -292,6 +295,7 @@ function mapPlanningRow(row: PlanningRow): PlanningRecord {
         badges,
         solutionOutput: row.solution_output ?? undefined,
         solutionWarnings: parseJson<string[]>(row.solution_warnings, []),
+        solutionSolveTimeMs: row.solution_solve_time_ms ?? undefined,
         lastErrorMessage: lastError?.message,
         errorDetails: lastError?.details ?? [],
         errorHint: lastError?.hint
@@ -517,6 +521,9 @@ async function ensureSchema(): Promise<void> {
     }
     if (!(await columnExists('plannings', 'badges'))) {
         await database.query('ALTER TABLE plannings ADD COLUMN badges JSON NULL AFTER wizard_data');
+    }
+    if (!(await columnExists('plannings', 'solution_solve_time_ms'))) {
+        await database.query('ALTER TABLE plannings ADD COLUMN solution_solve_time_ms INT NULL AFTER solution_warnings');
     }
     // Make project_id nullable if it isn't already
     if (await columnExists('plannings', 'project_id') && !(await isColumnNullable('plannings', 'project_id'))) {
@@ -967,6 +974,10 @@ export async function updatePlanning(id: string, userId: string, input: Planning
     if (input.solutionWarnings !== undefined) {
         fields.push('plannings.solution_warnings = ?');
         params.push(input.solutionWarnings ? JSON.stringify(input.solutionWarnings) : null);
+    }
+    if (input.solutionSolveTimeMs !== undefined) {
+        fields.push('plannings.solution_solve_time_ms = ?');
+        params.push(input.solutionSolveTimeMs ?? null);
     }
     if (input.lastError !== undefined) {
         fields.push('plannings.last_error = ?');

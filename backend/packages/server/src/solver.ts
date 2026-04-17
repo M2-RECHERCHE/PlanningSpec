@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { URI } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import { createPlanningSpecServices } from 'planning-spec-language';
+import { env } from './env.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -19,6 +20,7 @@ const generator = PlanningSpec.generator.Generator;
 export interface SolveSuccess {
     output: string;
     warnings: string[];
+    solveTimeMs: number;
 }
 
 export interface SourceIssue {
@@ -169,10 +171,18 @@ export async function solvePlanningSource(source: string, solver: string): Promi
     }
 
     try {
+        // Preferences add soft constraints that require minimisation — double the timeout budget.
+        const hasPreferences = /preferences\s*\[\s*\{/.test(source);
+        const timeoutMs = hasPreferences ? env.solverTimeoutMs * 2 : env.solverTimeoutMs;
+
         const mznPath = generator.generateToFile(analysis.document as never, analysis.tmpDir);
-        const { stdout, stderr } = await execFileAsync('minizinc', ['--solver', solver, mznPath], {
-            maxBuffer: 8 * 1024 * 1024
-        });
+        const t0 = Date.now();
+        const { stdout, stderr } = await execFileAsync(
+            'minizinc',
+            ['--solver', solver, '--time-limit', String(timeoutMs), mznPath],
+            { maxBuffer: 8 * 1024 * 1024, timeout: timeoutMs + 5_000 }
+        );
+        const solveTimeMs = Date.now() - t0;
 
         const trimmedOutput = stdout.trim();
         const warnings = toWarnings(stderr);
@@ -197,7 +207,8 @@ export async function solvePlanningSource(source: string, solver: string): Promi
             ok: true,
             result: {
                 output: trimmedOutput,
-                warnings
+                warnings,
+                solveTimeMs
             }
         };
     } catch (error) {
@@ -232,6 +243,6 @@ export async function solvePlanningSource(source: string, solver: string): Promi
             }
         };
     } finally {
-        // rmSync(analysis.tmpDir, { recursive: true, force: true });
+        rmSync(analysis.tmpDir, { recursive: true, force: true });
     }
 }

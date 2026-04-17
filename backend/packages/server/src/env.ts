@@ -48,6 +48,7 @@ loadEnvFile();
 export const env = {
     port: readInt(process.env.PORT, 4000),
     solver: process.env.MINIZINC_SOLVER ?? 'Highs',
+    solverTimeoutMs: readInt(process.env.MINIZINC_TIMEOUT_MS, 120_000),
     allowedOrigins: (process.env.ALLOWED_ORIGINS ?? 'http://localhost:3000')
         .split(',')
         .map(origin => origin.trim())

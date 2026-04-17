@@ -2398,6 +2398,14 @@ const Step7Preferences: React.FC<{ data: EditorFormData; onChange: (d: EditorFor
   );
 };
 
+function formatMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const m = Math.floor(ms / 60_000);
+  const s = Math.floor((ms % 60_000) / 1000);
+  return `${m}m ${s}s`;
+}
+
 interface Step8Props {
   data: EditorFormData;
   planning: Planning | null;
@@ -2406,11 +2414,14 @@ interface Step8Props {
   solvers: AvailableSolver[];
   loadingSolvers: boolean;
   onGenerateReport: () => void;
+  isSolving?: boolean;
+  solveElapsedMs?: number;
+  solverTimeMs?: number | null;
 }
 
 interface AvailableSolver { id: string; label: string; isDefault: boolean; }
 
-const Step8: React.FC<Step8Props> = ({ data, planning, selectedSolver, onSolverChange, solvers, loadingSolvers, onGenerateReport }) => {
+const Step8: React.FC<Step8Props> = ({ data, planning, selectedSolver, onSolverChange, solvers, loadingSolvers, onGenerateReport, isSolving = false, solveElapsedMs = 0, solverTimeMs }) => {
   const { isMobile } = useResponsive();
 
   const roleGroups = data.activities.map(activity => ({
@@ -2590,6 +2601,22 @@ const Step8: React.FC<Step8Props> = ({ data, planning, selectedSolver, onSolverC
               Highs est recommandé pour la planification. Gecode et Chuffed sont adaptés aux contraintes combinatoires.
             </div>
           </div>
+
+          {/* ── Live timer ── */}
+          {isSolving && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 4px', color: '#7dd3fc', fontSize: 13 }}>
+              <span style={{ width: 14, height: 14, border: '2px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+              <span>Résolution en cours…</span>
+              <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#38bdf8', minWidth: 52 }}>{formatMs(solveElapsedMs)}</span>
+            </div>
+          )}
+          {!isSolving && solverTimeMs != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0 4px', color: 'var(--text-secondary)', fontSize: 13 }}>
+              <span style={{ color: '#34d399' }}>✓</span>
+              Dernier temps d&apos;exécution :
+              <span style={{ fontFamily: 'monospace', color: '#7dd3fc' }}>{formatMs(solverTimeMs)}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2635,7 +2662,10 @@ const Step8: React.FC<Step8Props> = ({ data, planning, selectedSolver, onSolverC
             <div>
               <div style={{ fontWeight: 700, fontSize: '15px', color: '#10b981' }}>Planification résolue avec succès</div>
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 2 }}>
-                Le solveur a trouvé une solution optimale. Générez le rapport pour visualiser le résultat.
+                Le solveur a trouvé une solution.
+                {planning?.solutionSolveTimeMs != null && (
+                  <> Temps d&apos;exécution : <span style={{ fontFamily: 'monospace', color: '#7dd3fc' }}>{formatMs(planning.solutionSolveTimeMs)}</span></>
+                )}
               </div>
             </div>
           </div>
@@ -2675,6 +2705,10 @@ export const PlanningEditorPage: React.FC = () => {
   );
   const [dslDirty, setDslDirty] = useState(false);
   const [editorSolving, setEditorSolving] = useState(false);
+  const [solveElapsedMs, setSolveElapsedMs] = useState(0);
+  const [solverTimeMs, setSolverTimeMs] = useState<number | null>(null);
+  const solveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const solveStartRef = useRef<number>(0);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [editorWidth, setEditorWidth] = useState(480);
   const [editorFullscreen, setEditorFullscreen] = useState(false);
@@ -2706,6 +2740,28 @@ export const PlanningEditorPage: React.FC = () => {
     () => [...jsonValidationMarkers, ...semanticValidationMarkers],
     [jsonValidationMarkers, semanticValidationMarkers]
   );
+
+  // Live solve timer — starts when editorSolving becomes true, stops on false
+  useEffect(() => {
+    if (editorSolving) {
+      solveStartRef.current = Date.now();
+      setSolveElapsedMs(0);
+      solveTimerRef.current = setInterval(() => {
+        setSolveElapsedMs(Date.now() - solveStartRef.current);
+      }, 100);
+    } else {
+      if (solveTimerRef.current !== null) {
+        clearInterval(solveTimerRef.current);
+        solveTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (solveTimerRef.current !== null) {
+        clearInterval(solveTimerRef.current);
+        solveTimerRef.current = null;
+      }
+    };
+  }, [editorSolving]);
 
   const syncDslIntoPlatform = useCallback(async (
     rawSource: string,
@@ -3120,6 +3176,10 @@ export const PlanningEditorPage: React.FC = () => {
     }
 
     setSolving(true);
+    setSolverOutput(null);
+    setSolverWarnings([]);
+    setSolverTimeMs(null);
+    setEditorSolving(true);
     const source = buildPlanningDslSource(formData);
     setDslSource(source);
     setDslDirty(false);
@@ -3137,16 +3197,19 @@ export const PlanningEditorPage: React.FC = () => {
 
     if (!saved) {
       setSolving(false);
+      setEditorSolving(false);
       return;
     }
 
     lastPersistedDslRef.current = source;
 
     const result = await solvePlanning(selectedPlanning.id, undefined, source, selectedSolver || undefined);
+    setSolverTimeMs(result?.solveTimeMs ?? null);
+    setEditorSolving(false);
     setSolving(false);
 
     if (result) {
-      toast('Resolution terminee avec succes.', 'success');
+      toast('Résolution terminée avec succès.', 'success');
     }
   };
 
@@ -3171,6 +3234,7 @@ export const PlanningEditorPage: React.FC = () => {
     setEditorError(null);
     setSolverOutput(null);
     setSolverWarnings([]);
+    setSolverTimeMs(null);
     setEditorSolving(true);
     setConsoleTab('output');
     setShowConsole(true);
@@ -3193,6 +3257,7 @@ export const PlanningEditorPage: React.FC = () => {
     if (result) {
       setSolverOutput(result.output);
       setSolverWarnings(result.warnings ?? []);
+      setSolverTimeMs(result.solveTimeMs ?? null);
       setConsoleTab('output');
       toast('Résolution terminée avec succès.', 'success');
     } else {
@@ -3229,7 +3294,7 @@ export const PlanningEditorPage: React.FC = () => {
     <Step5 key="step-5" data={formData} onChange={setFormData} />,
     <Step6 key="step-6" data={formData} onChange={setFormData} />,
     <Step7Preferences key="step-7" data={formData} onChange={setFormData} />,
-    <Step8 key="step-8" data={formData} planning={selectedPlanning} selectedSolver={selectedSolver} onSolverChange={setSelectedSolver} solvers={solvers} loadingSolvers={loadingSolvers} onGenerateReport={handleGenerateReport} />,
+    <Step8 key="step-8" data={formData} planning={selectedPlanning} selectedSolver={selectedSolver} onSolverChange={setSelectedSolver} solvers={solvers} loadingSolvers={loadingSolvers} onGenerateReport={handleGenerateReport} isSolving={solving} solveElapsedMs={solveElapsedMs} solverTimeMs={solverTimeMs} />,
   ];
 
   return (
@@ -3400,7 +3465,7 @@ export const PlanningEditorPage: React.FC = () => {
                   Continuer
                 </Button>
               ) : (
-                <Button variant="success" onClick={() => { void handleSolve(); }} loading={solving} style={{ width: isMobile ? '100%' : undefined }}>
+                <Button variant="success" onClick={() => { void handleSolve(); }} loading={solving} disabled={editorSolving} style={{ width: isMobile ? '100%' : undefined }}>
                   Résoudre la planification
                 </Button>
               )}
@@ -3675,11 +3740,20 @@ export const PlanningEditorPage: React.FC = () => {
                       {editorSolving && (
                         <div style={{ color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ width: 12, height: 12, border: '2px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
-                          Résolution en cours…
+                          <span>Résolution en cours…</span>
+                          <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#7dd3fc', minWidth: 52 }}>{formatMs(solveElapsedMs)}</span>
                         </div>
                       )}
                       {solverOutput && !editorSolving && (
-                        <pre style={{ margin: 0, color: '#34d399', whiteSpace: 'pre-wrap' }}>{solverOutput}</pre>
+                        <>
+                          {solverTimeMs !== null && (
+                            <div style={{ marginBottom: 6, fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ color: '#34d399' }}>✓</span>
+                              Résolu en <span style={{ fontFamily: 'monospace', color: '#7dd3fc' }}>{formatMs(solverTimeMs)}</span>
+                            </div>
+                          )}
+                          <pre style={{ margin: 0, color: '#34d399', whiteSpace: 'pre-wrap' }}>{solverOutput}</pre>
+                        </>
                       )}
                       {solverWarnings.length > 0 && (
                         <div style={{ marginTop: 8 }}>
@@ -3794,19 +3868,19 @@ export const PlanningEditorPage: React.FC = () => {
               {/* Run button */}
               <button
                 onClick={() => { void handleEditorSolve(); }}
-                disabled={editorSolving || dslErrorCount > 0}
+                disabled={editorSolving || solving || dslErrorCount > 0}
                 style={{
                   width: '100%',
-                  background: editorSolving || dslErrorCount > 0 ? 'rgba(56,189,248,0.15)' : 'linear-gradient(135deg, #38bdf8, #3b82f6)',
+                  background: editorSolving || solving || dslErrorCount > 0 ? 'rgba(56,189,248,0.15)' : 'linear-gradient(135deg, #38bdf8, #3b82f6)',
                   border: 'none',
-                  color: editorSolving || dslErrorCount > 0 ? '#38bdf8' : '#0f172a',
+                  color: editorSolving || solving || dslErrorCount > 0 ? '#38bdf8' : '#0f172a',
                   borderRadius: 7, padding: '9px 0',
                   fontSize: 13, fontWeight: 700,
-                  cursor: editorSolving || dslErrorCount > 0 ? 'not-allowed' : 'pointer',
+                  cursor: editorSolving || solving || dslErrorCount > 0 ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   opacity: dslErrorCount > 0 ? 0.6 : 1,
                   transition: 'all 0.15s',
-                  boxShadow: editorSolving || dslErrorCount > 0 ? 'none' : '0 2px 8px rgba(56,189,248,0.3)',
+                  boxShadow: editorSolving || solving || dslErrorCount > 0 ? 'none' : '0 2px 8px rgba(56,189,248,0.3)',
                 }}
               >
                 {editorSolving ? (

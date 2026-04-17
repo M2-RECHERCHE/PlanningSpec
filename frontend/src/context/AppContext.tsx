@@ -424,7 +424,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (data) body.data = data;
       if (source) body.source = source;
       if (solver) body.solver = solver;
-      const response = await api.post<{ data: { planning: Planning; result: { output: string; warnings: string[] } } }>(
+      const response = await api.post<{ data: { planning: Planning; result: { output: string; warnings: string[]; solveTimeMs: number } } }>(
         `/api/plannings/${id}/solve`,
         body
       );
@@ -436,6 +436,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         planning,
         output: response.data.data.result.output,
         warnings: response.data.data.result.warnings,
+        solveTimeMs: response.data.data.result.solveTimeMs ?? 0,
       };
     } catch (error) {
       const backendError = handlePossibleAuthError(error);

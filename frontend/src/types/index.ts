@@ -41,6 +41,7 @@ export interface Planning {
   data?: Record<string, any>;
   solutionOutput?: string;
   solutionWarnings?: string[];
+  solutionSolveTimeMs?: number;
   lastErrorMessage?: string;
   errorDetails?: string[];
   errorHint?: string;
@@ -58,4 +59,5 @@ export interface PlanningSolveResult {
   planning: Planning;
   output: string;
   warnings: string[];
+  solveTimeMs: number;
 }

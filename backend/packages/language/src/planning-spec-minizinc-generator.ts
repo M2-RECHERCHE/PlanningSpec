@@ -466,11 +466,22 @@ export class PlanningSpecMiniZincGenerator {
       code += `var int: penalty =\n  ${penaltyTerms.join('\n  + ')};\n`;
     }
 
-    code += `var int: makespan;\n`;
-    code += `constraint makespan = max(i in ACT_INST)(start_time[i] + duration[i] - 1);\n`;
-    code += `var int: objective = penalty * (TOTAL_SLOTS + 1) + makespan;\n`;
+    // code += `var int: makespan;\n`;
+    // code += `constraint makespan = max(i in ACT_INST)(start_time[i] + duration[i] - 1);\n`;
+    // code += `var int: objective = penalty * (TOTAL_SLOTS + 1) + makespan;\n`;
+    // code += `var int: objective = penalty * (TOTAL_SLOTS + 1);\n`;
 
-    code += `\nsolve minimize objective;\n\n`;
+    // code += `\nsolve minimize objective;\n\n`;
+
+    // Solve: minimize soft-constraint violations (preferences), or just satisfy if none.
+    // The makespan (latest end time) is intentionally NOT included in the objective:
+    // adding max() over all activities multiplies solver complexity exponentially
+    // without adding correctness value for scheduling feasibility.
+    if (penaltyTerms.length > 0) {
+      code += `\nsolve :: int_search([start_time[i] | i in ACT_INST], first_fail, indomain_min, complete) minimize penalty;\n\n`;
+    } else {
+      code += `\nsolve :: int_search([start_time[i] | i in ACT_INST], first_fail, indomain_min, complete) satisfy;\n\n`;
+    }
 
     // ------------------------------------------------
     // 11) OUTPUT — format structuré parseable par le module de rapport

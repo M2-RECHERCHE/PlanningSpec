@@ -1366,7 +1366,7 @@ async function solveAndPersistPlanning(
     planning: PlanningRecord,
     sourceOverride?: string,
     solver: string = env.solver
-): Promise<{ ok: true; planning: PlanningRecord; output: string; warnings: string[] } | { ok: false; status: number; error: ApiErrorPayload }> {
+): Promise<{ ok: true; planning: PlanningRecord; output: string; warnings: string[]; solveTimeMs: number } | { ok: false; status: number; error: ApiErrorPayload }> {
     let source: string;
     let capacityWarnings: string[] = [];
 
@@ -1434,6 +1434,7 @@ async function solveAndPersistPlanning(
         progress: 100,
         solutionOutput: solveResult.result.output,
         solutionWarnings: solveResult.result.warnings,
+        solutionSolveTimeMs: solveResult.result.solveTimeMs,
         lastError: null
     });
 
@@ -1452,7 +1453,8 @@ async function solveAndPersistPlanning(
         ok: true,
         planning: updatedPlanning,
         output: solveResult.result.output,
-        warnings: solveResult.result.warnings
+        warnings: solveResult.result.warnings,
+        solveTimeMs: solveResult.result.solveTimeMs
     };
 }
 
@@ -1875,7 +1877,8 @@ app.post('/api/plannings/:id/solve', authenticateRequest, async (req, res) => {
             planning: solveResult.planning,
             result: {
                 output: solveResult.output,
-                warnings: solveResult.warnings
+                warnings: solveResult.warnings,
+                solveTimeMs: solveResult.solveTimeMs
             }
         }, "Résolution terminée avec succès.");
     } catch (error) {
