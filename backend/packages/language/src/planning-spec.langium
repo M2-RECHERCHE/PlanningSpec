@@ -161,3 +161,5 @@ terminal STRING: /"([^"\\]|\\.)*"/;
 terminal INT returns number: /[0-9]+/;
 
 hidden terminal WS: /\s+/;
+hidden terminal SL_COMMENT: /\/\/[^\n\r]*/;
+hidden terminal ML_COMMENT: /\/\*[\s\S]*?\*\//;

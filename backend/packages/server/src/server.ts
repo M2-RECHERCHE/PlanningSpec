@@ -246,9 +246,37 @@ function getPersistedPlanningData(value: unknown): PersistedPlanningData {
     return {};
 }
 
+function stripJsonComments(src: string): string {
+    let out = '';
+    let i = 0;
+    while (i < src.length) {
+        if (src[i] === '"') {
+            out += src[i++];
+            while (i < src.length) {
+                if (src[i] === '\\') { out += src[i++]; if (i < src.length) out += src[i++]; continue; }
+                if (src[i] === '"') { out += src[i++]; break; }
+                out += src[i++];
+            }
+            continue;
+        }
+        if (src[i] === '/' && src[i + 1] === '/') {
+            while (i < src.length && src[i] !== '\n') i++;
+            continue;
+        }
+        if (src[i] === '/' && src[i + 1] === '*') {
+            i += 2;
+            while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
+            i += 2;
+            continue;
+        }
+        out += src[i++];
+    }
+    return out;
+}
+
 function canonicalizePlanningSource(source: string): string {
     try {
-        const parsed = JSON.parse(source);
+        const parsed = JSON.parse(stripJsonComments(source));
         const validation = validatePlanningDataForSolve(parsed);
         if (validation.value) {
             return serializeSolveModelToDsl(validation.value);
