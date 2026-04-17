@@ -171,9 +171,11 @@ export async function solvePlanningSource(source: string, solver: string): Promi
     }
 
     try {
-        // Preferences add soft constraints that require minimisation — double the timeout budget.
+        // Preferences add soft constraints that require minimisation — enforce a higher floor.
         const hasPreferences = /preferences\s*\[\s*\{/.test(source);
-        const timeoutMs = hasPreferences ? env.solverTimeoutMs * 2 : env.solverTimeoutMs;
+        const timeoutMs = hasPreferences
+            ? Math.max(env.solverTimeoutMs, 600_000)   // at least 10 min with preferences
+            : Math.max(env.solverTimeoutMs, 480_000);  // at least 8 min without
 
         const mznPath = generator.generateToFile(analysis.document as never, analysis.tmpDir);
         const t0 = Date.now();
@@ -243,6 +245,6 @@ export async function solvePlanningSource(source: string, solver: string): Promi
             }
         };
     } finally {
-        rmSync(analysis.tmpDir, { recursive: true, force: true });
+        // rmSync(analysis.tmpDir, { recursive: true, force: true });
     }
 }
