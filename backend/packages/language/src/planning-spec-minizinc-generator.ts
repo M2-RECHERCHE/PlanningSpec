@@ -62,12 +62,18 @@ export class PlanningSpecMiniZincGenerator {
     // ------------------------------------------------
     const resourceTypeToInstances = new Map<string, string[]>(); // "Teacher" -> ["Prof_1", ...]
     const allResourceInstances: string[] = [];
+    const seenResourceInstances = new Set<string>();
 
     model.resources.resources.forEach((r: ResourceEntry) => {
       const rt = this.s(r.name);
       const insts = r.instances.map(inst => this.id(inst.name));
       resourceTypeToInstances.set(rt, insts);
-      insts.forEach(x => allResourceInstances.push(x));
+      insts.forEach(x => {
+        if (!seenResourceInstances.has(x)) {
+          seenResourceInstances.add(x);
+          allResourceInstances.push(x);
+        }
+      });
     });
 
     code += `enum RESOURCE = { ${allResourceInstances.join(', ')} };\n`;

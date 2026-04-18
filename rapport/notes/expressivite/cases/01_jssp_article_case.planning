@@ -1,0 +1,60 @@
+{
+  "time": {
+    "days": ["D1", "D2", "D3"],
+    "slotsPerDay": 8
+  },
+  "activities": {
+    "J1_O1": { "count": 1, "duration": 2 },
+    "J1_O2": { "count": 1, "duration": 2 },
+    "J1_O3": { "count": 1, "duration": 1 },
+    "J2_O1": { "count": 1, "duration": 2 },
+    "J2_O2": { "count": 1, "duration": 1 },
+    "J2_O3": { "count": 1, "duration": 2 },
+    "J3_O1": { "count": 1, "duration": 1 },
+    "J3_O2": { "count": 1, "duration": 2 },
+    "J3_O3": { "count": 1, "duration": 2 }
+  },
+  "resources": {
+    "Machine": ["M1", "M2", "M3"]
+  },
+  "roles": {},
+  "constraints": [
+    { "type": "cardinality_per_activity", "activity": "J1_O1", "target": "Machine", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "J1_O2", "target": "Machine", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "J1_O3", "target": "Machine", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "J2_O1", "target": "Machine", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "J2_O2", "target": "Machine", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "J2_O3", "target": "Machine", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "J3_O1", "target": "Machine", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "J3_O2", "target": "Machine", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "J3_O3", "target": "Machine", "min": 1, "max": 1 },
+
+    { "type": "required_resource", "activityInstance": "J1_O1_1", "resource": "M1" },
+    { "type": "required_resource", "activityInstance": "J1_O2_1", "resource": "M2" },
+    { "type": "required_resource", "activityInstance": "J1_O3_1", "resource": "M3" },
+    { "type": "required_resource", "activityInstance": "J2_O1_1", "resource": "M1" },
+    { "type": "required_resource", "activityInstance": "J2_O2_1", "resource": "M3" },
+    { "type": "required_resource", "activityInstance": "J2_O3_1", "resource": "M2" },
+    { "type": "required_resource", "activityInstance": "J3_O1_1", "resource": "M2" },
+    { "type": "required_resource", "activityInstance": "J3_O2_1", "resource": "M1" },
+    { "type": "required_resource", "activityInstance": "J3_O3_1", "resource": "M3" },
+
+    { "type": "instance_precedence", "beforeActivityInstance": "J1_O1_1", "afterActivityInstance": "J1_O2_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "J1_O2_1", "afterActivityInstance": "J1_O3_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "J2_O1_1", "afterActivityInstance": "J2_O2_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "J2_O2_1", "afterActivityInstance": "J2_O3_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "J3_O1_1", "afterActivityInstance": "J3_O2_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "J3_O2_1", "afterActivityInstance": "J3_O3_1" },
+
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "J1_O1", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "J1_O2", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "J1_O3", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "J2_O1", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "J2_O2", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "J2_O3", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "J3_O1", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "J3_O2", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "J3_O3", "scope": "slot", "max": 1 }
+  ],
+  "preferences": []
+}

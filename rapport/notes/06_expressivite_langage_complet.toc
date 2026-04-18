@@ -1,0 +1,40 @@
+\babel@toc {french}{}\relax 
+\contentsline {section}{\numberline {1}Introduction}{3}{section.1}%
+\contentsline {section}{\numberline {2}Périmètre d'expressivité}{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Objets modélisés}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Positionnement}{3}{subsection.2.2}%
+\contentsline {section}{\numberline {3}Modèle mathématique global}{3}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Ensembles et paramètres}{3}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Variables de décision}{4}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Contraintes structurelles générées systématiquement}{4}{subsection.3.3}%
+\contentsline {paragraph}{Non dépassement journalier}{4}{section*.2}%
+\contentsline {paragraph}{Non-chevauchement par ressource}{4}{section*.3}%
+\contentsline {paragraph}{Compatibilité rôles/ressources}{4}{section*.4}%
+\contentsline {section}{\numberline {4}Contraintes du DSL: sémantique et traduction MiniZinc}{4}{section.4}%
+\contentsline {subsection}{\numberline {4.1}\texttt {cardinality\_per\_activity}}{4}{subsection.4.1}%
+\contentsline {paragraph}{Cible type de ressource \(\tau \)}{4}{section*.7}%
+\contentsline {paragraph}{Cible rôle \(k\)}{5}{section*.8}%
+\contentsline {paragraph}{Cible \texttt {slot}}{5}{section*.9}%
+\contentsline {subsection}{\numberline {4.2}\texttt {resource\_exclusivity}}{5}{subsection.4.2}%
+\contentsline {paragraph}{Scope \texttt {slot}}{5}{section*.12}%
+\contentsline {paragraph}{Scope \texttt {day}}{5}{section*.13}%
+\contentsline {subsection}{\numberline {4.3}\texttt {fixed\_assignment}}{5}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}\texttt {forbidden\_assignment}}{5}{subsection.4.4}%
+\contentsline {subsection}{\numberline {4.5}\texttt {temporal\_precedence}}{6}{subsection.4.5}%
+\contentsline {subsection}{\numberline {4.6}\texttt {time\_window}}{6}{subsection.4.6}%
+\contentsline {subsection}{\numberline {4.7}\texttt {mandatory\_roles}}{6}{subsection.4.7}%
+\contentsline {subsection}{\numberline {4.8}\texttt {instance\_precedence}}{6}{subsection.4.8}%
+\contentsline {subsection}{\numberline {4.9}\texttt {required\_resource}}{6}{subsection.4.9}%
+\contentsline {section}{\numberline {5}Préférences: modélisation souple et fonction objectif}{7}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Principe}{7}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}\texttt {avoid\_participation\_on\_date}}{7}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}\texttt {max\_per\_scope}}{7}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}\texttt {preferred\_resource}}{8}{subsection.5.4}%
+\contentsline {section}{\numberline {6}Lien explicite entre DSL et fragments MiniZinc}{8}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Exemple de solve}{8}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Lecture logique}{8}{subsection.6.2}%
+\contentsline {section}{\numberline {7}Évaluation de robustesse et d'expressivité}{8}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Forces}{8}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Limites}{8}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Conclusion}{9}{subsection.7.3}%
+\contentsline {section}{\numberline {8}Annexe A: Récapitulatif synthétique des traductions}{9}{section.8}%

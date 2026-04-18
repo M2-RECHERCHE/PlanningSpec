@@ -1,0 +1,49 @@
+{
+  "time": {
+    "days": ["D1", "D2", "D3", "D4"],
+    "slotsPerDay": 6
+  },
+  "activities": {
+    "TaskA": { "count": 1, "duration": 2 },
+    "TaskB": { "count": 1, "duration": 2 },
+    "TaskC": { "count": 1, "duration": 3 },
+    "TaskD": { "count": 1, "duration": 2 }
+  },
+  "resources": {
+    "SkillCut": ["W1", "W2"],
+    "SkillAssemble": ["W2", "W3"],
+    "SkillTest": ["W3", "W4"]
+  },
+  "roles": {
+    "TaskA": { "Cut": "SkillCut" },
+    "TaskB": { "Assemble": "SkillAssemble" },
+    "TaskC": { "Cut": "SkillCut", "Assemble": "SkillAssemble" },
+    "TaskD": { "Test": "SkillTest" }
+  },
+  "constraints": [
+    { "type": "mandatory_roles", "activity": "TaskA" },
+    { "type": "mandatory_roles", "activity": "TaskB" },
+    { "type": "mandatory_roles", "activity": "TaskC" },
+    { "type": "mandatory_roles", "activity": "TaskD" },
+
+    { "type": "instance_precedence", "beforeActivityInstance": "TaskA_1", "afterActivityInstance": "TaskC_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "TaskB_1", "afterActivityInstance": "TaskC_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "TaskC_1", "afterActivityInstance": "TaskD_1" },
+
+    { "type": "cardinality_per_activity", "activity": "TaskA", "role": "Cut", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "TaskB", "role": "Assemble", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "TaskC", "role": "Cut", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "TaskC", "role": "Assemble", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "TaskD", "role": "Test", "min": 1, "max": 1 },
+
+    { "type": "resource_exclusivity", "resourceType": "SkillCut", "activity": "TaskA", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "SkillCut", "activity": "TaskC", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "SkillAssemble", "activity": "TaskB", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "SkillAssemble", "activity": "TaskC", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "SkillTest", "activity": "TaskD", "scope": "slot", "max": 1 }
+  ],
+  "preferences": [
+    { "type": "preferred_resource", "activityInstance": "TaskC_1", "role": "Cut", "resource": "W1", "weight": 2 },
+    { "type": "preferred_resource", "activityInstance": "TaskC_1", "role": "Assemble", "resource": "W2", "weight": 2 }
+  ]
+}

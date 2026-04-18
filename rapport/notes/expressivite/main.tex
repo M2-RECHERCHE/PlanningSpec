@@ -1,0 +1,390 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{seqsplit}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\geometry{a4paper, margin=2.5cm}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!8},
+  showstringspaces=false
+}
+
+\newtheorem{definition}{Définition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remarque}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\title{Étude Scientifique de l'Expressivité du DSL \texttt{PlanningSpec}}
+\author{Projet M2 Recherche -- DSL de planification déclarative}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introduction}
+La modélisation déclarative des problèmes de planification est reconnue comme un verrou méthodologique: la puissance des solveurs ne suffit pas si la spécification du problème reste difficile à formaliser pour les experts métier \cite{marriott1998cp,constraintllm2025}. Les travaux récents confirment cet enjeu, en particulier dans les approches NL-to-CP où la qualité de la modélisation demeure le facteur limitant \cite{text2zinc2025,song2025llmcp,szeider2025mcp}.
+
+Ce rapport répond à la question suivante:
+\begin{quote}
+\emph{Le langage \texttt{PlanningSpec} est-il suffisamment expressif pour encoder, de manière rigoureuse, des classes de problèmes de planification issues de la littérature?}
+\end{quote}
+
+Notre contribution dans ce document est de:
+\begin{enumerate}[label=\textbf{C\arabic*.}]
+  \item définir formellement la notion d'expressivité utilisée pour l'évaluation;
+  \item caractériser la contribution de chaque contrainte/préférence du DSL à cette expressivité;
+  \item démontrer l'encodage de cas représentatifs de la littérature (JSSP, RCPSP, planification académique);
+  \item fournir les fichiers \texttt{.planning} reproductibles correspondant à ces démonstrations.
+\end{enumerate}
+
+\section{Cadre scientifique et positionnement}
+\subsection{Références de base}
+Nous nous appuyons sur trois blocs de littérature:
+\begin{itemize}
+  \item \textbf{Langages de modélisation CP}: MiniZinc comme référence solver-agnostic \cite{nethercote2007minizinc}.
+  \item \textbf{Problèmes de planification}: JSSP et sa taxonomie de contraintes/objectifs \cite{abdolrazzagh2017jssp}, complexité NP-difficile \cite{garey1976jssp}, et variantes RCPSP rapportées dans la revue systématique interne.
+  \item \textbf{Assistants de modélisation récents}: Text2Zinc, ConstraintLLM, MCP-Solver, qui motivent un DSL explicite et validable \cite{text2zinc2025,constraintllm2025,szeider2025mcp}.
+\end{itemize}
+
+\subsection{Unité d'analyse}
+L'unité d'analyse est le couple:
+\[
+(\texttt{Grammaire PlanningSpec},\ \texttt{Compilation MiniZinc})
+\]
+L'expressivité ne se réduit donc pas à la syntaxe; elle inclut la capacité de traduction en contraintes exécutables.
+
+\section{Notion d'expressivité: définitions}
+\begin{definition}[Expressivité syntaxique]
+Un DSL est syntaxiquement expressif pour une famille de problèmes si chaque concept métier critique (temps, ressources, précédences, capacités, préférences) dispose d'un construct explicite et non ambigu.
+\end{definition}
+
+\begin{definition}[Expressivité sémantique]
+Un DSL est sémantiquement expressif si ses constructs peuvent être compilés en contraintes logiques/mathématiques préservant l'intention du modèle.
+\end{definition}
+
+\begin{definition}[Expressivité compositionnelle]
+Un DSL est compositionnellement expressif si plusieurs contraintes peuvent être combinées sans contradiction systématique du formalisme et sans perdre la capacité de résolution.
+\end{definition}
+
+\begin{definition}[Expressivité opérationnelle]
+Un DSL est opérationnellement expressif s'il permet de produire un modèle effectivement résoluble par un solveur générique (ici MiniZinc + solveur CP).
+\end{definition}
+
+\section{Modèle formel global de \texttt{PlanningSpec}}
+On note:
+\begin{align*}
+&\mathcal{A} &&\text{: ensemble des instances d'activités} \\
+&\mathcal{R} &&\text{: ensemble des ressources} \\
+&\mathcal{K} &&\text{: ensemble des rôles} \\
+&H &&\text{: horizon discret (slots)} \\
+&d_i &&\text{: durée de l'activité } i\in\mathcal{A}
+\end{align*}
+
+Variables:
+\begin{align*}
+&s_i \in \{1,\dots,H\} &&\text{(début)} \\
+&x_{i,r}\in\{0,1\} &&\text{(ressource }r\text{ affectée à }i) \\
+&y_{i,k,r}\in\{0,1\} &&\text{(ressource }r\text{ affectée au rôle }k\text{ de }i)
+\end{align*}
+
+Contraintes structurelles compilées:
+\begin{enumerate}
+  \item non-dépassement journalier des activités;
+  \item non-chevauchement d'une même ressource;
+  \item cohérence rôle--type de ressource;
+  \item cohérence \texttt{role\_assignment} $\Rightarrow$ \texttt{assignment}.
+\end{enumerate}
+
+\section{Contribution de chaque contrainte à l'expressivité}
+\subsection{Contraintes dures}
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{L{0.26\textwidth} X X}
+\toprule
+\textbf{Contrainte DSL} & \textbf{Rôle scientifique} & \textbf{Contribution à l'expressivité} \\
+\midrule
+\texttt{\seqsplit{cardinality\_per\_activity}} & Encodage d'arité de participation (ressource/rôle) & Permet les exigences quantitatives (ex. 1 président, 2 opérateurs) \\
+\texttt{\seqsplit{resource\_exclusivity}} & Capacité locale slot/jour par type de ressource & Modélise les ressources renouvelables et conflits d'utilisation \\
+\texttt{\seqsplit{fixed\_assignment}} & Affectation imposée & Représente les obligations organisationnelles fortes \\
+\texttt{\seqsplit{forbidden\_assignment}} & Affectation interdite & Exprime incompatibilités réglementaires/techniques \\
+\texttt{\seqsplit{temporal\_precedence}} & Ordre global inter-types d'activités & Capture contraintes de phases et dépendances macro \\
+\texttt{\seqsplit{instance\_precedence}} & Ordre fin entre instances & Capture les graphes de précédence de type JSSP/RCPSP \\
+\texttt{\seqsplit{time\_window}} & Fenêtre temporelle bornée & Exprime dates de disponibilité et fenêtres contractuelles \\
+\texttt{\seqsplit{mandatory\_roles}} & Rôles obligatoires & Garantit la complétude structurelle des activités complexes \\
+\texttt{\seqsplit{required\_resource}} & Ressource explicitement requise & Permet routage machine/opération, affectations matérielles imposées \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Préférences (soft constraints)}
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{L{0.26\textwidth} X X}
+\toprule
+\textbf{Préférence DSL} & \textbf{Rôle scientifique} & \textbf{Contribution à l'expressivité} \\
+\midrule
+\texttt{\seqsplit{avoid\_participation\_on\_date}} & Indisponibilité souple datée & Introduit flexibilité sans rendre le modèle infaisable \\
+\texttt{\seqsplit{max\_per\_scope}} & Plafonnement souple par jour/slot & Permet équilibrage de charge et robustesse organisationnelle \\
+\texttt{\seqsplit{preferred\_resource}} & Préférence d'affectation & Modélise qualité de solution et satisfaction métier \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Traduction MiniZinc et logique mathématique}
+La compilation suit une logique CP classique \cite{nethercote2007minizinc,marriott1998cp}. Exemples centraux:
+
+\paragraph{Cardinalité par activité et type \(\tau\)}
+\[
+\forall i\in\mathcal{A}(a):\quad m \le \sum_{r\in\mathcal{R}_{\tau}} x_{i,r} \le M
+\]
+
+\paragraph{Exclusivité ressource (scope slot)}
+\[
+\forall r,\forall t:\quad
+\sum_{i\in\mathcal{A}(a)} \mathbf{1}[x_{i,r}=1 \land s_i\le t<s_i+d_i] \le M
+\]
+
+\paragraph{Précédence d'instances}
+\[
+s_{i_b}+d_{i_b}\le s_{i_a}
+\]
+
+\paragraph{Préférences agrégées}
+\[
+\texttt{penalty}=\sum_\ell P_\ell,\qquad
+\texttt{solve minimize penalty}
+\]
+(ou \texttt{satisfy} en absence de préférences).
+
+\section{Formalisation détaillée des contraintes et préférences}
+Cette section explicite, pour chaque construct du DSL, son intérêt scientifique, sa nécessité pratique, et sa formulation mathématique.
+
+\subsection{Contraintes dures}
+\subsubsection{\texttt{cardinality\_per\_activity}}
+\textbf{Pourquoi c'est nécessaire.}
+Les problèmes de planification imposent souvent des exigences quantitatives minimales et maximales par activité (nombre d'opérateurs, nombre de rôles, etc.), point central dans les formulations RCPSP/JSSP étendues \cite{abdolrazzagh2017jssp,torba2024msrcmpsp}.
+
+\textbf{Formulation.}
+Pour une activité \(a\), une instance \(i\in\mathcal{A}(a)\), une borne \([m,M]\):
+\[
+m \le \sum_{r\in\mathcal{R}_\tau} x_{i,r} \le M
+\]
+ou, pour un rôle \(k\):
+\[
+m \le \sum_{r\in\mathcal{R}_{type(k)}} y_{i,k,r} \le M.
+\]
+
+\subsubsection{\texttt{resource\_exclusivity}}
+\textbf{Pourquoi c'est nécessaire.}
+La capacité finie des ressources renouvelables est la contrainte structurante des modèles de scheduling: une machine/ressource ne peut exécuter plusieurs tâches concurrentes au-delà de sa capacité \cite{marriott1998cp,abdolrazzagh2017jssp}.
+
+\textbf{Formulation (scope slot).}
+\[
+\forall r\in\mathcal{R}_\tau,\ \forall t\in\{1,\dots,H\}:\ 
+\sum_{i\in\mathcal{A}(a)} \mathbf{1}[x_{i,r}=1\land s_i\le t<s_i+d_i] \le M.
+\]
+
+\subsubsection{\texttt{fixed\_assignment} et \texttt{forbidden\_assignment}}
+\textbf{Pourquoi c'est nécessaire.}
+Les cas réels imposent des obligations d'affectation (certification, habilitation, disponibilité contractuelle) et des incompatibilités explicites \cite{torba2024msrcmpsp,snauwaert2025hskills}.
+
+\textbf{Formulation.}
+\[
+\texttt{fixed: } x_{i,r}=1\ (\text{et }y_{i,k,r}=1\text{ si rôle}),\qquad
+\texttt{forbidden: } y_{i,k,r}=0.
+\]
+
+\subsubsection{\texttt{temporal\_precedence} et \texttt{instance\_precedence}}
+\textbf{Pourquoi c'est nécessaire.}
+Les contraintes de précédence modélisent la logique technologique et organisationnelle du flux de production/projet \cite{garey1976jssp,abdolrazzagh2017jssp}.
+
+\textbf{Formulation.}
+\[
+\texttt{temporal\_precedence: }\forall i\in\mathcal{A}(a_b),\forall j\in\mathcal{A}(a_a),\ s_i+d_i\le s_j
+\]
+\[
+\texttt{instance\_precedence: } s_{i_b}+d_{i_b}\le s_{i_a}.
+\]
+
+\subsubsection{\texttt{time\_window}}
+\textbf{Pourquoi c'est nécessaire.}
+Les fenêtres calendaires représentent disponibilités, jalons et contraintes d'ouverture atelier/salle \cite{torba2024msrcmpsp}.
+
+\textbf{Formulation.}
+\[
+L \le s_i,\qquad s_i+d_i-1 \le U.
+\]
+
+\subsubsection{\texttt{mandatory\_roles}}
+\textbf{Pourquoi c'est nécessaire.}
+Dans les activités multi-rôles (maintenance spécialisée, jury académique), la faisabilité métier exige la couverture de chaque rôle clé.
+
+\textbf{Formulation.}
+\[
+\forall i\in\mathcal{A}(a),\forall k\in\mathcal{K}(a):\ \sum_{r\in\mathcal{R}} y_{i,k,r}\ge 1.
+\]
+
+\subsubsection{\texttt{required\_resource}}
+\textbf{Pourquoi c'est nécessaire.}
+Permet d'encoder explicitement les opérations qui requièrent une ressource déterminée (routage machine/opération), typique des problèmes job-shop.
+
+\textbf{Formulation.}
+\[
+x_{i,r}=1.
+\]
+
+\subsection{Préférences (soft constraints)}
+\subsubsection{\texttt{avoid\_participation\_on\_date}}
+\textbf{Pourquoi c'est nécessaire.}
+Les indisponibilités souhaitées (et non strictes) sont fréquentes. Les modéliser en pénalité améliore l'acceptabilité du planning sans casser la faisabilité \cite{torba2024msrcmpsp}.
+
+\textbf{Formulation.}
+\[
+P = w\cdot \mathbf{1}\!\left[\sum_{i\in\mathcal{A}}\mathbf{1}[x_{i,r}=1\land dayOf(s_i)=q] > 0\right].
+\]
+
+\subsubsection{\texttt{max\_per\_scope}}
+\textbf{Pourquoi c'est nécessaire.}
+Cette préférence sert au lissage de charge (workload balancing) et à la robustesse opérationnelle.
+
+\textbf{Formulation (slot).}
+\[
+P=\sum_{r,t} w\cdot \max\!\left(0,\sum_{i\in\mathcal{A}(a)}\mathbf{1}[x_{i,r}=1\land s_i\le t<s_i+d_i]-M\right).
+\]
+
+\subsubsection{\texttt{preferred\_resource}}
+\textbf{Pourquoi c'est nécessaire.}
+Représente les choix de qualité de service/expérience locale tout en restant flexible.
+
+\textbf{Formulation.}
+\[
+P =
+\begin{cases}
+w\cdot \mathbf{1}[y_{i,k,r}=0], & \text{si rôle explicite}\\
+w\cdot \mathbf{1}[x_{i,r}=0], & \text{sinon}
+\end{cases}
+\]
+
+\subsection{Objectif global}
+Le solveur minimise la pénalité agrégée:
+\[
+\min \sum_{\ell} P_\ell
+\]
+ou recherche une solution faisable (\texttt{satisfy}) s'il n'existe aucune préférence. Ce choix est cohérent avec une stratégie de planification d'abord faisable puis améliorable, courante en CP appliquée \cite{nethercote2007minizinc,constraintllm2025}.
+
+\section{Démonstrations sur des cas de la littérature}
+\subsection{Cas A -- JSSP (article de synthèse)}
+Le JSSP est caractérisé par des opérations ordonnées par job, des ressources machine unitaires, et un horizon commun \cite{abdolrazzagh2017jssp,garey1976jssp}. Notre encodage utilise:
+\begin{itemize}
+  \item \texttt{instance\_precedence} pour les routes d'opérations;
+  \item \texttt{required\_resource} pour la machine de chaque opération;
+  \item \texttt{resource\_exclusivity} + non-chevauchement global pour la capacité machine;
+  \item \texttt{cardinality\_per\_activity} pour imposer 1 machine/opération.
+\end{itemize}
+
+\paragraph{Fichier de démonstration}
+\texttt{cases/01\_jssp\_article\_case.planning}
+
+\lstinputlisting{cases/01_jssp_article_case.planning}
+
+\begin{proposition}
+Sous l'hypothèse d'une route machine fixée par opération, le fichier JSSP fourni réalise un encodage CP cohérent des contraintes structurelles usuelles du JSSP (précédence intra-job, non-conflit machine, durée).
+\end{proposition}
+
+\subsection{Cas B -- RCPSP (dépendances + ressources renouvelables)}
+Dans l'esprit des formulations RCPSP (et des encodages SAT/SMT recensés dans la revue interne), nous modélisons:
+\begin{itemize}
+  \item un graphe de précédence de projet;
+  \item des demandes de ressources renouvelables (workers, grue);
+  \item des fenêtres temporelles partielles;
+  \item une préférence de lissage de charge.
+\end{itemize}
+
+\paragraph{Fichier de démonstration}
+\texttt{cases/02\_rcpsp\_article\_case.planning}
+
+\lstinputlisting{cases/02_rcpsp_article_case.planning}
+
+\begin{proposition}
+Le cas RCPSP encode simultanément précédences, capacités et fenêtres, ce qui montre la capacité compositionnelle du DSL sur des contraintes hétérogènes.
+\end{proposition}
+
+\subsection{Cas C -- Planification académique à rôles}
+Ce cas illustre l'expressivité spécifique du DSL pour des problèmes institutionnels (jurys/soutenances):
+\begin{itemize}
+  \item rôles obligatoires (\texttt{mandatory\_roles});
+  \item cardinalités par rôle;
+  \item exclusivité enseignant/salle;
+  \item préférences personnelles (jour à éviter, ressource préférée).
+\end{itemize}
+
+\paragraph{Fichier de démonstration}
+\texttt{cases/03\_academic\_planning\_case.planning}
+
+\lstinputlisting{cases/03_academic_planning_case.planning}
+
+\begin{proposition}
+La combinaison contraintes dures + préférences pondérées permet d'exprimer la faisabilité institutionnelle et la qualité d'usage dans un même modèle.
+\end{proposition}
+
+\section{Discussion scientifique}
+\subsection{Ce qui est prouvé par les démonstrations}
+Les trois cas montrent que \texttt{PlanningSpec} couvre explicitement:
+\begin{enumerate}
+  \item précédence et temporalité;
+  \item capacité/partage de ressources;
+  \item affectations forcées/interdites;
+  \item séparation dur/souple et optimisation par pénalité.
+\end{enumerate}
+Ces dimensions correspondent aux briques centrales des formulations de planification combinatoire \cite{abdolrazzagh2017jssp,marriott1998cp}.
+
+\subsection{Limites actuelles}
+\begin{itemize}
+  \item objectif \texttt{makespan} non activé par défaut (choix pragmatique pour limiter l'explosion combinatoire);
+  \item \texttt{temporal\_precedence} est global (all-to-all) et peut être trop fort selon le domaine;
+  \item certaines vérifications sémantiques avancées (cycles, cohérence référentielle exhaustive) peuvent être renforcées.
+\end{itemize}
+
+\subsection{Menaces à la validité}
+\begin{itemize}
+  \item les cas d'étude sont représentatifs mais de taille réduite;
+  \item certaines références récentes (LLM+CP) restent prépublications;
+  \item l'évaluation porte sur l'expressivité et non sur un benchmark de performance exhaustif.
+\end{itemize}
+
+\section{Conclusion}
+Au sens des définitions proposées (syntaxique, sémantique, compositionnelle, opérationnelle), \texttt{PlanningSpec} est expressif pour une large classe de problèmes de planification discrète à ressources contraintes. Les encodages fournis montrent la transposition effective de cas de littérature vers des modèles exécutables.
+
+La suite scientifique naturelle est:
+\begin{enumerate}
+  \item ajouter des objectifs multi-critères explicites (e.g., makespan + pénalités),
+  \item enrichir la validation statique du DSL,
+  \item conduire une campagne expérimentale comparative sur jeux d'instances standard.
+\end{enumerate}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

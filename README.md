@@ -95,6 +95,11 @@ pnpm langium:generate
 pnpm test
 ```
 
+## Release
+
+- Procédure complète de versioning/tagging: `docs/RELEASE_TAGGING.md`
+- Historique des versions: `CHANGELOG.md`
+
 ## Variables d'environnement
 
 ### Backend — `backend/packages/server/.env.example`

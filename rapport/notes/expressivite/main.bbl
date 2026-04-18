@@ -1,0 +1,50 @@
+\begin{thebibliography}{10}
+
+\bibitem{abdolrazzagh2017jssp}
+Majid Abdolrazzagh-Nezhad and Salwani Abdullah.
+\newblock Job shop scheduling: Classification, constraints and objective functions.
+\newblock {\em International Journal of Computer, Electrical, Automation, Control and Information Engineering}, 11(4), 2017.
+
+\bibitem{garey1976jssp}
+Michael~R. Garey, David~S. Johnson, and Ravi Sethi.
+\newblock The complexity of flowshop and jobshop scheduling.
+\newblock {\em Mathematics of Operations Research}, 1(2):117--129, 1976.
+
+\bibitem{marriott1998cp}
+Kim Marriott and Peter~J. Stuckey.
+\newblock {\em Programming with Constraints: An Introduction}.
+\newblock MIT Press, 1998.
+
+\bibitem{nethercote2007minizinc}
+Nicholas Nethercote, Peter~J. Stuckey, Ralph Becket, Sebastian Brand, Gregory~J. Duck, and Guido Tack.
+\newblock Minizinc: Towards a standard cp modelling language.
+\newblock In {\em Principles and Practice of Constraint Programming (CP)}. Springer, 2007.
+
+\bibitem{constraintllm2025}
+Weichun Shi, Minghao Liu, Wanting Zhang, Langchen Shi, Fuqi Jia, Feifei Ma, and Jian Zhang.
+\newblock Constraintllm: A neuro-symbolic framework for industrial-level constraint programming.
+\newblock In {\em Proceedings of EMNLP}, pages 15999--16019, 2025.
+
+\bibitem{text2zinc2025}
+Akash Singirikonda, Serdar Kadioglu, and Karthik Uppuluri.
+\newblock Text2zinc: A cross-domain dataset for modeling optimization and satisfaction problems in minizinc, 2025.
+
+\bibitem{snauwaert2025hskills}
+Jakob Snauwaert and Mario Vanhoucke.
+\newblock A solution framework for multi-skilled project scheduling problems with hierarchical skills.
+\newblock {\em Journal of Scheduling}, 28:289--310, 2025.
+
+\bibitem{song2025llmcp}
+Yuliang Song and Eldan Cohen.
+\newblock Do llms understand constraint programming? zero-shot constraint programming model generation using llms, 2025.
+
+\bibitem{szeider2025mcp}
+Stefan Szeider.
+\newblock Mcp-solver: Integrating language models with constraint programming systems, 2025.
+
+\bibitem{torba2024msrcmpsp}
+Rahman Torba, St{\'e}phane Dauz{\`e}re-P{\'e}r{\`e}s, Claude Yugma, C{\'e}dric Gallais, and Juliette Pouzet.
+\newblock Solving a real-life multi-skill resource-constrained multi-project scheduling problem.
+\newblock {\em Annals of Operations Research}, 338:69--114, 2024.
+
+\end{thebibliography}
