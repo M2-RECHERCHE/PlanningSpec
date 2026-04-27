@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { api, getBackendError, setAuthToken, type BackendErrorPayload } from '../lib/api';
 import { buildRoute, hasExplicitHashRoute, readCurrentRoute, type AppRoute } from '../lib/routing';
 import { User, Planning, Badge, PlanStatus, PlanningSolveResult } from '../types';
@@ -85,6 +85,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedPlanning, setSelectedPlanning] = useState<Planning | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const userRef = useRef<User | null>(null);
+  const planningsRef = useRef<Planning[]>([]);
+
+  userRef.current = user;
+  planningsRef.current = plannings;
 
   const toast = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now().toString();
@@ -101,9 +106,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     applyRouteState(readCurrentRoute(), nextPlannings);
   }, [applyRouteState]);
 
-  const syncRouteFromLocation = useCallback((nextPlannings: Planning[] = plannings) => {
-    applyRouteState(readCurrentRoute(), nextPlannings);
-  }, [applyRouteState, plannings]);
+  const syncRouteFromLocation = useCallback((nextPlannings?: Planning[]) => {
+    applyRouteState(readCurrentRoute(), nextPlannings ?? planningsRef.current);
+  }, [applyRouteState]);
 
   const updateLocation = useCallback((page: string, params?: { projectId?: string; planningId?: string }, replace = false) => {
     if (typeof window === 'undefined') {
@@ -145,7 +150,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [clearSession, toast]);
 
   const loadAppData = useCallback(async (options?: { userOverride?: User | null }) => {
-    const effectiveUser = options?.userOverride ?? user;
+    const effectiveUser = options?.userOverride ?? userRef.current;
     if (!effectiveUser) {
       setPlannings([]);
       return;
@@ -167,7 +172,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toast(backendError.message, 'error');
       }
     }
-  }, [handlePossibleAuthError, syncRouteFromLocation, toast, user]);
+  }, [handlePossibleAuthError, syncRouteFromLocation, toast]);
 
   const refreshData = useCallback(async () => {
     await loadAppData();

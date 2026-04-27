@@ -2768,6 +2768,42 @@ export const PlanningEditorPage: React.FC = () => {
     () => [...jsonValidationMarkers, ...semanticValidationMarkers],
     [jsonValidationMarkers, semanticValidationMarkers]
   );
+  const areMarkersEqual = useCallback(
+    (
+      left: Array<{ severity: number; message: string; startLineNumber: number; startColumn: number }>,
+      right: Array<{ severity: number; message: string; startLineNumber: number; startColumn: number }>
+    ) => {
+      if (left.length !== right.length) {
+        return false;
+      }
+      for (let index = 0; index < left.length; index += 1) {
+        const l = left[index];
+        const r = right[index];
+        if (
+          l.severity !== r.severity
+          || l.message !== r.message
+          || l.startLineNumber !== r.startLineNumber
+          || l.startColumn !== r.startColumn
+        ) {
+          return false;
+        }
+      }
+      return true;
+    },
+    []
+  );
+  const updateJsonValidationMarkers = useCallback(
+    (next: Array<{ severity: number; message: string; startLineNumber: number; startColumn: number }>) => {
+      setJsonValidationMarkers(prev => (areMarkersEqual(prev, next) ? prev : next));
+    },
+    [areMarkersEqual]
+  );
+  const updateSemanticValidationMarkers = useCallback(
+    (next: Array<{ severity: number; message: string; startLineNumber: number; startColumn: number }>) => {
+      setSemanticValidationMarkers(prev => (areMarkersEqual(prev, next) ? prev : next));
+    },
+    [areMarkersEqual]
+  );
 
   // Live solve timer — starts when editorSolving becomes true, stops on false
   useEffect(() => {
@@ -2810,8 +2846,8 @@ export const PlanningEditorPage: React.FC = () => {
     setDslSource(canonicalSource);
     setFormData(nextFormData);
     setEditorError(null);
-    setJsonValidationMarkers([]);
-    setSemanticValidationMarkers([]);
+    updateJsonValidationMarkers([]);
+    updateSemanticValidationMarkers([]);
     lastSyncedDslRef.current = canonicalSource;
 
     if (!options?.persist) {
@@ -2839,7 +2875,7 @@ export const PlanningEditorPage: React.FC = () => {
       toast(options.toastMessage, 'success');
     }
     return true;
-  }, [formData, savePlanningData, selectedPlanning, toast]);
+  }, [formData, savePlanningData, selectedPlanning, toast, updateJsonValidationMarkers, updateSemanticValidationMarkers]);
 
   useEffect(() => {
     if (!selectedPlanning) {
@@ -2855,8 +2891,8 @@ export const PlanningEditorPage: React.FC = () => {
     setFormData(nextFormData);
     setDslSource(getStoredDslSource(selectedPlanning, nextFormData));
     setDslDirty(false);
-    setJsonValidationMarkers([]);
-    setSemanticValidationMarkers([]);
+    updateJsonValidationMarkers([]);
+    updateSemanticValidationMarkers([]);
     setSolverOutput(selectedPlanning.solutionOutput ?? null);
     setSolverWarnings(selectedPlanning.solutionWarnings ?? []);
     setEditorError(null);
@@ -2864,7 +2900,7 @@ export const PlanningEditorPage: React.FC = () => {
     planningHydratedRef.current = selectedPlanning.id;
     lastSyncedDslRef.current = getStoredDslSource(selectedPlanning, nextFormData);
     lastPersistedDslRef.current = getStoredDslSource(selectedPlanning, nextFormData);
-  }, [selectedPlanning]);
+  }, [selectedPlanning, updateJsonValidationMarkers, updateSemanticValidationMarkers]);
 
   useEffect(() => {
     if (!selectedPlanning) {
@@ -2929,13 +2965,13 @@ export const PlanningEditorPage: React.FC = () => {
     }
 
     if (!selectedPlanning || !dslSource.trim()) {
-      setSemanticValidationMarkers([]);
+      updateSemanticValidationMarkers([]);
       return;
     }
 
     const jsonErrorCount = jsonValidationMarkers.filter(marker => marker.severity === 8).length;
     if (jsonErrorCount > 0) {
-      setSemanticValidationMarkers([]);
+      updateSemanticValidationMarkers([]);
       setEditorError(null);
       return;
     }
@@ -2951,7 +2987,7 @@ export const PlanningEditorPage: React.FC = () => {
           const message = error instanceof Error ? error.message : 'Source invalide.';
           const position = getJsonErrorPosition(dslSource, message);
           setEditorError(message);
-          setSemanticValidationMarkers([{
+          updateSemanticValidationMarkers([{
             severity: 8,
             message,
             startLineNumber: position.line,
@@ -2970,7 +3006,7 @@ export const PlanningEditorPage: React.FC = () => {
 
       try {
         await api.post('/api/validate-source', { source: canonicalSource });
-        setSemanticValidationMarkers([]);
+        updateSemanticValidationMarkers([]);
         setEditorError(null);
 
         if (canonicalSource !== lastSyncedDslRef.current) {
@@ -2990,7 +3026,7 @@ export const PlanningEditorPage: React.FC = () => {
             startColumn: match ? Number(match[2]) : 1,
           };
         });
-        setSemanticValidationMarkers(nextMarkers);
+        updateSemanticValidationMarkers(nextMarkers);
         if (nextMarkers.length > 0) {
           setShowConsole(true);
           setConsoleTab('errors');
@@ -2999,7 +3035,7 @@ export const PlanningEditorPage: React.FC = () => {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [dslSource, selectedPlanning, formData, jsonValidationMarkers]);
+  }, [dslSource, selectedPlanning, formData, jsonValidationMarkers, updateSemanticValidationMarkers]);
 
   useEffect(() => {
     if (!editorInstanceRef.current || !monacoRef.current) {
@@ -3612,7 +3648,7 @@ export const PlanningEditorPage: React.FC = () => {
                 }}
                 onValidate={(markers) => {
                   const relevant = markers.filter((marker) => marker.severity >= 4);
-                  setJsonValidationMarkers(relevant.map(marker => ({
+                  updateJsonValidationMarkers(relevant.map(marker => ({
                     severity: marker.severity,
                     message: marker.message,
                     startLineNumber: marker.startLineNumber,

@@ -61,6 +61,15 @@ function isUnsatisfiableOutput(stdout: string): boolean {
     return normalized.includes('UNSATISFIABLE');
 }
 
+function isUnknownOutput(stdout: string, stderrWarnings: string[]): boolean {
+    const normalized = stdout.toUpperCase();
+    if (normalized.includes('=====UNKNOWN=====') || normalized.includes('UNKNOWN')) {
+        return true;
+    }
+
+    return stderrWarnings.some(line => /timeout|time limit|unknown/i.test(line));
+}
+
 async function analyzePlanningSource(source: string): Promise<{ ok: true; document: unknown; tmpDir: string } | { ok: false; error: SolveFailure; tmpDir: string }> {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'planning-spec-'));
 
@@ -171,11 +180,9 @@ export async function solvePlanningSource(source: string, solver: string): Promi
     }
 
     try {
-        // Preferences add soft constraints that require minimisation — enforce a higher floor.
-        const hasPreferences = /preferences\s*\[\s*\{/.test(source);
-        const timeoutMs = hasPreferences
-            ? Math.max(env.solverTimeoutMs, 600_000)   // at least 10 min with preferences
-            : Math.max(env.solverTimeoutMs, 480_000);  // at least 8 min without
+        // Keep solver runs alive long enough on dense instances.
+        const minimumTimeoutMs = 3_600_000; // 1 hour
+        const timeoutMs = Math.max(env.solverTimeoutMs, minimumTimeoutMs);
 
         const mznPath = generator.generateToFile(analysis.document as never, analysis.tmpDir);
         const t0 = Date.now();
@@ -201,6 +208,37 @@ export async function solvePlanningSource(source: string, solver: string): Promi
                         ...warnings
                     ],
                     hint: 'Vérifie les capacités disponibles, les cardinalités par rôle et les contraintes d’exclusivité.'
+                }
+            };
+        }
+
+        if (isUnknownOutput(trimmedOutput, warnings)) {
+            return {
+                ok: false,
+                error: {
+                    status: 422,
+                    code: 'SOLVER_TIMEOUT_OR_UNKNOWN',
+                    message: 'Le solveur n’a pas pu conclure dans les limites de calcul.',
+                    details: [
+                        'MiniZinc a retourné un état UNKNOWN (pas de solution prouvée).',
+                        ...warnings
+                    ],
+                    hint: 'Réduis la taille du modèle (instances/contraintes) ou relance avec un solveur plus adapté.'
+                }
+            };
+        }
+
+        if (!trimmedOutput) {
+            return {
+                ok: false,
+                error: {
+                    status: 422,
+                    code: 'EMPTY_SOLVER_OUTPUT',
+                    message: 'Le solveur n’a produit aucune sortie exploitable.',
+                    details: warnings.length > 0
+                        ? warnings
+                        : ['MiniZinc a terminé sans sortie, ce qui indique généralement une résolution incomplète ou interrompue.'],
+                    hint: 'Vérifie les logs du solveur et essaie un solveur différent (ex: Highs/Gecode).'
                 }
             };
         }
