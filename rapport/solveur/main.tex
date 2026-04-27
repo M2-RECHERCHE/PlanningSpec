@@ -1,0 +1,314 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{pdflscape}
+\usepackage{makecell}
+
+\geometry{margin=2.5cm}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue,
+  pdftitle={Justification du choix du solveur HiGHS pour la plateforme DSL-MiniZinc}
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  frame=single,
+  columns=fullflexible,
+  breaklines=true
+}
+
+\newtheorem{definition}{Définition}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{remark}{Remarque}[section]
+
+\title{Justification du Choix du Solveur HiGHS\\pour une Plateforme de Planification DSL $\rightarrow$ MiniZinc}
+\author{}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\clearpage
+
+\begin{abstract}
+Cette section autonome justifie le choix actuel du solveur HiGHS pour une plateforme qui transforme des instances de planification \texttt{.planning} en modèles MiniZinc. L'argument principal est structurel : la formulation générée est majoritairement composée de variables binaires et de contraintes linéaires ou linéarisables, ce qui la rapproche d'un modèle MILP. La justification reste volontairement nuancée : HiGHS est le solveur le plus adapté à la formulation actuelle, sans prétendre qu'il soit universellement optimal pour toutes les variantes de problèmes de planning.
+\end{abstract}
+
+\tableofcontents
+\clearpage
+
+\section{Contexte et objectif}
+
+La plateforme étudiée suit la chaîne de traitement suivante : un fichier DSL \texttt{.planning} est analysé, traduit en MiniZinc, aplati par le compilateur MiniZinc, puis transmis à un solveur. MiniZinc peut cibler plusieurs solveurs, notamment HiGHS, Gecode, Chuffed, OR-Tools CP-SAT, CBC, SCIP, Gurobi et CPLEX, selon la configuration disponible \cite{minizinc-solvers,minizinc-downloads}.
+
+Tous ces solveurs ne sont pas équivalents sur une même instance. Le point clé est le suivant :
+\begin{quote}
+Le choix du solveur ne dépend pas uniquement de la nature générale du problème de planification, mais aussi de la manière dont ce problème est représenté dans MiniZinc.
+\end{quote}
+
+L'objectif de cette section est donc d'établir, avec un raisonnement explicite, pourquoi HiGHS apparaît actuellement comme le solveur le plus cohérent avec la formulation produite par la plateforme.
+
+\section{Nature du modèle généré par la plateforme}
+
+\subsection{Paramètres de taille et familles de variables}
+
+On introduit les paramètres :
+\[
+A=\text{nombre d'activités},\quad
+R=\text{nombre de ressources},\quad
+K=\text{nombre de rôles},\quad
+T=\text{nombre de slots temporels}.
+\]
+
+Les variables majeures du modèle sont typiquement :
+\begin{itemize}
+  \item \texttt{start\_time[a]} : variable entière (ou discrète) de début de l'activité $a$ ;
+  \item \texttt{assignment[a,r]} : booléen d'affectation activité--ressource ;
+  \item \texttt{role\_assignment[a,k,r]} : booléen d'affectation activité--rôle--ressource.
+\end{itemize}
+
+\begin{proposition}[Comptage des variables principales]
+Sous cette modélisation,
+\[
+N_{\text{start}}=A,\quad N_{\text{assign}}=A\times R,\quad N_{\text{role}}=A\times K\times R,
+\]
+et
+\[
+N_{\text{variables}}=A+A\times R+A\times K\times R.
+\]
+\end{proposition}
+
+\begin{proof}
+Le résultat suit directement du nombre d'indices nécessaires pour instancier chaque famille de variables : un indice pour \texttt{start\_time}, deux indices pour \texttt{assignment}, et trois indices pour \texttt{role\_assignment}. La somme donne le total.
+\end{proof}
+
+\subsection{Structure des contraintes}
+
+La formulation contient principalement :
+\begin{itemize}
+  \item contraintes de cardinalité (sommes de booléens),
+  \item contraintes de capacité (inégalités linéaires),
+  \item contraintes de non-chevauchement (souvent décomposées),
+  \item contraintes de disponibilité,
+  \item contraintes de précédence,
+  \item implications logiques,
+  \item éventuellement une fonction objectif additive (pénalités/préférences).
+\end{itemize}
+
+Cette structure produit un modèle dominé par :
+\begin{enumerate}[label=\arabic*.]
+  \item des décisions binaires,
+  \item des agrégations linéaires de booléens,
+  \item des contraintes linéaires ou linéarisables,
+  \item un objectif fréquemment linéaire.
+\end{enumerate}
+
+\begin{remark}
+Même si le problème métier est un problème de planification combinatoire, la représentation mathématique actuelle est proche d'une formulation MILP.
+\end{remark}
+
+\section{Pourquoi la formulation actuelle favorise HiGHS}
+
+HiGHS est un solveur d'optimisation linéaire open source, conçu pour les problèmes LP/MIP (et QP) \cite{highs-site}. Dans l'écosystème MiniZinc, il est disponible comme backend dédié \cite{minizinc-downloads,minizinc-changelog}.
+
+L'adéquation avec la formulation actuelle s'explique par :
+\begin{itemize}
+  \item la forte proportion de variables binaires ;
+  \item des contraintes de cardinalité exprimables comme sommes de binaires ;
+  \item des contraintes de capacité naturellement linéaires ;
+  \item une fonction objectif souvent additive ;
+  \item des implications logiques fréquemment linéarisables.
+\end{itemize}
+
+\begin{quote}
+HiGHS est pertinent non pas parce que le problème de planification est simple, mais parce que la formulation MiniZinc produite par la plateforme se rapproche d'un modèle linéaire en variables binaires.
+\end{quote}
+
+\section{Problème de planification et formulation mathématique}
+
+Un même problème de planning peut être encodé selon plusieurs paradigmes :
+\begin{enumerate}[label=\arabic*.]
+  \item programmation par contraintes (CP),
+  \item SAT/CP-SAT,
+  \item MILP,
+  \item hybride.
+\end{enumerate}
+
+Ainsi, le solveur optimal dépend du \emph{modèle effectivement généré} :
+\begin{itemize}
+  \item si la formulation exploite fortement des contraintes globales de scheduling, un solveur CP peut être très pertinent ;
+  \item si la formulation est fortement logique/booleenne, CP-SAT peut devenir très compétitif ;
+  \item si la formulation est majoritairement binaire + linéaire, un solveur MILP tel que HiGHS est naturellement cohérent.
+\end{itemize}
+
+\section{Comparaison avec Gecode, Chuffed et OR-Tools CP-SAT}
+
+\subsection{Gecode}
+
+Gecode est un solveur CP orienté domaines finis, avec un support natif de nombreuses contraintes globales dans MiniZinc \cite{minizinc-solvers,gecode-site}. Il peut être excellent sur des modèles de scheduling exprimés en contraintes globales riches.
+
+Dans la formulation actuelle, il peut être moins naturellement favorisé si :
+\begin{itemize}
+  \item les contraintes sont déjà très décomposées ;
+  \item le non-chevauchement est formulé principalement en paire-à-paire ;
+  \item la structure linéaire domine la structure CP globale.
+\end{itemize}
+
+\textbf{Conclusion nuancée :} Gecode peut être performant sur certains modèles de planning, mais il est moins naturellement aligné avec une formulation majoritairement linéaire et booléenne.
+
+\subsection{Chuffed}
+
+Chuffed est un solveur CP à \emph{lazy clause generation}, combinant propagation CP et apprentissage de clauses \cite{minizinc-solvers,chuffed-github}. Il est souvent pertinent sur des modèles logiques/combinatoires denses.
+
+Il reste un candidat sérieux à évaluer, en particulier lorsque les implications logiques sont centrales. Cependant, si l'essentiel du modèle est représenté par des sommes linéaires de binaires et un objectif linéaire, HiGHS peut garder un avantage structurel.
+
+\textbf{Conclusion nuancée :} Chuffed est un candidat crédible à comparer expérimentalement, mais HiGHS reste plus cohérent avec la structure linéaire actuelle.
+
+\subsection{OR-Tools CP-SAT}
+
+OR-Tools CP-SAT est un solveur hybride très performant sur de nombreux problèmes entiers et booléens, avec capacités de raisonnement logique et contraintes linéaires sur entiers \cite{ortools-cpsat,ortools-mpsolver}.
+
+Il peut donc être très pertinent pour la plateforme. Néanmoins, son efficacité dépend de la forme exacte du modèle aplati, de l'intégration MiniZinc et du compromis entre raisonnement logique et exploitation de relaxations linéaires.
+
+\textbf{Conclusion nuancée :} OR-Tools CP-SAT est probablement l'un des meilleurs solveurs à tester en complément de HiGHS, surtout si la formulation évolue vers davantage de logique ou de scheduling global.
+
+\section{Critères de choix d'un solveur}
+
+On peut retenir les critères suivants :
+\begin{itemize}
+  \item nature des variables (continues/entières/binaires),
+  \item linéarité des contraintes,
+  \item présence et nature de l'objectif,
+  \item proportion de booléens,
+  \item présence de contraintes globales,
+  \item capacité à prouver l'optimalité,
+  \item temps de résolution et robustesse,
+  \item disponibilité MiniZinc,
+  \item simplicité d'intégration,
+  \item contraintes de licence,
+  \item stabilité sur des familles d'instances variées.
+\end{itemize}
+
+Pour la formulation actuelle, HiGHS est favorable sur plusieurs critères : open source, intégration MiniZinc, cohérence LP/MIP, efficacité attendue sur contraintes linéaires et variables binaires.
+
+\section{Justification synthétique du choix de HiGHS}
+
+Le raisonnement peut être résumé ainsi :
+\begin{enumerate}[label=\arabic*.]
+  \item la plateforme génère un modèle MiniZinc ;
+  \item le modèle contient de nombreuses variables booléennes ;
+  \item les contraintes sont majoritairement linéaires ou linéarisables ;
+  \item l'objectif éventuel est additif ;
+  \item l'ensemble correspond à une structure de type MILP ;
+  \item HiGHS est conçu pour LP/MIP ;
+  \item HiGHS est donc le solveur le plus cohérent avec la formulation actuelle ;
+  \item d'autres solveurs restent pertinents si la formulation change.
+\end{enumerate}
+
+\begin{quote}
+Le choix de HiGHS est donc justifié par l'adéquation entre la structure du modèle généré et la classe de problèmes pour laquelle HiGHS est conçu.
+\end{quote}
+
+\section{Limites de la justification}
+
+La conclusion doit rester conditionnelle :
+\begin{itemize}
+  \item HiGHS n'est pas nécessairement le meilleur solveur pour toutes les formulations de planning ;
+  \item un solveur CP peut devenir supérieur si les contraintes globales sont davantage exploitées ;
+  \item OR-Tools CP-SAT peut surpasser HiGHS sur des formulations très logiques ;
+  \item Gurobi/CPLEX peuvent être plus performants sur certaines grandes instances MILP ;
+  \item la décision finale doit être validée expérimentalement sur les mêmes instances \texttt{.planning}.
+\end{itemize}
+
+\section{Conclusion}
+
+Dans l'état actuel de la plateforme, HiGHS apparaît comme le solveur le plus adapté, car la formulation MiniZinc générée est proche d'un MILP dominé par des variables binaires et des contraintes linéaires/linéarisables.
+
+Ce résultat doit toutefois être lu comme une conclusion \emph{contextuelle} : Gecode, Chuffed, OR-Tools CP-SAT, CBC, SCIP, Gurobi et CPLEX restent des alternatives pertinentes selon l'évolution de la formulation, la taille des instances et les contraintes d'intégration.
+
+La formulation la plus rigoureuse est donc :
+\begin{quote}
+HiGHS apparaît comme le choix le plus approprié pour la formulation MiniZinc actuelle de la plateforme.
+\end{quote}
+
+\begin{thebibliography}{99}
+
+\bibitem{minizinc-solvers}
+MiniZinc Handbook,
+\textit{Solving Technologies and Solver Backends},
+\url{https://docs.minizinc.dev/en/latest/solvers.html}.
+
+\bibitem{minizinc-downloads}
+MiniZinc,
+\textit{Downloads and Available Solvers},
+\url{https://www.minizinc.org/downloads/}.
+
+\bibitem{minizinc-changelog}
+MiniZinc Handbook,
+\textit{Change Log (HiGHS interface in MiniZinc)},
+\url{https://docs.minizinc.dev/en/2.9.0/changelog.html}.
+
+\bibitem{highs-site}
+HiGHS,
+\textit{High-performance linear optimization software},
+\url{https://highs.dev/}.
+
+\bibitem{gecode-site}
+Gecode,
+\textit{Constraint solving toolkit},
+\url{https://www.gecode.dev/}.
+
+\bibitem{chuffed-github}
+Chuffed,
+\textit{The Chuffed CP solver},
+\url{https://github.com/chuffed/chuffed}.
+
+\bibitem{ortools-cpsat}
+Google OR-Tools,
+\textit{CP-SAT Solver},
+\url{https://developers.google.com/optimization/cp/cp_solver}.
+
+\bibitem{ortools-mpsolver}
+Google OR-Tools,
+\textit{MPSolver Interface},
+\url{https://developers.google.com/optimization/lp/mpsolver}.
+
+\bibitem{cbc-intro}
+COIN-OR,
+\textit{Introduction to CBC},
+\url{https://coin-or.github.io/Cbc/intro.html}.
+
+\bibitem{scip-site}
+SCIP,
+\textit{SCIP Optimization Suite},
+\url{https://www.scipopt.org/}.
+
+\bibitem{gurobi-doc}
+Gurobi,
+\textit{Gurobi Optimizer Reference Manual},
+\url{https://docs.gurobi.com/projects/optimizer/en/current/index.html}.
+
+\bibitem{cplex-site}
+IBM,
+\textit{CPLEX Optimizer},
+\url{https://www.ibm.com/products/ilog-cplex-optimization-studio/cplex-optimizer}.
+
+\end{thebibliography}
+
+\end{document}

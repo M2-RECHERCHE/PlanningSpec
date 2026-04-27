@@ -7,19 +7,40 @@ description: Rédiger des rapports académiques en français au format LaTeX, st
 
 ## Overview
 
-Produire un rapport académique LaTeX complet, cohérent et directement compilable, avec séparation explicite entre théorie, estimation et empirique.
-Respecter strictement les contraintes structurelles du demandeur (ex. document sans chapitres, langue française, sections imposées, style Master).
+Produire des documents LaTeX de niveau Master, en français, avec raisonnement explicite, structure propre, et qualité de compilation vérifiée.
+Traiter la demande comme un livrable académique, pas comme un simple brouillon.
+
+## Profil Cible
+
+- Mémoire/rapport technique en français.
+- Forte exigence de rigueur (définitions, hypothèses, preuves, limites).
+- Préférence marquée pour des documents structurés en `\section` / `\subsection`.
+- Cas fréquent : interdiction des chapitres (`\chapter`).
 
 ## Workflow
 
 1. Lire la demande et extraire les contraintes non négociables.
-2. Identifier le format attendu : `article` ou `report`, avec ou sans `\chapter`.
-3. Déduire le plan cible (sections, sous-sections, preuves, tableaux, bibliographie).
-4. Rédiger le contenu section par section avec progression logique : définitions, propositions, preuves, remarques, limites.
+2. Déterminer le mode de sortie :
+   - mode A : fichier LaTeX complet compilable ;
+   - mode B : section autonome intégrable (sans préambule).
+3. Déduire la structure cible (sections, sous-sections, tableaux, formules, preuves, limites, conclusion).
+4. Rédiger le contenu avec progression logique : contexte -> modélisation -> analyse -> comparaison -> limites -> conclusion.
 5. Vérifier la cohérence mathématique (notations, hypothèses, dépendances des résultats).
-6. Vérifier la cohérence rédactionnelle (terminologie stable, transitions, niveau Master).
-7. Compiler (`Makefile` si présent, sinon `pdflatex`) et corriger les erreurs bloquantes.
-8. Livrer un document compilable et signaler explicitement ce qui relève de la théorie, de l'estimation, et de l'empirique.
+6. Vérifier la cohérence argumentative (thèses nuancées, pas d'affirmations absolues).
+7. Vérifier les sources techniques utilisées (docs officielles prioritaires) et citer proprement.
+8. Compiler (`Makefile` prioritaire ; sinon `pdflatex`) et corriger les erreurs bloquantes.
+9. Livrer un document compilable et expliciter les limites des conclusions.
+
+## Règles de Structure (priorité haute)
+
+- Si la demande indique “pas de chapitre” :
+  - utiliser `\documentclass{article}` ;
+  - n'utiliser que `\section`, `\subsection`, `\subsubsection` ;
+  - interdire `\chapter`.
+- Si la demande est “section autonome intégrable” :
+  - ne pas inclure `\documentclass`, `\begin{document}`, `\end{document}`.
+- Si la demande est “fichier complet” :
+  - inclure titre, éventuellement résumé/sommaire si demandé, puis sections.
 
 ## Contraintes de Rédaction
 
@@ -33,6 +54,18 @@ Respecter strictement les contraintes structurelles du demandeur (ex. document s
 - Si les données sont absentes, fournir une méthodologie et des tableaux vides à remplir.
 - Énoncer les hypothèses de chaque preuve.
 - Conclure chaque preuve proprement.
+- Expliquer le raisonnement causal, pas seulement donner le verdict final.
+
+## Règles d'Argumentation (important)
+
+- Éviter les formulations absolues (“toujours meilleur”, “optimal dans tous les cas”).
+- Privilégier les formulations contextuelles :
+  - “le plus adapté pour la formulation actuelle” ;
+  - “cohérent avec la structure du modèle généré” ;
+  - “à confirmer expérimentalement”.
+- Distinguer explicitement :
+  - nature du problème métier ;
+  - nature de la formulation mathématique générée.
 
 ## Rigueur Mathématique
 
@@ -48,6 +81,15 @@ Pour chaque résultat important :
 3. démontrer ;
 4. interpréter en une phrase.
 
+## Politique de Sources
+
+- Pour les caractéristiques techniques des solveurs, vérifier via sources officielles (documentation éditeur/projet, documentation MiniZinc).
+- Citer uniquement des sources effectivement utilisées.
+- Si utilisation de `\cite{...}` :
+  - vérifier que chaque clé existe dans la bibliographie ;
+  - vérifier qu'aucune référence n'est non résolue après compilation.
+- Si le flux bibliographique est simple, privilégier éventuellement `\footnote{\url{...}}` pour éviter les clés cassées.
+
 ## Règles LaTeX
 
 - Adapter la classe aux contraintes utilisateurs :
@@ -58,6 +100,10 @@ Pour chaque résultat important :
   - colonnes alignées ;
   - `longtable` pour tableaux longs ;
   - `pdflscape` si tableau large.
+- Pour tableaux larges (comparatifs solveurs), privilégier :
+  - `\scriptsize`,
+  - colonnes `p{...}`,
+  - en-têtes courts et explicites.
 - Toujours livrer un document compilable dans l'état final.
 
 ## Structure Type d'un Rapport
@@ -76,6 +122,17 @@ Adapter selon la demande, mais utiliser par défaut :
 11. Conclusion.
 12. Références.
 
+## Structure Type d'une Section Solveur (cas fréquent)
+
+1. Contexte et objectif.
+2. Nature du modèle généré.
+3. Adéquation formulation-solveur principal.
+4. Comparaison avec solveurs concurrents (nuancée).
+5. Critères de choix.
+6. Méthodologie expérimentale.
+7. Limites.
+8. Conclusion contextuelle.
+
 ## Gestion des Résultats Empiriques
 
 Si mesures absentes :
@@ -91,8 +148,16 @@ Avant livraison :
 1. vérifier l'absence de conflit avec les contraintes explicites (ex. pas de `\chapter`).
 2. vérifier que toutes les formules sont cohérentes avec les notations.
 3. vérifier que chaque proposition importante a une justification.
-4. compiler et corriger les erreurs bloquantes.
-5. confirmer que le PDF est généré.
+4. vérifier la cohérence des citations (pas de clés manquantes).
+5. compiler et corriger les erreurs bloquantes.
+6. confirmer que le PDF est généré.
+
+## Protocole de Compilation
+
+- Si `Makefile` existe : exécuter `make clean && make`.
+- Si le `Makefile` ne force pas la reconstruction, exécuter explicitement `make clean` avant `make`.
+- Si absence de `Makefile` : exécuter au moins deux passes `pdflatex`.
+- Considérer bloquant : erreurs LaTeX, citations non résolues, labels cassés critiques.
 
 ## Anti-Patterns à Éviter
 
@@ -101,3 +166,4 @@ Avant livraison :
 - Utiliser des formulations vagues sans paramètres explicites.
 - Générer des tableaux expérimentaux remplis sans données réelles.
 - Ignorer une contrainte de forme donnée par l'utilisateur.
+- Répondre avec un simple plan quand un texte rédigé complet est demandé.
