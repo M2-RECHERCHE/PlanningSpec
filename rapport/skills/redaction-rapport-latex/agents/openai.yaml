@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rédaction Rapport LaTeX"
+  short_description: "Rédiger des rapports académiques structurés en français"
+  default_prompt: "Utiliser ce skill pour produire un rapport académique LaTeX rigoureux, structuré et compilable en français."
