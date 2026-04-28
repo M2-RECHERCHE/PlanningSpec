@@ -6,6 +6,8 @@ import type {
     AvoidParticipationOnDate,
     MaxPerScope,
     PreferredResource,
+    RoomStabilityForRole,
+    CompactScheduleForRole,
     ResourceExclusivity,
     TimeWindow,
     InstancePrecedence
@@ -24,7 +26,9 @@ export function registerValidationChecks(services: PlanningSpecServices) {
         InstancePrecedence: validator.checkInstancePrecedence,
         AvoidParticipationOnDate: validator.checkAvoidParticipationWeight,
         MaxPerScope: validator.checkMaxPerScope,
-        PreferredResource: validator.checkPreferredResourceWeight
+        PreferredResource: validator.checkPreferredResourceWeight,
+        RoomStabilityForRole: validator.checkRoomStabilityForRole,
+        CompactScheduleForRole: validator.checkCompactScheduleForRole
     };
 
     registry.register(checks, validator);
@@ -161,6 +165,48 @@ export class PlanningSpecValidator {
                 'warning',
                 'Preference weight should be greater than 0.',
                 { node: preference, property: 'weight' }
+            );
+        }
+    }
+
+    checkRoomStabilityForRole(
+        preference: RoomStabilityForRole,
+        accept: ValidationAcceptor
+    ): void {
+        if (preference.weight <= 0) {
+            accept(
+                'warning',
+                'Preference weight should be greater than 0.',
+                { node: preference, property: 'weight' }
+            );
+        }
+
+        if (!['day', 'global'].includes(preference.scope.replace(/"/g, ''))) {
+            accept(
+                'warning',
+                'scope should be either "day" or "global" to be handled by the solver.',
+                { node: preference, property: 'scope' }
+            );
+        }
+    }
+
+    checkCompactScheduleForRole(
+        preference: CompactScheduleForRole,
+        accept: ValidationAcceptor
+    ): void {
+        if (preference.weight <= 0) {
+            accept(
+                'warning',
+                'Preference weight should be greater than 0.',
+                { node: preference, property: 'weight' }
+            );
+        }
+
+        if (!['day', 'global'].includes(preference.scope.replace(/"/g, ''))) {
+            accept(
+                'warning',
+                'scope should be either "day" or "global" to be handled by the solver.',
+                { node: preference, property: 'scope' }
             );
         }
     }

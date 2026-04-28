@@ -464,6 +464,65 @@ export class PlanningSpecMiniZincGenerator {
           penaltyTerms.push(`${weight} * bool2int(not assignment[${ai}, ${res}])`);
         }
       }
+
+      // RoomStabilityForRole:
+      // Penalize room changes for the same resource assigned to a given role.
+      if (p.$type === 'RoomStabilityForRole') {
+        const actName = this.s(p.activity);
+        const roleName = this.s(p.role);
+        const roomRt = this.s(p.roomResourceType);
+        const scope = this.s(p.scope);
+        const weight = p.weight;
+
+        if (!hasRoles) {
+          code += `% WARNING: room_stability_for_role ignored because no roles are declared\n`;
+        } else {
+          const actorRt = rolesPerAct.get(actName)?.get(roleName);
+          if (!actorRt) {
+            code += `% WARNING: room_stability_for_role ignored, role "${roleName}" is not defined for activity "${actName}"\n`;
+          } else if (!resourceTypeToInstances.has(roomRt)) {
+            code += `% WARNING: room_stability_for_role ignored, roomResourceType "${roomRt}" does not exist\n`;
+          } else if (scope === 'day') {
+            penaltyTerms.push(
+              `sum(actor in RES_${this.id(actorRt)}, d in 1..NUM_DAYS) ( ${weight} * max(0, (sum(room in RES_${this.id(roomRt)}) (bool2int(sum(a in ACT_INST where act_type[a] == ${this.id(actName)}) (bool2int(role_assignment[a, ${this.id(roleName)}, actor] /\\ assignment[a, room] /\\ dayOf(start_time[a]) == d)) > 0))) - 1) )`
+            );
+          } else if (scope === 'global') {
+            penaltyTerms.push(
+              `sum(actor in RES_${this.id(actorRt)}) ( ${weight} * max(0, (sum(room in RES_${this.id(roomRt)}) (bool2int(sum(a in ACT_INST where act_type[a] == ${this.id(actName)}) (bool2int(role_assignment[a, ${this.id(roleName)}, actor] /\\ assignment[a, room])) > 0))) - 1) )`
+            );
+          } else {
+            code += `% NOTE: room_stability_for_role scope=${scope} not implemented (supported: day, global)\n`;
+          }
+        }
+      }
+
+      // CompactScheduleForRole:
+      // Penalize idle gaps between assignments for resources carrying a given role.
+      if (p.$type === 'CompactScheduleForRole') {
+        const actName = this.s(p.activity);
+        const roleName = this.s(p.role);
+        const scope = this.s(p.scope);
+        const weight = p.weight;
+
+        if (!hasRoles) {
+          code += `% WARNING: compact_schedule_for_role ignored because no roles are declared\n`;
+        } else {
+          const actorRt = rolesPerAct.get(actName)?.get(roleName);
+          if (!actorRt) {
+            code += `% WARNING: compact_schedule_for_role ignored, role "${roleName}" is not defined for activity "${actName}"\n`;
+          } else if (scope === 'day') {
+            penaltyTerms.push(
+              `sum(actor in RES_${this.id(actorRt)}, d in 1..NUM_DAYS) ( let { var int: busy_units = sum(a in ACT_INST where act_type[a] == ${this.id(actName)}) (bool2int(role_assignment[a, ${this.id(roleName)}, actor] /\\ dayOf(start_time[a]) == d) * duration[a]); var int: first_slot = min(a in ACT_INST where act_type[a] == ${this.id(actName)}) (if role_assignment[a, ${this.id(roleName)}, actor] /\\ dayOf(start_time[a]) == d then start_time[a] else dayEnd(d) + 1 endif); var int: last_slot = max(a in ACT_INST where act_type[a] == ${this.id(actName)}) (if role_assignment[a, ${this.id(roleName)}, actor] /\\ dayOf(start_time[a]) == d then start_time[a] + duration[a] - 1 else dayStart(d) - 1 endif) } in ${weight} * (if busy_units > 0 then (last_slot - first_slot + 1) - busy_units else 0 endif) )`
+            );
+          } else if (scope === 'global') {
+            penaltyTerms.push(
+              `sum(actor in RES_${this.id(actorRt)}) ( let { var int: busy_units = sum(a in ACT_INST where act_type[a] == ${this.id(actName)}) (bool2int(role_assignment[a, ${this.id(roleName)}, actor]) * duration[a]); var int: first_slot = min(a in ACT_INST where act_type[a] == ${this.id(actName)}) (if role_assignment[a, ${this.id(roleName)}, actor] then start_time[a] else TOTAL_SLOTS + 1 endif); var int: last_slot = max(a in ACT_INST where act_type[a] == ${this.id(actName)}) (if role_assignment[a, ${this.id(roleName)}, actor] then start_time[a] + duration[a] - 1 else 0 endif) } in ${weight} * (if busy_units > 0 then (last_slot - first_slot + 1) - busy_units else 0 endif) )`
+            );
+          } else {
+            code += `% NOTE: compact_schedule_for_role scope=${scope} not implemented (supported: day, global)\n`;
+          }
+        }
+      }
     });
 
     if (penaltyTerms.length === 0) {

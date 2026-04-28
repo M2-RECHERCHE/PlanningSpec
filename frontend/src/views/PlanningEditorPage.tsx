@@ -38,6 +38,8 @@ const PREFERENCE_TYPES = [
   { value: 'avoid_participation_on_date', label: 'Éviter une date' },
   { value: 'max_per_scope', label: 'Maximum par portée' },
   { value: 'preferred_resource', label: 'Ressource préférée' },
+  { value: 'room_stability_for_role', label: 'Stabilité de salle (rôle)' },
+  { value: 'compact_schedule_for_role', label: 'Planning compact (rôle)' },
 ] as const;
 
 type PreferenceType = typeof PREFERENCE_TYPES[number]['value'];
@@ -96,6 +98,7 @@ interface EditorPreference {
   max?: number;
   weight?: number;
   resourceType?: string;
+  roomResourceType?: string;
   activityInstance?: string;
   role?: string;
 }
@@ -249,6 +252,7 @@ const emptyPreference = (): EditorPreference => ({
   max: 1,
   weight: 10,
   resourceType: '',
+  roomResourceType: '',
   activityInstance: '',
   role: '',
 });
@@ -277,7 +281,11 @@ const normalizeConstraint = (constraint: Record<string, any>): EditorConstraint 
 });
 
 const isPreferenceType = (value: unknown): value is PreferenceType =>
-  value === 'avoid_participation_on_date' || value === 'max_per_scope' || value === 'preferred_resource';
+  value === 'avoid_participation_on_date' ||
+  value === 'max_per_scope' ||
+  value === 'preferred_resource' ||
+  value === 'room_stability_for_role' ||
+  value === 'compact_schedule_for_role';
 
 const normalizePreference = (preference: Record<string, any>): EditorPreference => ({
   ...emptyPreference(),
@@ -291,6 +299,7 @@ const normalizePreference = (preference: Record<string, any>): EditorPreference 
   max: Number.isFinite(Number(preference.max)) ? Number(preference.max) : 1,
   weight: Number.isFinite(Number(preference.weight)) ? Number(preference.weight) : 10,
   resourceType: typeof preference.resourceType === 'string' ? preference.resourceType : '',
+  roomResourceType: typeof preference.roomResourceType === 'string' ? preference.roomResourceType : '',
   activityInstance: typeof preference.activityInstance === 'string' ? preference.activityInstance : '',
   role: typeof preference.role === 'string' ? preference.role : '',
 });
@@ -607,6 +616,27 @@ const buildSolvePayload = (formData: EditorFormData) => {
         };
       }
 
+      if (preference.type === 'room_stability_for_role') {
+        return {
+          type: preference.type,
+          activity: preference.activity?.trim() || '',
+          role: preference.role?.trim() || '',
+          roomResourceType: preference.roomResourceType?.trim() || '',
+          scope: preference.scope?.trim() || 'day',
+          weight: Math.max(1, Number(preference.weight) || 1),
+        };
+      }
+
+      if (preference.type === 'compact_schedule_for_role') {
+        return {
+          type: preference.type,
+          activity: preference.activity?.trim() || '',
+          role: preference.role?.trim() || '',
+          scope: preference.scope?.trim() || 'day',
+          weight: Math.max(1, Number(preference.weight) || 1),
+        };
+      }
+
       return {
         type: preference.type,
         activityInstance: preference.activityInstance?.trim() || '',
@@ -770,6 +800,27 @@ const serializePreferenceToDsl = (preference: Record<string, unknown>) => {
       ['activityInstance', stringifyDslValue(preference.activityInstance)],
       ['role', stringifyDslValue(preference.role)],
       ['resource', stringifyDslValue(preference.resource)],
+      ['weight', String(preference.weight)],
+    ], 4);
+  }
+
+  if (type === 'room_stability_for_role') {
+    return stringifyDslObject([
+      ['type', stringifyDslValue(type)],
+      ['activity', stringifyDslValue(preference.activity)],
+      ['role', stringifyDslValue(preference.role)],
+      ['roomResourceType', stringifyDslValue(preference.roomResourceType)],
+      ['scope', stringifyDslValue(preference.scope)],
+      ['weight', String(preference.weight)],
+    ], 4);
+  }
+
+  if (type === 'compact_schedule_for_role') {
+    return stringifyDslObject([
+      ['type', stringifyDslValue(type)],
+      ['activity', stringifyDslValue(preference.activity)],
+      ['role', stringifyDslValue(preference.role)],
+      ['scope', stringifyDslValue(preference.scope)],
       ['weight', String(preference.weight)],
     ], 4);
   }
@@ -1230,6 +1281,27 @@ const buildPlanningSchema = (formData: EditorFormData) => {
               weight: 8,
             }],
           },
+          {
+            label: 'Stabilité de salle (rôle)',
+            body: [{
+              type: 'room_stability_for_role',
+              activity: activityNames[0] ?? 'Activite',
+              role: roleNames[0] ?? 'Role',
+              roomResourceType: resourceTypes.find(type => /room|salle/i.test(type)) ?? resourceTypes[0] ?? 'Room',
+              scope: 'day',
+              weight: 6,
+            }],
+          },
+          {
+            label: 'Planning compact (rôle)',
+            body: [{
+              type: 'compact_schedule_for_role',
+              activity: activityNames[0] ?? 'Activite',
+              role: roleNames[0] ?? 'Role',
+              scope: 'day',
+              weight: 8,
+            }],
+          },
         ],
         items: {
           oneOf: [
@@ -1266,6 +1338,31 @@ const buildPlanningSchema = (formData: EditorFormData) => {
                 activityInstance: { type: 'string', enum: activityInstances.length > 0 ? activityInstances : undefined },
                 role: { type: 'string', enum: roleNames.length > 0 ? roleNames : undefined },
                 resource: { type: 'string', enum: resourceNames.length > 0 ? resourceNames : undefined },
+                weight: { type: 'integer', minimum: 1 },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'activity', 'role', 'roomResourceType', 'scope', 'weight'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'room_stability_for_role' },
+                activity: { type: 'string', enum: activityNames.length > 0 ? activityNames : undefined },
+                role: { type: 'string', enum: roleNames.length > 0 ? roleNames : undefined },
+                roomResourceType: { type: 'string', enum: resourceTypes.length > 0 ? resourceTypes : undefined },
+                scope: { type: 'string', enum: ['day', 'global'] },
+                weight: { type: 'integer', minimum: 1 },
+              },
+            },
+            {
+              type: 'object',
+              required: ['type', 'activity', 'role', 'scope', 'weight'],
+              additionalProperties: false,
+              properties: {
+                type: { const: 'compact_schedule_for_role' },
+                activity: { type: 'string', enum: activityNames.length > 0 ? activityNames : undefined },
+                role: { type: 'string', enum: roleNames.length > 0 ? roleNames : undefined },
+                scope: { type: 'string', enum: ['day', 'global'] },
                 weight: { type: 'integer', minimum: 1 },
               },
             },
@@ -1503,6 +1600,34 @@ const getStepError = (step: number, data: EditorFormData): string | null => {
           !['slot', 'day'].includes(preference.scope.trim()) ||
           !Number.isInteger(preference.max) ||
           Number(preference.max) < 1 ||
+          !Number.isInteger(preference.weight) ||
+          Number(preference.weight) < 1;
+      }
+
+      if (preference.type === 'room_stability_for_role') {
+        const activityName = preference.activity?.trim() || '';
+        const activityRoles = rolesByActivity.get(activityName) || new Set<string>();
+        return !activityName ||
+          !activityNames.has(activityName) ||
+          !preference.role?.trim() ||
+          !activityRoles.has(preference.role.trim()) ||
+          !preference.roomResourceType?.trim() ||
+          !resourceTypes.has(preference.roomResourceType.trim()) ||
+          !preference.scope?.trim() ||
+          !['day', 'global'].includes(preference.scope.trim()) ||
+          !Number.isInteger(preference.weight) ||
+          Number(preference.weight) < 1;
+      }
+
+      if (preference.type === 'compact_schedule_for_role') {
+        const activityName = preference.activity?.trim() || '';
+        const activityRoles = rolesByActivity.get(activityName) || new Set<string>();
+        return !activityName ||
+          !activityNames.has(activityName) ||
+          !preference.role?.trim() ||
+          !activityRoles.has(preference.role.trim()) ||
+          !preference.scope?.trim() ||
+          !['day', 'global'].includes(preference.scope.trim()) ||
           !Number.isInteger(preference.weight) ||
           Number(preference.weight) < 1;
       }
@@ -2248,6 +2373,34 @@ const Step7Preferences: React.FC<{ data: EditorFormData; onChange: (d: EditorFor
       };
     }
 
+    if (type === 'room_stability_for_role') {
+      const defaultActivity = activityOptions[0]?.value || '';
+      const defaultRoomResourceType =
+        resourceTypeOptions.find(option => /room|salle/i.test(option.value))?.value ||
+        resourceTypeOptions[0]?.value ||
+        '';
+
+      return {
+        type,
+        activity: defaultActivity,
+        role: getRoleOptionsForActivity(defaultActivity)[0]?.value || '',
+        roomResourceType: defaultRoomResourceType,
+        scope: 'day',
+        weight: 6,
+      };
+    }
+
+    if (type === 'compact_schedule_for_role') {
+      const defaultActivity = activityOptions[0]?.value || '';
+      return {
+        type,
+        activity: defaultActivity,
+        role: getRoleOptionsForActivity(defaultActivity)[0]?.value || '',
+        scope: 'day',
+        weight: 8,
+      };
+    }
+
     const defaultInstance = activityInstanceOptions[0]?.value || '';
     return {
       type,
@@ -2305,6 +2458,45 @@ const Step7Preferences: React.FC<{ data: EditorFormData; onChange: (d: EditorFor
           />
           <NumberInput label="Max" value={preference.max ?? 1} onChange={value => updatePreference(preference.id, { max: value })} min={1} max={99} />
           <NumberInput label="Poids" value={preference.weight ?? 5} onChange={value => updatePreference(preference.id, { weight: value })} min={1} max={999} />
+        </div>
+      );
+    }
+
+    if (preference.type === 'room_stability_for_role') {
+      const roleOptions = getRoleOptionsForActivity(preference.activity || '');
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 1fr 0.8fr 0.8fr', gap: '12px', alignItems: 'end' }}>
+          <Select label="Activité" value={preference.activity || ''} onChange={value => updatePreference(preference.id, { activity: value, role: getRoleOptionsForActivity(value)[0]?.value || '' })}
+            options={[{ value: '', label: '— Activité —' }, ...activityOptions]}
+          />
+          <Select label="Rôle" value={preference.role || ''} onChange={value => updatePreference(preference.id, { role: value })}
+            options={[{ value: '', label: '— Rôle —' }, ...roleOptions]}
+          />
+          <Select label="Type de salle" value={preference.roomResourceType || ''} onChange={value => updatePreference(preference.id, { roomResourceType: value })}
+            options={[{ value: '', label: '— Type salle —' }, ...resourceTypeOptions]}
+          />
+          <Select label="Scope" value={preference.scope || 'day'} onChange={value => updatePreference(preference.id, { scope: value })}
+            options={[{ value: 'day', label: 'day' }, { value: 'global', label: 'global' }]}
+          />
+          <NumberInput label="Poids" value={preference.weight ?? 6} onChange={value => updatePreference(preference.id, { weight: value })} min={1} max={999} />
+        </div>
+      );
+    }
+
+    if (preference.type === 'compact_schedule_for_role') {
+      const roleOptions = getRoleOptionsForActivity(preference.activity || '');
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : isCompact ? '1fr 1fr' : '1fr 1fr 1fr 0.8fr', gap: '12px', alignItems: 'end' }}>
+          <Select label="Activité" value={preference.activity || ''} onChange={value => updatePreference(preference.id, { activity: value, role: getRoleOptionsForActivity(value)[0]?.value || '' })}
+            options={[{ value: '', label: '— Activité —' }, ...activityOptions]}
+          />
+          <Select label="Rôle" value={preference.role || ''} onChange={value => updatePreference(preference.id, { role: value })}
+            options={[{ value: '', label: '— Rôle —' }, ...roleOptions]}
+          />
+          <Select label="Scope" value={preference.scope || 'day'} onChange={value => updatePreference(preference.id, { scope: value })}
+            options={[{ value: 'day', label: 'day' }, { value: 'global', label: 'global' }]}
+          />
+          <NumberInput label="Poids" value={preference.weight ?? 8} onChange={value => updatePreference(preference.id, { weight: value })} min={1} max={999} />
         </div>
       );
     }
@@ -2404,7 +2596,11 @@ const Step7Preferences: React.FC<{ data: EditorFormData; onChange: (d: EditorFor
               ? `${preference.resource || '—'} évite le ${preference.date || '—'} (poids : ${preference.weight ?? 10})`
               : preference.type === 'max_per_scope'
                 ? `${preference.resourceType || '—'} sur ${preference.activity || '—'} max ${preference.max ?? 1} par ${preference.scope || 'jour'} (poids : ${preference.weight ?? 5})`
-                : `${preference.activityInstance || '—'} préfère ${preference.resource || '—'} pour ${preference.role || '—'} (poids : ${preference.weight ?? 8})`
+                : preference.type === 'room_stability_for_role'
+                  ? `${preference.role || '—'} sur ${preference.activity || '—'} limite les changements de ${preference.roomResourceType || 'salle'} (${preference.scope || 'day'}, poids : ${preference.weight ?? 6})`
+                  : preference.type === 'compact_schedule_for_role'
+                    ? `${preference.role || '—'} sur ${preference.activity || '—'} favorise des passages regroupés (${preference.scope || 'day'}, poids : ${preference.weight ?? 8})`
+                    : `${preference.activityInstance || '—'} préfère ${preference.resource || '—'} pour ${preference.role || '—'} (poids : ${preference.weight ?? 8})`
             }
           </div>
         </div>

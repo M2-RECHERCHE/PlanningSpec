@@ -168,7 +168,9 @@ type SupportedConstraintType =
 type SupportedPreferenceType =
     | 'avoid_participation_on_date'
     | 'max_per_scope'
-    | 'preferred_resource';
+    | 'preferred_resource'
+    | 'room_stability_for_role'
+    | 'compact_schedule_for_role';
 
 interface SessionPayload {
     token: string;
@@ -427,6 +429,27 @@ function serializePreferenceToDsl(preference: Record<string, unknown>): string {
             ["activityInstance", stringifyDslValue(preference.activityInstance)],
             ["role", stringifyDslValue(preference.role)],
             ["resource", stringifyDslValue(preference.resource)],
+            ["weight", String(preference.weight)]
+        ], 4);
+    }
+
+    if (type === "room_stability_for_role") {
+        return stringifyDslObject([
+            ["type", stringifyDslValue(type)],
+            ["activity", stringifyDslValue(preference.activity)],
+            ["role", stringifyDslValue(preference.role)],
+            ["roomResourceType", stringifyDslValue(preference.roomResourceType)],
+            ["scope", stringifyDslValue(preference.scope)],
+            ["weight", String(preference.weight)]
+        ], 4);
+    }
+
+    if (type === "compact_schedule_for_role") {
+        return stringifyDslObject([
+            ["type", stringifyDslValue(type)],
+            ["activity", stringifyDslValue(preference.activity)],
+            ["role", stringifyDslValue(preference.role)],
+            ["scope", stringifyDslValue(preference.scope)],
             ["weight", String(preference.weight)]
         ], 4);
     }
@@ -1129,7 +1152,7 @@ function validatePlanningDataForSolve(data: unknown): { value?: SolveReadyData; 
             }
 
             const preferenceType = preference.type as SupportedPreferenceType;
-            if (!["avoid_participation_on_date", "max_per_scope", "preferred_resource"].includes(preferenceType)) {
+            if (!["avoid_participation_on_date", "max_per_scope", "preferred_resource", "room_stability_for_role", "compact_schedule_for_role"].includes(preferenceType)) {
                 fieldErrors[`preferences.${index}.type`] = `Le type de préférence "${preference.type}" n'est pas supporté.`;
                 return;
             }
@@ -1190,6 +1213,67 @@ function validatePlanningDataForSolve(data: unknown): { value?: SolveReadyData; 
                     fieldErrors[`preferences.${index}.resource`] = "La ressource ciblée n'existe pas.";
                 }
                 const weight = Number(preference.weight);
+                if (!Number.isInteger(weight) || weight < 1) {
+                    fieldErrors[`preferences.${index}.weight`] = "Le poids doit être un entier strictement positif.";
+                }
+            }
+
+            if (preferenceType === "room_stability_for_role") {
+                const activity = typeof preference.activity === "string" ? preference.activity : '';
+                const role = typeof preference.role === "string" ? preference.role : '';
+                const roomResourceType = typeof preference.roomResourceType === "string" ? preference.roomResourceType : '';
+                const scope = typeof preference.scope === "string" ? preference.scope : '';
+                const weight = Number(preference.weight);
+
+                if (!activity.trim()) {
+                    fieldErrors[`preferences.${index}.activity`] = "L'activité est requise.";
+                } else if (!activityNames.includes(activity)) {
+                    fieldErrors[`preferences.${index}.activity`] = "L'activité ciblée n'existe pas.";
+                }
+
+                if (!role.trim()) {
+                    fieldErrors[`preferences.${index}.role`] = "Le rôle est requis.";
+                } else if (activity.trim() && !roleNamesByActivity.get(activity)?.has(role)) {
+                    fieldErrors[`preferences.${index}.role`] = "Le rôle ciblé n'existe pas pour cette activité.";
+                }
+
+                if (!roomResourceType.trim()) {
+                    fieldErrors[`preferences.${index}.roomResourceType`] = "Le type de ressource salle est requis.";
+                } else if (!resourceTypes.includes(roomResourceType)) {
+                    fieldErrors[`preferences.${index}.roomResourceType`] = "Le type de ressource salle ciblé n'existe pas.";
+                }
+
+                if (!scope.trim() || !["day", "global"].includes(scope)) {
+                    fieldErrors[`preferences.${index}.scope`] = "Le scope doit être \"day\" ou \"global\".";
+                }
+
+                if (!Number.isInteger(weight) || weight < 1) {
+                    fieldErrors[`preferences.${index}.weight`] = "Le poids doit être un entier strictement positif.";
+                }
+            }
+
+            if (preferenceType === "compact_schedule_for_role") {
+                const activity = typeof preference.activity === "string" ? preference.activity : '';
+                const role = typeof preference.role === "string" ? preference.role : '';
+                const scope = typeof preference.scope === "string" ? preference.scope : '';
+                const weight = Number(preference.weight);
+
+                if (!activity.trim()) {
+                    fieldErrors[`preferences.${index}.activity`] = "L'activité est requise.";
+                } else if (!activityNames.includes(activity)) {
+                    fieldErrors[`preferences.${index}.activity`] = "L'activité ciblée n'existe pas.";
+                }
+
+                if (!role.trim()) {
+                    fieldErrors[`preferences.${index}.role`] = "Le rôle est requis.";
+                } else if (activity.trim() && !roleNamesByActivity.get(activity)?.has(role)) {
+                    fieldErrors[`preferences.${index}.role`] = "Le rôle ciblé n'existe pas pour cette activité.";
+                }
+
+                if (!scope.trim() || !["day", "global"].includes(scope)) {
+                    fieldErrors[`preferences.${index}.scope`] = "Le scope doit être \"day\" ou \"global\".";
+                }
+
                 if (!Number.isInteger(weight) || weight < 1) {
                     fieldErrors[`preferences.${index}.weight`] = "Le poids doit être un entier strictement positif.";
                 }
@@ -1303,6 +1387,50 @@ function analyzePotentialCapacityRisks(data: SolveReadyData): string[] {
                 warnings.push(
                     `La préférence preferred_resource cible la ressource "${rawPreference.resource}", mais elle n'existe pas dans le modèle.`
                 );
+            }
+        }
+
+        if (rawPreference.type === "room_stability_for_role") {
+            const activity = typeof rawPreference.activity === "string" ? rawPreference.activity : '';
+            const role = typeof rawPreference.role === "string" ? rawPreference.role : '';
+            const roomResourceType = typeof rawPreference.roomResourceType === "string" ? rawPreference.roomResourceType : '';
+
+            if (activity && role) {
+                const actorResourceType = data.roles[activity]?.[role];
+                if (!actorResourceType) {
+                    warnings.push(
+                        `La préférence room_stability_for_role référence le rôle "${role}" pour "${activity}", mais ce rôle n'est pas défini.`
+                    );
+                } else if (!Array.isArray(data.resources[actorResourceType]) || data.resources[actorResourceType].length === 0) {
+                    warnings.push(
+                        `La préférence room_stability_for_role vise le rôle "${role}" (${actorResourceType}) pour "${activity}", mais aucune ressource de ce type n'est disponible.`
+                    );
+                }
+            }
+
+            if (roomResourceType) {
+                if (!Array.isArray(data.resources[roomResourceType]) || data.resources[roomResourceType].length === 0) {
+                    warnings.push(
+                        `La préférence room_stability_for_role cible le type de salle "${roomResourceType}", mais aucune ressource de ce type n'est disponible.`
+                    );
+                }
+            }
+        }
+
+        if (rawPreference.type === "compact_schedule_for_role") {
+            const activity = typeof rawPreference.activity === "string" ? rawPreference.activity : '';
+            const role = typeof rawPreference.role === "string" ? rawPreference.role : '';
+            if (activity && role) {
+                const actorResourceType = data.roles[activity]?.[role];
+                if (!actorResourceType) {
+                    warnings.push(
+                        `La préférence compact_schedule_for_role référence le rôle "${role}" pour "${activity}", mais ce rôle n'est pas défini.`
+                    );
+                } else if (!Array.isArray(data.resources[actorResourceType]) || data.resources[actorResourceType].length === 0) {
+                    warnings.push(
+                        `La préférence compact_schedule_for_role vise le rôle "${role}" (${actorResourceType}) pour "${activity}", mais aucune ressource de ce type n'est disponible.`
+                    );
+                }
             }
         }
     });

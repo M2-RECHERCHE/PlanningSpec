@@ -126,7 +126,7 @@ Preferences:
     '[' (preferences+=Preference (',' preferences+=Preference)*)? ']';
 
 Preference:
-    AvoidParticipationOnDate | MaxPerScope | PreferredResource;
+    AvoidParticipationOnDate | MaxPerScope | PreferredResource | RoomStabilityForRole | CompactScheduleForRole;
 
 AvoidParticipationOnDate:
     '{'
@@ -152,6 +152,25 @@ PreferredResource:
         '"activityInstance"' ':' activityInstance=STRING ','
         '"role"' ':' role=STRING ','
         '"resource"' ':' resource=STRING ','
+        '"weight"' ':' weight=INT
+    '}';
+
+RoomStabilityForRole:
+    '{'
+        '"type"' ':' '"room_stability_for_role"' ','
+        '"activity"' ':' activity=STRING ','
+        '"role"' ':' role=STRING ','
+        '"roomResourceType"' ':' roomResourceType=STRING ','
+        '"scope"' ':' scope=STRING ','
+        '"weight"' ':' weight=INT
+    '}';
+
+CompactScheduleForRole:
+    '{'
+        '"type"' ':' '"compact_schedule_for_role"' ','
+        '"activity"' ':' activity=STRING ','
+        '"role"' ':' role=STRING ','
+        '"scope"' ':' scope=STRING ','
         '"weight"' ':' weight=INT
     '}';
 
