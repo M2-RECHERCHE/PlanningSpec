@@ -4,7 +4,7 @@ import { useApp } from '../../../context/AppContext';
 import { AppLayout, Topbar } from '../../../components/layout/AppLayout';
 import { Button } from '../../../components/ui';
 import { useResponsive } from '../../../hooks/useResponsive';
-import { fetchReport, type PlanningReport } from '../../../lib/reportApi';
+import { fetchReport, getReportVersionSelection, setReportVersionSelection, type PlanningReport } from '../../../lib/reportApi';
 import { PALETTE } from '../palette';
 import { DesignerPanel } from './DesignerPanel';
 import { ReportDocument } from './ReportDocument';
@@ -19,6 +19,7 @@ export const ReportDesignerPage: React.FC = () => {
   const [report, setReport] = useState<PlanningReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [reportVersionId, setReportVersionId] = useState<string | undefined>(undefined);
 
   const [opts, setOpts] = useState<ReportDesignOptions>(() => ({
     ...DEFAULT_OPTIONS,
@@ -28,9 +29,11 @@ export const ReportDesignerPage: React.FC = () => {
   // Sync activity colors when report loads
   useEffect(() => {
     if (!selectedPlanning?.id) return;
+    const versionId = getReportVersionSelection(selectedPlanning.id);
+    setReportVersionId(versionId);
     setLoading(true);
     setLoadError(null);
-    fetchReport(selectedPlanning.id)
+    fetchReport(selectedPlanning.id, versionId)
       .then(r => {
         setReport(r);
         setOpts(prev => {
@@ -97,7 +100,12 @@ export const ReportDesignerPage: React.FC = () => {
 
   const topbarActions = (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <Button variant="secondary" size="sm" onClick={() => navigate('report', { planning: selectedPlanning })}>
+      <Button variant="secondary" size="sm" onClick={() => {
+        if (selectedPlanning?.id) {
+          setReportVersionSelection(selectedPlanning.id, reportVersionId);
+        }
+        navigate('report', { planning: selectedPlanning });
+      }}>
         ← Rapport
       </Button>
       {report && (

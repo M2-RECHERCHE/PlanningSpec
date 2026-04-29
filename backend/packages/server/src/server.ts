@@ -6,10 +6,12 @@ import { promisify } from 'node:util';
 
 import {
     createPlanning,
+    createPlanningSolutionVersion,
     createProject,
     createSession,
     createTagDefinition,
     createUser,
+    deletePlanningSolutionVersion,
     deleteExpiredSessions,
     deletePlanning,
     deleteProject,
@@ -17,9 +19,11 @@ import {
     deleteTagDefinition,
     getAuthUserByEmail,
     getPlanningById,
+    getPlanningSolutionVersionById,
     getProjectById,
     getSessionByTokenHash,
     initializeDatabase,
+    listPlanningSolutionVersions,
     listPlannings,
     listProjects,
     listTagDefinitions,
@@ -1456,6 +1460,21 @@ function getSingleParam(value: string | string[] | undefined): string {
     return Array.isArray(value) ? value[0] ?? '' : value ?? '';
 }
 
+function getOptionalQueryParam(value: unknown): string | undefined {
+    if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+    }
+
+    if (Array.isArray(value)) {
+        const first = value.find(entry => typeof entry === 'string' && entry.trim());
+        if (typeof first === 'string') {
+            return first.trim();
+        }
+    }
+
+    return undefined;
+}
+
 async function authenticateRequest(req: AuthenticatedRequest, res: express.Response, next: express.NextFunction): Promise<void> {
     const token = extractBearerToken(req);
     if (!token) {
@@ -1602,6 +1621,27 @@ async function solveAndPersistPlanning(
             error: {
                 code: "INTERNAL_ERROR",
                 message: "La résolution a réussi, mais la planification n'a pas pu être rechargée."
+            }
+        };
+    }
+
+    try {
+        await createPlanningSolutionVersion(userId, {
+            planningId: planning.id,
+            solver,
+            sourceSnapshot: source,
+            solutionOutput: solveResult.result.output,
+            solutionWarnings: solveResult.result.warnings,
+            solveTimeMs: solveResult.result.solveTimeMs
+        });
+    } catch (error) {
+        return {
+            ok: false,
+            status: 500,
+            error: {
+                code: "DATABASE_ERROR",
+                message: "La solution a été calculée, mais son archivage en version a échoué.",
+                details: [error instanceof Error ? error.message : "Unknown versioning error"]
             }
         };
     }
@@ -1891,6 +1931,29 @@ app.get('/api/plannings/:id', authenticateRequest, async (req, res) => {
     }
 });
 
+app.get('/api/plannings/:id/versions', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const planning = await getPlanningById(planningId, auth.user.id);
+        if (!planning) {
+            return sendError(res, 404, {
+                code: "NOT_FOUND",
+                message: "Planification introuvable."
+            });
+        }
+
+        const versions = await listPlanningSolutionVersions(planningId, auth.user.id);
+        return sendSuccess(res, { versions });
+    } catch (error) {
+        return sendError(res, 500, {
+            code: "DATABASE_ERROR",
+            message: "Impossible de charger l'historique des versions.",
+            details: [error instanceof Error ? error.message : "Unknown database error"]
+        });
+    }
+});
+
 app.post('/api/plannings', authenticateRequest, async (req, res) => {
     const parsed = sanitizePlanningInput(req.body);
     if (!parsed.value) {
@@ -1951,6 +2014,37 @@ app.patch('/api/plannings/:id', authenticateRequest, async (req, res) => {
         return sendError(res, 500, {
             code: "DATABASE_ERROR",
             message: "Impossible de mettre à jour la planification.",
+            details: [error instanceof Error ? error.message : "Unknown database error"]
+        });
+    }
+});
+
+app.delete('/api/plannings/:id/versions/:versionId', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const versionId = getSingleParam(req.params.versionId);
+        const planning = await getPlanningById(planningId, auth.user.id);
+        if (!planning) {
+            return sendError(res, 404, {
+                code: "NOT_FOUND",
+                message: "Planification introuvable."
+            });
+        }
+
+        const deleted = await deletePlanningSolutionVersion(versionId, planningId, auth.user.id);
+        if (!deleted) {
+            return sendError(res, 404, {
+                code: "NOT_FOUND",
+                message: "Version introuvable."
+            });
+        }
+
+        return sendSuccess(res, { deleted: true }, "Version supprimée.");
+    } catch (error) {
+        return sendError(res, 500, {
+            code: "DATABASE_ERROR",
+            message: "Impossible de supprimer cette version.",
             details: [error instanceof Error ? error.message : "Unknown database error"]
         });
     }
@@ -2189,7 +2283,27 @@ app.get('/api/plannings/:id/report', authenticateRequest, async (req, res) => {
         if (!planning) {
             return sendError(res, 404, { code: 'NOT_FOUND', message: 'Planification introuvable.' });
         }
-        const report = buildPlanningReport(planning);
+        const versionId = getOptionalQueryParam(req.query?.versionId);
+        const sourcePlanning = versionId
+            ? await (async () => {
+                const version = await getPlanningSolutionVersionById(versionId, planning.id, auth.user.id);
+                if (!version) {
+                    return null;
+                }
+
+                return {
+                    ...planning,
+                    solutionOutput: version.solutionOutput,
+                    solutionWarnings: version.solutionWarnings,
+                    solutionSolveTimeMs: version.solveTimeMs
+                } satisfies PlanningRecord;
+            })()
+            : planning;
+        if (!sourcePlanning) {
+            return sendError(res, 404, { code: 'NOT_FOUND', message: 'Version de solution introuvable.' });
+        }
+
+        const report = buildPlanningReport(sourcePlanning);
         if (!report) {
             return sendError(res, 422, { code: 'NO_SOLUTION', message: 'Cette planification n\'a pas encore été résolue.' });
         }
@@ -2206,12 +2320,33 @@ app.get('/api/plannings/:id/report/markdown', authenticateRequest, async (req, r
         if (!planning) {
             return sendError(res, 404, { code: 'NOT_FOUND', message: 'Planification introuvable.' });
         }
-        const report = buildPlanningReport(planning);
+        const versionId = getOptionalQueryParam(req.query?.versionId);
+        const sourcePlanning = versionId
+            ? await (async () => {
+                const version = await getPlanningSolutionVersionById(versionId, planning.id, auth.user.id);
+                if (!version) {
+                    return null;
+                }
+
+                return {
+                    ...planning,
+                    solutionOutput: version.solutionOutput,
+                    solutionWarnings: version.solutionWarnings,
+                    solutionSolveTimeMs: version.solveTimeMs
+                } satisfies PlanningRecord;
+            })()
+            : planning;
+        if (!sourcePlanning) {
+            return sendError(res, 404, { code: 'NOT_FOUND', message: 'Version de solution introuvable.' });
+        }
+
+        const report = buildPlanningReport(sourcePlanning);
         if (!report) {
             return sendError(res, 422, { code: 'NO_SOLUTION', message: 'Cette planification n\'a pas encore été résolue.' });
         }
         const md = generateMarkdown(report);
-        const filename = `rapport-${planning.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.md`;
+        const versionSuffix = versionId ? `-version-${versionId.slice(0, 8)}` : '';
+        const filename = `rapport-${planning.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}${versionSuffix}.md`;
         res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         return res.send(md);
@@ -2227,7 +2362,27 @@ app.get('/api/plannings/:id/report/print', authenticateRequest, async (req, res)
         if (!planning) {
             return sendError(res, 404, { code: 'NOT_FOUND', message: 'Planification introuvable.' });
         }
-        const report = buildPlanningReport(planning);
+        const versionId = getOptionalQueryParam(req.query?.versionId);
+        const sourcePlanning = versionId
+            ? await (async () => {
+                const version = await getPlanningSolutionVersionById(versionId, planning.id, auth.user.id);
+                if (!version) {
+                    return null;
+                }
+
+                return {
+                    ...planning,
+                    solutionOutput: version.solutionOutput,
+                    solutionWarnings: version.solutionWarnings,
+                    solutionSolveTimeMs: version.solveTimeMs
+                } satisfies PlanningRecord;
+            })()
+            : planning;
+        if (!sourcePlanning) {
+            return sendError(res, 404, { code: 'NOT_FOUND', message: 'Version de solution introuvable.' });
+        }
+
+        const report = buildPlanningReport(sourcePlanning);
         if (!report) {
             return sendError(res, 422, { code: 'NO_SOLUTION', message: 'Cette planification n\'a pas encore été résolue.' });
         }

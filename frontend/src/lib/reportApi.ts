@@ -1,5 +1,7 @@
 import { api } from './api';
 
+const REPORT_VERSION_STORAGE_KEY_PREFIX = 'planify:report-version:';
+
 // ─── Types (mirror of backend report.ts) ─────────────────────────────────────
 
 export interface ActivityInstance {
@@ -44,10 +46,43 @@ function apiUrl(path: string): string {
   return `${process.env.REACT_APP_API_BASE_URL ?? 'http://localhost:4000'}${path}`;
 }
 
+function withVersionQuery(path: string, versionId?: string): string {
+  if (!versionId) {
+    return path;
+  }
+
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}versionId=${encodeURIComponent(versionId)}`;
+}
+
+export function setReportVersionSelection(planningId: string, versionId?: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const key = `${REPORT_VERSION_STORAGE_KEY_PREFIX}${planningId}`;
+  if (!versionId) {
+    window.sessionStorage.removeItem(key);
+    return;
+  }
+
+  window.sessionStorage.setItem(key, versionId);
+}
+
+export function getReportVersionSelection(planningId: string): string | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  const value = window.sessionStorage.getItem(`${REPORT_VERSION_STORAGE_KEY_PREFIX}${planningId}`) ?? '';
+  return value.trim() ? value.trim() : undefined;
+}
+
 // ─── API calls ────────────────────────────────────────────────────────────────
 
-export async function fetchReport(planningId: string): Promise<PlanningReport> {
-  const res = await api.get<{ data: PlanningReport }>(`/api/plannings/${planningId}/report`);
+export async function fetchReport(planningId: string, versionId?: string): Promise<PlanningReport> {
+  const path = withVersionQuery(`/api/plannings/${planningId}/report`, versionId);
+  const res = await api.get<{ data: PlanningReport }>(path);
   return res.data.data;
 }
 
@@ -55,8 +90,9 @@ export async function fetchReport(planningId: string): Promise<PlanningReport> {
  * Fetches the server-generated print HTML and opens it in a new tab.
  * The user then uses Ctrl+P / browser print dialog to produce a PDF.
  */
-export async function openPrintView(planningId: string): Promise<void> {
-  const res = await fetch(apiUrl(`/api/plannings/${planningId}/report/print`), {
+export async function openPrintView(planningId: string, versionId?: string): Promise<void> {
+  const path = withVersionQuery(`/api/plannings/${planningId}/report/print`, versionId);
+  const res = await fetch(apiUrl(path), {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -72,8 +108,9 @@ export async function openPrintView(planningId: string): Promise<void> {
  * Downloads the Markdown report via a fetch + blob anchor.
  * No popup blocker issue since it's a programmatic click on a blob URL.
  */
-export async function downloadMarkdown(planningId: string, title: string): Promise<void> {
-  const res = await fetch(apiUrl(`/api/plannings/${planningId}/report/markdown`), {
+export async function downloadMarkdown(planningId: string, title: string, versionId?: string): Promise<void> {
+  const path = withVersionQuery(`/api/plannings/${planningId}/report/markdown`, versionId);
+  const res = await fetch(apiUrl(path), {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -15,4 +15,4 @@ Serveur Express dédié au backend HTTP.
 - `PORT` : port HTTP, défaut `4000`
 - `ALLOWED_ORIGINS` : origines CORS séparées par des virgules
 - `MINIZINC_SOLVER` : solveur MiniZinc, défaut `Highs`
-- `MINIZINC_TIMEOUT_MS` : timeout solveur en millisecondes, défaut `10800000` (3h)
+- `MINIZINC_TIMEOUT_MS` : timeout solveur en millisecondes, défaut `36000000` (10h)

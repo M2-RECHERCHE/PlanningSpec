@@ -47,6 +47,18 @@ export interface Planning {
   errorHint?: string;
 }
 
+export interface PlanningSolutionVersion {
+  id: string;
+  planningId: string;
+  userId: string;
+  solver: string;
+  sourceSnapshot?: string;
+  solutionOutput: string;
+  solutionWarnings?: string[];
+  solveTimeMs?: number;
+  createdAt: string;
+}
+
 export interface StepData {
   label: string;
   description: string;

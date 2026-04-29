@@ -5,7 +5,9 @@ import { Button } from '../../components/ui';
 import { useResponsive } from '../../hooks/useResponsive';
 import {
   fetchReport,
+  getReportVersionSelection,
   openPrintView,
+  setReportVersionSelection,
   downloadMarkdown,
   type PlanningReport,
 } from '../../lib/reportApi';
@@ -44,13 +46,16 @@ export const ReportPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('calendar');
   const [customColors, setCustomColors] = useState<Record<string, string>>({});
   const [exporting, setExporting] = useState<'print' | 'markdown' | null>(null);
+  const [reportVersionId, setReportVersionId] = useState<string | undefined>(undefined);
 
   // Fetch report from backend on mount / planning change
   useEffect(() => {
     if (!selectedPlanning?.id) return;
+    const versionId = getReportVersionSelection(selectedPlanning.id);
+    setReportVersionId(versionId);
     setLoading(true);
     setError(null);
-    fetchReport(selectedPlanning.id)
+    fetchReport(selectedPlanning.id, versionId)
       .then(r => { setReport(r); setCustomColors({}); })
       .catch(e => setError(e?.response?.data?.error?.message ?? e?.message ?? 'Erreur de chargement'))
       .finally(() => setLoading(false));
@@ -70,27 +75,27 @@ export const ReportPage: React.FC = () => {
     if (!selectedPlanning?.id) return;
     setExporting('print');
     try {
-      await openPrintView(selectedPlanning.id);
+      await openPrintView(selectedPlanning.id, reportVersionId);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Impossible d\'ouvrir l\'aperçu';
       alert(msg);
     } finally {
       setExporting(null);
     }
-  }, [selectedPlanning?.id]);
+  }, [reportVersionId, selectedPlanning?.id]);
 
   const handleMarkdown = useCallback(async () => {
     if (!selectedPlanning?.id || !report) return;
     setExporting('markdown');
     try {
-      await downloadMarkdown(selectedPlanning.id, report.title);
+      await downloadMarkdown(selectedPlanning.id, report.title, reportVersionId);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Erreur de téléchargement';
       alert(msg);
     } finally {
       setExporting(null);
     }
-  }, [selectedPlanning?.id, report]);
+  }, [reportVersionId, selectedPlanning?.id, report]);
 
   // ── No planning selected ──
   if (!selectedPlanning) {
@@ -145,7 +150,12 @@ export const ReportPage: React.FC = () => {
         variant="primary"
         size="sm"
         disabled={!report}
-        onClick={() => navigate('reportDesigner', { planning: selectedPlanning })}
+        onClick={() => {
+          if (selectedPlanning?.id) {
+            setReportVersionSelection(selectedPlanning.id, reportVersionId);
+          }
+          navigate('reportDesigner', { planning: selectedPlanning });
+        }}
       >
         📐 Designer PDF
       </Button>
@@ -300,7 +310,7 @@ export const ReportPage: React.FC = () => {
               <Button variant="secondary" size="sm" onClick={() => {
                 if (!selectedPlanning?.id) return;
                 setLoading(true); setError(null);
-                fetchReport(selectedPlanning.id)
+                fetchReport(selectedPlanning.id, reportVersionId)
                   .then(r => setReport(r))
                   .catch(e => setError(e?.message ?? 'Erreur'))
                   .finally(() => setLoading(false));

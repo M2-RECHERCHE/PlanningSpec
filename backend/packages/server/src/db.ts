@@ -80,6 +80,18 @@ export interface PlanningRecord {
     errorHint?: string;
 }
 
+export interface PlanningSolutionVersionRecord {
+    id: string;
+    planningId: string;
+    userId: string;
+    solver: string;
+    sourceSnapshot?: string;
+    solutionOutput: string;
+    solutionWarnings: string[];
+    solveTimeMs?: number;
+    createdAt: string;
+}
+
 interface UserRow extends RowDataPacket {
     id: string;
     name: string;
@@ -139,6 +151,18 @@ interface PlanningRow extends RowDataPacket {
     solution_warnings: unknown;
     solution_solve_time_ms: number | null;
     last_error: unknown;
+}
+
+interface PlanningSolutionVersionRow extends RowDataPacket {
+    id: string;
+    planning_id: string;
+    user_id: string;
+    solver: string;
+    source_snapshot: string | null;
+    solution_output: string;
+    solution_warnings: unknown;
+    solve_time_ms: number | null;
+    created_at: string | Date;
 }
 
 interface ExistsRow extends RowDataPacket {
@@ -203,6 +227,15 @@ export interface PlanningUpdateInput {
     solutionWarnings?: string[] | null;
     solutionSolveTimeMs?: number | null;
     lastError?: { message: string; details?: string[]; hint?: string } | null;
+}
+
+export interface PlanningSolutionVersionInput {
+    planningId: string;
+    solver: string;
+    sourceSnapshot?: string | null;
+    solutionOutput: string;
+    solutionWarnings?: string[] | null;
+    solveTimeMs?: number | null;
 }
 
 let pool: Pool | null = null;
@@ -318,6 +351,20 @@ function mapSessionRow(row: SessionRow): AuthSessionRecord {
             createdAt: toIsoDate(row.user_created_at),
             updatedAt: toIsoDate(row.user_updated_at)
         }
+    };
+}
+
+function mapPlanningSolutionVersionRow(row: PlanningSolutionVersionRow): PlanningSolutionVersionRecord {
+    return {
+        id: row.id,
+        planningId: row.planning_id,
+        userId: row.user_id,
+        solver: row.solver,
+        sourceSnapshot: row.source_snapshot ?? undefined,
+        solutionOutput: row.solution_output,
+        solutionWarnings: parseJson<string[]>(row.solution_warnings, []),
+        solveTimeMs: row.solve_time_ms ?? undefined,
+        createdAt: toIsoDate(row.created_at)
     };
 }
 
@@ -467,12 +514,32 @@ async function ensureSchema(): Promise<void> {
             badges JSON NULL,
             solution_output LONGTEXT NULL,
             solution_warnings JSON NULL,
+            solution_solve_time_ms INT NULL,
             last_error JSON NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX idx_plannings_user_id (user_id),
             INDEX idx_plannings_project_id (project_id),
             INDEX idx_plannings_updated_at (updated_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await database.query(`
+        CREATE TABLE IF NOT EXISTS planning_solution_versions (
+            id VARCHAR(36) PRIMARY KEY,
+            planning_id VARCHAR(36) NOT NULL,
+            user_id VARCHAR(36) NOT NULL,
+            solver VARCHAR(191) NOT NULL,
+            source_snapshot LONGTEXT NULL,
+            solution_output LONGTEXT NOT NULL,
+            solution_warnings JSON NULL,
+            solve_time_ms INT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_solution_versions_planning FOREIGN KEY (planning_id) REFERENCES plannings(id) ON DELETE CASCADE,
+            CONSTRAINT fk_solution_versions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_solution_versions_planning_id (planning_id),
+            INDEX idx_solution_versions_user_id (user_id),
+            INDEX idx_solution_versions_created_at (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
@@ -864,6 +931,7 @@ const PLANNING_SELECT = `
     plannings.badges,
     plannings.solution_output,
     plannings.solution_warnings,
+    plannings.solution_solve_time_ms,
     plannings.last_error
 `;
 
@@ -1010,5 +1078,127 @@ export async function deletePlanning(id: string, userId: string): Promise<boolea
         'DELETE FROM plannings WHERE id = ? AND user_id = ?',
         [id, userId]
     );
+    return result.affectedRows > 0;
+}
+
+export async function createPlanningSolutionVersion(
+    userId: string,
+    input: PlanningSolutionVersionInput
+): Promise<PlanningSolutionVersionRecord> {
+    const database = getPool();
+    const id = randomUUID();
+
+    await database.execute<ResultSetHeader>(`
+        INSERT INTO planning_solution_versions (
+            id,
+            planning_id,
+            user_id,
+            solver,
+            source_snapshot,
+            solution_output,
+            solution_warnings,
+            solve_time_ms
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+        id,
+        input.planningId,
+        userId,
+        input.solver,
+        input.sourceSnapshot ?? null,
+        input.solutionOutput,
+        input.solutionWarnings ? JSON.stringify(input.solutionWarnings) : null,
+        input.solveTimeMs ?? null
+    ]);
+
+    const [rows] = await database.execute<PlanningSolutionVersionRow[]>(`
+        SELECT
+            id,
+            planning_id,
+            user_id,
+            solver,
+            source_snapshot,
+            solution_output,
+            solution_warnings,
+            solve_time_ms,
+            created_at
+        FROM planning_solution_versions
+        WHERE id = ?
+          AND user_id = ?
+        LIMIT 1
+    `, [id, userId]);
+
+    if (!rows[0]) {
+        throw new Error('The planning solution version was created but could not be reloaded.');
+    }
+
+    return mapPlanningSolutionVersionRow(rows[0]);
+}
+
+export async function listPlanningSolutionVersions(
+    planningId: string,
+    userId: string
+): Promise<PlanningSolutionVersionRecord[]> {
+    const database = getPool();
+    const [rows] = await database.execute<PlanningSolutionVersionRow[]>(`
+        SELECT
+            id,
+            planning_id,
+            user_id,
+            solver,
+            source_snapshot,
+            solution_output,
+            solution_warnings,
+            solve_time_ms,
+            created_at
+        FROM planning_solution_versions
+        WHERE planning_id = ?
+          AND user_id = ?
+        ORDER BY created_at DESC
+    `, [planningId, userId]);
+
+    return rows.map(mapPlanningSolutionVersionRow);
+}
+
+export async function getPlanningSolutionVersionById(
+    id: string,
+    planningId: string,
+    userId: string
+): Promise<PlanningSolutionVersionRecord | null> {
+    const database = getPool();
+    const [rows] = await database.execute<PlanningSolutionVersionRow[]>(`
+        SELECT
+            id,
+            planning_id,
+            user_id,
+            solver,
+            source_snapshot,
+            solution_output,
+            solution_warnings,
+            solve_time_ms,
+            created_at
+        FROM planning_solution_versions
+        WHERE id = ?
+          AND planning_id = ?
+          AND user_id = ?
+        LIMIT 1
+    `, [id, planningId, userId]);
+
+    return rows[0] ? mapPlanningSolutionVersionRow(rows[0]) : null;
+}
+
+export async function deletePlanningSolutionVersion(
+    id: string,
+    planningId: string,
+    userId: string
+): Promise<boolean> {
+    const database = getPool();
+    const [result] = await database.execute<ResultSetHeader>(`
+        DELETE FROM planning_solution_versions
+        WHERE id = ?
+          AND planning_id = ?
+          AND user_id = ?
+    `, [id, planningId, userId]);
+
     return result.affectedRows > 0;
 }

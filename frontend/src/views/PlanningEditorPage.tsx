@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MonacoEditor from '@monaco-editor/react';
 import { useApp } from '../context/AppContext';
 import { api } from '../lib/api';
+import { setReportVersionSelection } from '../lib/reportApi';
 import { AppLayout, Topbar } from '../components/layout/AppLayout';
 import { StatusBadge, ProgressBar, Button, Input, Textarea, NumberInput, Modal, Select, Card } from '../components/ui';
 import { useResponsive } from '../hooks/useResponsive';
-import { Planning, Badge } from '../types';
+import { Planning, Badge, PlanningSolutionVersion } from '../types';
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
@@ -2633,11 +2634,15 @@ function formatMs(ms: number): string {
 interface Step8Props {
   data: EditorFormData;
   planning: Planning | null;
+  versions: PlanningSolutionVersion[];
+  versionsLoading: boolean;
+  onRefreshVersions: () => Promise<void>;
+  onDeleteVersion: (versionId: string) => Promise<void>;
+  onGenerateReport: (versionId?: string) => void;
   selectedSolver: string;
   onSolverChange: (solver: string) => void;
   solvers: AvailableSolver[];
   loadingSolvers: boolean;
-  onGenerateReport: () => void;
   isSolving?: boolean;
   solveElapsedMs?: number;
   solverTimeMs?: number | null;
@@ -2645,13 +2650,42 @@ interface Step8Props {
 
 interface AvailableSolver { id: string; label: string; isDefault: boolean; }
 
-const Step8: React.FC<Step8Props> = ({ data, planning, selectedSolver, onSolverChange, solvers, loadingSolvers, onGenerateReport, isSolving = false, solveElapsedMs = 0, solverTimeMs }) => {
+const Step8: React.FC<Step8Props> = ({
+  data,
+  planning,
+  versions,
+  versionsLoading,
+  onRefreshVersions,
+  onDeleteVersion,
+  selectedSolver,
+  onSolverChange,
+  solvers,
+  loadingSolvers,
+  onGenerateReport,
+  isSolving = false,
+  solveElapsedMs = 0,
+  solverTimeMs,
+}) => {
   const { isMobile } = useResponsive();
 
   const roleGroups = data.activities.map(activity => ({
     activityName: activity.name,
     roles: data.roles.filter(role => role.activityName.trim() === activity.name.trim()),
   }));
+  const [selectedVersionId, setSelectedVersionId] = useState('');
+
+  useEffect(() => {
+    if (versions.length === 0) {
+      setSelectedVersionId('');
+      return;
+    }
+
+    setSelectedVersionId(prev =>
+      prev && versions.some(version => version.id === prev)
+        ? prev
+        : versions[0].id
+    );
+  }, [versions]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -2904,12 +2938,166 @@ const Step8: React.FC<Step8Props> = ({ data, planning, selectedSolver, onSolverC
           </Button>
         </div>
       )}
+
+      <Card>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0 }}>Versions de résolution</h3>
+          <Button variant="secondary" size="sm" onClick={() => void onRefreshVersions()}>
+            Actualiser
+          </Button>
+        </div>
+
+        {versionsLoading ? (
+          <div style={{ color: 'var(--text-secondary)' }}>Chargement des versions…</div>
+        ) : versions.length === 0 ? (
+          <div style={{ color: 'var(--text-secondary)' }}>Aucune version enregistrée pour le moment.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {versions.map((version, index) => {
+              const isExpanded = selectedVersionId === version.id;
+              const versionLabel = `V${versions.length - index}`;
+              const solveTimeLabel = version.solveTimeMs != null ? formatMs(version.solveTimeMs) : 'n/a';
+
+              return (
+                <div key={version.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedVersionId(isExpanded ? '' : version.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedVersionId(isExpanded ? '' : version.id);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      border: isExpanded ? '1px solid rgba(34, 211, 238, 0.45)' : '1px solid rgba(16, 185, 129, 0.35)',
+                      borderRadius: 14,
+                      padding: isMobile ? '12px 14px' : '14px 16px',
+                      background: isExpanded ? 'linear-gradient(135deg, rgba(4, 47, 46, 0.92), rgba(10, 35, 44, 0.92))' : 'linear-gradient(135deg, rgba(2, 34, 36, 0.9), rgba(7, 35, 47, 0.9))',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 14,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                      <div style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        background: 'rgba(16, 185, 129, 0.18)',
+                        color: '#34d399',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                      }}>
+                        ✓
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 16, color: '#14b8a6' }}>
+                          Planification résolue avec succès
+                        </div>
+                        <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 4 }}>
+                          {versionLabel} · {new Date(version.createdAt).toLocaleString('fr-FR')} · {version.solver}
+                        </div>
+                        <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
+                          Le solveur a trouvé une solution. Temps d&apos;exécution : <span style={{ color: '#38bdf8', fontFamily: 'monospace' }}>{solveTimeLabel}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div onClick={event => event.stopPropagation()}>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          onGenerateReport(version.id);
+                        }}
+                        style={{ flexShrink: 0 }}
+                      >
+                        📄 Générer le rapport
+                      </Button>
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <Card padding="14px" style={{ borderColor: 'rgba(56, 189, 248, 0.2)', background: 'rgba(15, 23, 42, 0.45)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+                        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                          <strong style={{ color: 'var(--text-primary)' }}>{versionLabel}</strong> · {version.solver} · {new Date(version.createdAt).toLocaleString('fr-FR')}
+                        </div>
+                        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                          Temps: <span style={{ fontFamily: 'monospace', color: '#7dd3fc' }}>{solveTimeLabel}</span>
+                        </div>
+                      </div>
+
+                      {version.solutionWarnings && version.solutionWarnings.length > 0 && (
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', marginBottom: 4 }}>
+                            Avertissements
+                          </div>
+                          <ul style={{ margin: 0, paddingLeft: 18, color: '#fbbf24', fontSize: 12 }}>
+                            {version.solutionWarnings.map((warning, warningIndex) => (
+                              <li key={`${version.id}-warn-${warningIndex}`}>{warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>
+                        Détails de résolution
+                      </div>
+                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', maxHeight: 240, overflow: 'auto', fontSize: 12, color: '#34d399', background: 'rgba(2, 6, 23, 0.72)', border: '1px solid rgba(148, 163, 184, 0.2)', borderRadius: 10, padding: 12 }}>
+                        {version.solutionOutput}
+                      </pre>
+
+                      <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => onGenerateReport(version.id)}
+                        >
+                          📄 Générer le rapport
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => {
+                            if (window.confirm('Supprimer cette version ?')) {
+                              void onDeleteVersion(version.id);
+                            }
+                          }}
+                        >
+                          Supprimer
+                        </Button>
+                      </div>
+                    </Card>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
     </div>
   );
 };
 
 export const PlanningEditorPage: React.FC = () => {
-  const { selectedPlanning, navigate, savePlanningData, solvePlanning, toast } = useApp();
+  const {
+    selectedPlanning,
+    navigate,
+    savePlanningData,
+    solvePlanning,
+    listPlanningVersions,
+    deletePlanningVersion,
+    toast,
+  } = useApp();
   const { isMobile, isCompact } = useResponsive();
   const [currentStep, setCurrentStep] = useState(selectedPlanning?.currentStep || 1);
   const [formData, setFormData] = useState<EditorFormData>(selectedPlanning ? deriveFormData(selectedPlanning) : defaultFormData());
@@ -2921,6 +3109,8 @@ export const PlanningEditorPage: React.FC = () => {
   const [selectedSolver, setSelectedSolver] = useState<string>('highs');
   const [solvers, setSolvers] = useState<AvailableSolver[]>([]);
   const [loadingSolvers, setLoadingSolvers] = useState(true);
+  const [solutionVersions, setSolutionVersions] = useState<PlanningSolutionVersion[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
 
   // ── DSL Editor panel state ──────────────────────────────────────────────────
   const [showEditor, setShowEditor] = useState(true);
@@ -3000,6 +3190,32 @@ export const PlanningEditorPage: React.FC = () => {
     },
     [areMarkersEqual]
   );
+  const loadPlanningVersions = useCallback(async (planningId?: string) => {
+    const effectivePlanningId = planningId ?? selectedPlanning?.id;
+    if (!effectivePlanningId) {
+      setSolutionVersions([]);
+      return;
+    }
+
+    setVersionsLoading(true);
+    const versions = await listPlanningVersions(effectivePlanningId);
+    setSolutionVersions(versions);
+    setVersionsLoading(false);
+  }, [listPlanningVersions, selectedPlanning?.id]);
+
+  const handleDeletePlanningVersion = useCallback(async (versionId: string) => {
+    if (!selectedPlanning) {
+      return;
+    }
+
+    const deleted = await deletePlanningVersion(selectedPlanning.id, versionId);
+    if (!deleted) {
+      return;
+    }
+
+    const versions = await listPlanningVersions(selectedPlanning.id);
+    setSolutionVersions(versions);
+  }, [deletePlanningVersion, listPlanningVersions, selectedPlanning]);
 
   // Live solve timer — starts when editorSolving becomes true, stops on false
   useEffect(() => {
@@ -3107,6 +3323,16 @@ export const PlanningEditorPage: React.FC = () => {
     setSolverOutput(selectedPlanning.solutionOutput ?? null);
     setSolverWarnings(selectedPlanning.solutionWarnings ?? []);
   }, [selectedPlanning]);
+
+  useEffect(() => {
+    const planningId = selectedPlanning?.id;
+    if (!planningId) {
+      setSolutionVersions([]);
+      return;
+    }
+
+    void loadPlanningVersions(planningId);
+  }, [loadPlanningVersions, selectedPlanning?.id]);
 
   useEffect(() => {
     setFormData(prev => {
@@ -3469,11 +3695,13 @@ export const PlanningEditorPage: React.FC = () => {
     setSolving(false);
 
     if (result) {
+      await loadPlanningVersions(selectedPlanning.id);
       toast('Résolution terminée avec succès.', 'success');
     }
   };
 
-  const handleGenerateReport = () => {
+  const handleGenerateReport = (versionId?: string) => {
+    setReportVersionSelection(selectedPlanning.id, versionId);
     setReportLoading(true);
     setTimeout(() => {
       navigate('report', { planning: selectedPlanning });
@@ -3518,6 +3746,7 @@ export const PlanningEditorPage: React.FC = () => {
       setSolverOutput(result.output);
       setSolverWarnings(result.warnings ?? []);
       setSolverTimeMs(result.solveTimeMs ?? null);
+      await loadPlanningVersions(selectedPlanning.id);
       setConsoleTab('output');
       toast('Résolution terminée avec succès.', 'success');
     } else {
@@ -3554,7 +3783,27 @@ export const PlanningEditorPage: React.FC = () => {
     <Step5 key="step-5" data={formData} onChange={setFormData} />,
     <Step6 key="step-6" data={formData} onChange={setFormData} />,
     <Step7Preferences key="step-7" data={formData} onChange={setFormData} />,
-    <Step8 key="step-8" data={formData} planning={selectedPlanning} selectedSolver={selectedSolver} onSolverChange={setSelectedSolver} solvers={solvers} loadingSolvers={loadingSolvers} onGenerateReport={handleGenerateReport} isSolving={solving} solveElapsedMs={solveElapsedMs} solverTimeMs={solverTimeMs} />,
+    <Step8
+      key="step-8"
+      data={formData}
+      planning={selectedPlanning}
+      versions={solutionVersions}
+      versionsLoading={versionsLoading}
+      onRefreshVersions={async () => {
+        await loadPlanningVersions(selectedPlanning.id);
+      }}
+      onDeleteVersion={async (versionId: string) => {
+        await handleDeletePlanningVersion(versionId);
+      }}
+      selectedSolver={selectedSolver}
+      onSolverChange={setSelectedSolver}
+      solvers={solvers}
+      loadingSolvers={loadingSolvers}
+      onGenerateReport={handleGenerateReport}
+      isSolving={solving}
+      solveElapsedMs={solveElapsedMs}
+      solverTimeMs={solverTimeMs}
+    />,
   ];
 
   return (
@@ -4117,7 +4366,7 @@ export const PlanningEditorPage: React.FC = () => {
                 <div style={{ fontSize: 12, color: '#10b981', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 7, padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span>✓ Planification résolue</span>
                   <button
-                    onClick={handleGenerateReport}
+                    onClick={() => handleGenerateReport()}
                     style={{ background: '#10b981', border: 'none', color: '#fff', borderRadius: 5, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}
                   >
                     Rapport →

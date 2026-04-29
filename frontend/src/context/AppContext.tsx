@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { api, getBackendError, setAuthToken, type BackendErrorPayload } from '../lib/api';
 import { buildRoute, hasExplicitHashRoute, readCurrentRoute, type AppRoute } from '../lib/routing';
-import { User, Planning, Badge, PlanStatus, PlanningSolveResult } from '../types';
+import { User, Planning, Badge, PlanStatus, PlanningSolveResult, PlanningSolutionVersion } from '../types';
 
 const TOKEN_STORAGE_KEY = 'planify:auth-token';
 
@@ -37,6 +37,8 @@ interface AppContextType {
   updatePlanningStep: (id: string, step: number, data?: Record<string, any>) => Promise<void>;
   savePlanningData: (id: string, payload: SavePlanningInput) => Promise<Planning | null>;
   solvePlanning: (id: string, data?: Record<string, any>, source?: string, solver?: string) => Promise<PlanningSolveResult | null>;
+  listPlanningVersions: (planningId: string) => Promise<PlanningSolutionVersion[]>;
+  deletePlanningVersion: (planningId: string, versionId: string) => Promise<boolean>;
   deletePlanning: (id: string) => Promise<void>;
   createBadge: (name: string, color: string) => Promise<Badge | null>;
   deleteBadge: (id: string) => Promise<void>;
@@ -452,6 +454,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [applyPlanningUpdate, handlePossibleAuthError, refreshData, toast]);
 
+  const listPlanningVersions = useCallback(async (planningId: string) => {
+    try {
+      const response = await api.get<{ data: { versions: PlanningSolutionVersion[] } }>(`/api/plannings/${planningId}/versions`);
+      return response.data.data.versions ?? [];
+    } catch (error) {
+      const backendError = handlePossibleAuthError(error);
+      if (backendError.code !== 'AUTH_REQUIRED' && backendError.code !== 'INVALID_SESSION') {
+        toast(backendError.message, 'error');
+      }
+      return [];
+    }
+  }, [handlePossibleAuthError, toast]);
+
+  const deletePlanningVersion = useCallback(async (planningId: string, versionId: string) => {
+    try {
+      await api.delete(`/api/plannings/${planningId}/versions/${versionId}`);
+      toast('Version supprimée.', 'success');
+      return true;
+    } catch (error) {
+      const backendError = handlePossibleAuthError(error);
+      if (backendError.code !== 'AUTH_REQUIRED' && backendError.code !== 'INVALID_SESSION') {
+        toast(backendError.message, 'error');
+      }
+      return false;
+    }
+  }, [handlePossibleAuthError, toast]);
+
   const updatePlanningStatus = useCallback(async (id: string, status: PlanStatus) => {
     await savePlanningData(id, { status });
   }, [savePlanningData]);
@@ -543,6 +572,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatePlanningStep,
         savePlanningData,
         solvePlanning,
+        listPlanningVersions,
+        deletePlanningVersion,
         deletePlanning,
         createBadge,
         deleteBadge,
