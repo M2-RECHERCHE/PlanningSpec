@@ -447,6 +447,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     } catch (error) {
       const backendError = handlePossibleAuthError(error);
+      await refreshData();
       if (backendError.code !== 'AUTH_REQUIRED' && backendError.code !== 'INVALID_SESSION') {
         toast(backendError.message, 'error');
       }

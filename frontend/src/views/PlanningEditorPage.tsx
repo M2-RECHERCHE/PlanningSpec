@@ -2631,6 +2631,28 @@ function formatMs(ms: number): string {
   return `${m}m ${s}s`;
 }
 
+function buildSolverErrorOutput(planning: Planning | null): string | null {
+  if (!planning || planning.status !== 'error' || !planning.lastErrorMessage) {
+    return null;
+  }
+
+  const lines = [
+    `ERREUR: ${planning.lastErrorMessage}`,
+    ...(planning.errorDetails ?? []),
+    planning.errorHint ? `Piste: ${planning.errorHint}` : null,
+  ].filter((line): line is string => Boolean(line));
+
+  return lines.join('\n');
+}
+
+function getConsoleOutputFromPlanning(planning: Planning | null): string | null {
+  const errorOutput = buildSolverErrorOutput(planning);
+  if (errorOutput) {
+    return errorOutput;
+  }
+  return planning?.solutionOutput ?? null;
+}
+
 interface Step8Props {
   data: EditorFormData;
   planning: Planning | null;
@@ -3305,8 +3327,8 @@ export const PlanningEditorPage: React.FC = () => {
     setDslDirty(false);
     updateJsonValidationMarkers([]);
     updateSemanticValidationMarkers([]);
-    setSolverOutput(selectedPlanning.solutionOutput ?? null);
-    setSolverWarnings(selectedPlanning.solutionWarnings ?? []);
+    setSolverOutput(getConsoleOutputFromPlanning(selectedPlanning));
+    setSolverWarnings(selectedPlanning.status === 'error' ? [] : (selectedPlanning.solutionWarnings ?? []));
     setEditorError(null);
     setSaveTime(null);
     planningHydratedRef.current = selectedPlanning.id;
@@ -3320,8 +3342,8 @@ export const PlanningEditorPage: React.FC = () => {
       return;
     }
 
-    setSolverOutput(selectedPlanning.solutionOutput ?? null);
-    setSolverWarnings(selectedPlanning.solutionWarnings ?? []);
+    setSolverOutput(getConsoleOutputFromPlanning(selectedPlanning));
+    setSolverWarnings(selectedPlanning.status === 'error' ? [] : (selectedPlanning.solutionWarnings ?? []));
   }, [selectedPlanning]);
 
   useEffect(() => {
@@ -3750,12 +3772,13 @@ export const PlanningEditorPage: React.FC = () => {
       setConsoleTab('output');
       toast('Résolution terminée avec succès.', 'success');
     } else {
-      setConsoleTab('errors');
+      setConsoleTab('output');
     }
   };
 
   const dslErrorCount = validationMarkers.filter(m => m.severity === 8).length;
   const dslWarnCount  = validationMarkers.filter(m => m.severity === 4).length;
+  const isErrorOutput = Boolean(solverOutput) && solverOutput === buildSolverErrorOutput(selectedPlanning);
 
   const editorPanelStyle: React.CSSProperties = editorFullscreen || isCompact ? {
     position: 'fixed', inset: 0, zIndex: 9999,
@@ -4255,13 +4278,19 @@ export const PlanningEditorPage: React.FC = () => {
                       )}
                       {solverOutput && !editorSolving && (
                         <>
-                          {solverTimeMs !== null && (
+                          {!isErrorOutput && solverTimeMs !== null && (
                             <div style={{ marginBottom: 6, fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
                               <span style={{ color: '#34d399' }}>✓</span>
                               Résolu en <span style={{ fontFamily: 'monospace', color: '#7dd3fc' }}>{formatMs(solverTimeMs)}</span>
                             </div>
                           )}
-                          <pre style={{ margin: 0, color: '#34d399', whiteSpace: 'pre-wrap' }}>{solverOutput}</pre>
+                          {isErrorOutput && (
+                            <div style={{ marginBottom: 6, fontSize: 11, color: '#fca5a5', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ color: '#f87171' }}>✕</span>
+                              Échec de résolution
+                            </div>
+                          )}
+                          <pre style={{ margin: 0, color: isErrorOutput ? '#fca5a5' : '#34d399', whiteSpace: 'pre-wrap' }}>{solverOutput}</pre>
                         </>
                       )}
                       {solverWarnings.length > 0 && (
