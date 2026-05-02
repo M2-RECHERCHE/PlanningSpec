@@ -1,0 +1,217 @@
+{
+  "status": "FEASIBLE",
+  "hardViolations": [],
+  "softViolationCount": 0,
+  "assignments": [
+    {
+      "activityInstance": "Soutenance_1",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 1,
+      "globalSlot": 9,
+      "roles": {
+        "Candidat": "Student_1",
+        "President": "Teacher_1",
+        "Rapporteur": "Teacher_2",
+        "Membre": "Teacher_3",
+        "Salle": "Room_1"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_2",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 2,
+      "globalSlot": 10,
+      "roles": {
+        "Candidat": "Student_2",
+        "President": "Teacher_4",
+        "Rapporteur": "Teacher_5",
+        "Membre": "Teacher_6",
+        "Salle": "Room_2"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_3",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 3,
+      "globalSlot": 11,
+      "roles": {
+        "Candidat": "Student_3",
+        "President": "Teacher_7",
+        "Rapporteur": "Teacher_8",
+        "Membre": "Teacher_9",
+        "Salle": "Room_3"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_4",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 4,
+      "globalSlot": 12,
+      "roles": {
+        "Candidat": "Student_4",
+        "President": "Teacher_10",
+        "Rapporteur": "Teacher_11",
+        "Membre": "Teacher_12",
+        "Salle": "Room_4"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_5",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 5,
+      "globalSlot": 13,
+      "roles": {
+        "Candidat": "Student_5",
+        "President": "Teacher_13",
+        "Rapporteur": "Teacher_14",
+        "Membre": "Teacher_15",
+        "Salle": "Room_5"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_12",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 7,
+      "globalSlot": 15,
+      "roles": {
+        "Candidat": "Student_12",
+        "President": "Teacher_34",
+        "Rapporteur": "Teacher_35",
+        "Membre": "Teacher_36",
+        "Salle": "Room_1"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_13",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 7,
+      "globalSlot": 15,
+      "roles": {
+        "Candidat": "Student_13",
+        "President": "Teacher_37",
+        "Rapporteur": "Teacher_38",
+        "Membre": "Teacher_39",
+        "Salle": "Room_2"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_14",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 7,
+      "globalSlot": 15,
+      "roles": {
+        "Candidat": "Student_14",
+        "President": "Teacher_40",
+        "Rapporteur": "Teacher_41",
+        "Membre": "Teacher_42",
+        "Salle": "Room_3"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_15",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 7,
+      "globalSlot": 15,
+      "roles": {
+        "Candidat": "Student_15",
+        "President": "Teacher_43",
+        "Rapporteur": "Teacher_44",
+        "Membre": "Teacher_45",
+        "Salle": "Room_4"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_10",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 8,
+      "globalSlot": 16,
+      "roles": {
+        "Candidat": "Student_10",
+        "President": "Teacher_28",
+        "Rapporteur": "Teacher_29",
+        "Membre": "Teacher_30",
+        "Salle": "Room_4"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_11",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 8,
+      "globalSlot": 16,
+      "roles": {
+        "Candidat": "Student_11",
+        "President": "Teacher_31",
+        "Rapporteur": "Teacher_32",
+        "Membre": "Teacher_33",
+        "Salle": "Room_5"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_6",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 8,
+      "globalSlot": 16,
+      "roles": {
+        "Candidat": "Student_6",
+        "President": "Teacher_16",
+        "Rapporteur": "Teacher_17",
+        "Membre": "Teacher_18",
+        "Salle": "Room_6"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_7",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 8,
+      "globalSlot": 16,
+      "roles": {
+        "Candidat": "Student_7",
+        "President": "Teacher_19",
+        "Rapporteur": "Teacher_20",
+        "Membre": "Teacher_21",
+        "Salle": "Room_1"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_8",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 8,
+      "globalSlot": 16,
+      "roles": {
+        "Candidat": "Student_8",
+        "President": "Teacher_22",
+        "Rapporteur": "Teacher_23",
+        "Membre": "Teacher_24",
+        "Salle": "Room_2"
+      }
+    },
+    {
+      "activityInstance": "Soutenance_9",
+      "activity": "Soutenance",
+      "day": "Jour_2",
+      "slotInDay": 8,
+      "globalSlot": 16,
+      "roles": {
+        "Candidat": "Student_9",
+        "President": "Teacher_25",
+        "Rapporteur": "Teacher_26",
+        "Membre": "Teacher_27",
+        "Salle": "Room_3"
+      }
+    }
+  ]
+}

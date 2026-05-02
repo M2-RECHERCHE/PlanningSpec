@@ -8,7 +8,10 @@ Serveur Express dédié au backend HTTP.
 2. création d'un document Langium en mémoire,
 3. validation du document,
 4. génération du fichier MiniZinc,
-5. exécution de MiniZinc puis retour du résultat.
+5. exécution de MiniZinc ou délégation à OptaPlanner (si solveur `OptaPlanner` choisi), puis retour du résultat.
+
+Lors d'un appel `POST /api/plannings/:id/solve` ou `POST /api/solve`, vous pouvez fournir
+`solverTimeLimitSeconds` dans le body pour fixer le timeout demandé au solveur (notamment OptaPlanner).
 
 ## Variables d'environnement
 
@@ -16,3 +19,5 @@ Serveur Express dédié au backend HTTP.
 - `ALLOWED_ORIGINS` : origines CORS séparées par des virgules
 - `MINIZINC_SOLVER` : solveur MiniZinc, défaut `Highs`
 - `MINIZINC_TIMEOUT_MS` : timeout solveur en millisecondes, défaut `36000000` (10h)
+- `OPTAPLANNER_URL` : URL du backend Spring Boot OptaPlanner, défaut `http://localhost:8084`
+- `OPTAPLANNER_TIMEOUT_MS` : timeout OptaPlanner en millisecondes, défaut `1800000` (30 min)

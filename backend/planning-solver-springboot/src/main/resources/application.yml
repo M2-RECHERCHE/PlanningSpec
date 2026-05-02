@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: planning-solver
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+server:
+  port: 8084
+
+logging:
+  level:
+    org.optaplanner: INFO
+    com.example.planning: INFO

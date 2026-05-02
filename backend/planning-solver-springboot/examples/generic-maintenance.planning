@@ -1,0 +1,41 @@
+{
+  "time": {
+    "days": ["D1", "D2"],
+    "slotsPerDay": 4
+  },
+  "activities": {
+    "Maintenance": { "count": 2, "duration": 2 },
+    "Inspection": { "count": 2, "duration": 1 }
+  },
+  "resources": {
+    "Technician": ["Tech_1", "Tech_2"],
+    "Machine": ["Machine_1", "Machine_2"],
+    "Inspector": ["Inspector_1"]
+  },
+  "roles": {
+    "Maintenance": {
+      "Worker": "Technician",
+      "Machine": "Machine"
+    },
+    "Inspection": {
+      "Inspector": "Inspector",
+      "Machine": "Machine"
+    }
+  },
+  "constraints": [
+    { "type": "mandatory_roles", "activity": "Maintenance" },
+    { "type": "mandatory_roles", "activity": "Inspection" },
+    { "type": "resource_exclusivity", "resourceType": "Technician", "activity": "Maintenance", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Machine", "activity": "Maintenance", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "Inspector", "activity": "Inspection", "scope": "slot", "max": 1 },
+    { "type": "temporal_precedence", "beforeActivity": "Maintenance", "afterActivity": "Inspection" },
+    { "type": "fixed_assignment", "activityInstance": "Maintenance_1", "role": "Machine", "resource": "Machine_1" },
+    { "type": "forbidden_assignment", "activityInstance": "Maintenance_2", "role": "Worker", "resource": "Tech_1" },
+    { "type": "time_window", "activityInstance": "Maintenance_1", "minSlot": 1, "maxSlot": 4 }
+  ],
+  "preferences": [
+    { "type": "preferred_resource", "activityInstance": "Inspection_1", "role": "Inspector", "resource": "Inspector_1", "weight": 2 },
+    { "type": "avoid_participation_on_date", "resource": "Tech_1", "date": "D2", "weight": 1 },
+    { "type": "max_per_scope", "resourceType": "Machine", "activity": "Maintenance", "scope": "day", "max": 1, "weight": 1 }
+  ]
+}

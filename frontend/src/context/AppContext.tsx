@@ -36,7 +36,7 @@ interface AppContextType {
   updatePlanningStatus: (id: string, status: PlanStatus) => Promise<void>;
   updatePlanningStep: (id: string, step: number, data?: Record<string, any>) => Promise<void>;
   savePlanningData: (id: string, payload: SavePlanningInput) => Promise<Planning | null>;
-  solvePlanning: (id: string, data?: Record<string, any>, source?: string, solver?: string) => Promise<PlanningSolveResult | null>;
+  solvePlanning: (id: string, data?: Record<string, any>, source?: string, solver?: string, solverTimeLimitSeconds?: number) => Promise<PlanningSolveResult | null>;
   listPlanningVersions: (planningId: string) => Promise<PlanningSolutionVersion[]>;
   deletePlanningVersion: (planningId: string, versionId: string) => Promise<boolean>;
   deletePlanning: (id: string) => Promise<void>;
@@ -425,12 +425,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [applyPlanningUpdate, handlePossibleAuthError, refreshData, toast]);
 
-  const solvePlanning = useCallback(async (id: string, data?: Record<string, any>, source?: string, solver?: string) => {
+  const solvePlanning = useCallback(async (
+    id: string,
+    data?: Record<string, any>,
+    source?: string,
+    solver?: string,
+    solverTimeLimitSeconds?: number
+  ) => {
     try {
       const body: Record<string, any> = {};
       if (data) body.data = data;
       if (source) body.source = source;
       if (solver) body.solver = solver;
+      if (typeof solverTimeLimitSeconds === 'number' && Number.isFinite(solverTimeLimitSeconds)) {
+        body.solverTimeLimitSeconds = Math.max(1, Math.floor(solverTimeLimitSeconds));
+      }
       const response = await api.post<{ data: { planning: Planning; result: { output: string; warnings: string[]; solveTimeMs: number } } }>(
         `/api/plannings/${id}/solve`,
         body

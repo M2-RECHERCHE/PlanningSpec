@@ -2878,7 +2878,7 @@ const Step8: React.FC<Step8Props> = ({
               </div>
             )}
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 8 }}>
-              Highs est recommandé pour la planification. Gecode et Chuffed sont adaptés aux contraintes combinatoires.
+              Choisissez le solveur le plus adapté à votre cas (MiniZinc ou OptaPlanner si disponible).
             </div>
           </div>
 
@@ -3128,7 +3128,8 @@ export const PlanningEditorPage: React.FC = () => {
   const [reportLoading, setReportLoading] = useState(false);
   const [saveTime, setSaveTime] = useState<string | null>(null);
   const [exitConfirm, setExitConfirm] = useState(false);
-  const [selectedSolver, setSelectedSolver] = useState<string>('highs');
+  const [selectedSolver, setSelectedSolver] = useState<string>('');
+  const [solverTimeLimitSeconds, setSolverTimeLimitSeconds] = useState<number>(10);
   const [solvers, setSolvers] = useState<AvailableSolver[]>([]);
   const [loadingSolvers, setLoadingSolvers] = useState(true);
   const [solutionVersions, setSolutionVersions] = useState<PlanningSolutionVersion[]>([]);
@@ -3369,6 +3370,15 @@ export const PlanningEditorPage: React.FC = () => {
       .then((res: { data: { data: { solvers: AvailableSolver[] } } }) => {
         const list = res.data.data.solvers;
         setSolvers(list);
+        if (list.length > 0) {
+          const defaultSolver = list.find(s => s.isDefault) ?? list[0];
+          setSelectedSolver(prev => {
+            if (!prev) {
+              return defaultSolver.id;
+            }
+            return list.some(s => s.id === prev) ? prev : defaultSolver.id;
+          });
+        }
       })
       .catch(() => {})
       .finally(() => setLoadingSolvers(false));
@@ -3711,7 +3721,13 @@ export const PlanningEditorPage: React.FC = () => {
 
     lastPersistedDslRef.current = source;
 
-    const result = await solvePlanning(selectedPlanning.id, undefined, source, selectedSolver || undefined);
+    const result = await solvePlanning(
+      selectedPlanning.id,
+      undefined,
+      source,
+      selectedSolver || undefined,
+      selectedSolver === 'OptaPlanner' ? solverTimeLimitSeconds : undefined
+    );
     setSolverTimeMs(result?.solveTimeMs ?? null);
     setEditorSolving(false);
     setSolving(false);
@@ -3723,7 +3739,9 @@ export const PlanningEditorPage: React.FC = () => {
   };
 
   const handleGenerateReport = (versionId?: string) => {
-    setReportVersionSelection(selectedPlanning.id, versionId);
+    const fallbackLatestVersionId = solutionVersions.length > 0 ? solutionVersions[0].id : undefined;
+    const effectiveVersionId = versionId ?? fallbackLatestVersionId;
+    setReportVersionSelection(selectedPlanning.id, effectiveVersionId);
     setReportLoading(true);
     setTimeout(() => {
       navigate('report', { planning: selectedPlanning });
@@ -3762,7 +3780,13 @@ export const PlanningEditorPage: React.FC = () => {
       return;
     }
     lastPersistedDslRef.current = sourceToSolve;
-    const result = await solvePlanning(selectedPlanning.id, undefined, sourceToSolve, selectedSolver || undefined);
+    const result = await solvePlanning(
+      selectedPlanning.id,
+      undefined,
+      sourceToSolve,
+      selectedSolver || undefined,
+      selectedSolver === 'OptaPlanner' ? solverTimeLimitSeconds : undefined
+    );
     setEditorSolving(false);
     if (result) {
       setSolverOutput(result.output);
@@ -4349,7 +4373,7 @@ export const PlanningEditorPage: React.FC = () => {
                       ? 'Chargement…'
                       : (solvers.find(s => s.id === selectedSolver)?.label ?? selectedSolver ?? 'Highs')
                     }
-                    {(solvers.find(s => s.id === selectedSolver)?.isDefault ?? selectedSolver === 'highs') && (
+                    {(solvers.find(s => s.id === selectedSolver)?.isDefault ?? false) && (
                       <span style={{ fontSize: 10, color: '#888', background: '#1e1e1e', padding: '1px 5px', borderRadius: 999, border: '1px solid #3c3c3c' }}>défaut</span>
                     )}
                   </span>
@@ -4389,6 +4413,38 @@ export const PlanningEditorPage: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {selectedSolver === 'OptaPlanner' && (
+                <div>
+                  <div style={{ fontSize: 11, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Timeout OptaPlanner (secondes)
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10800}
+                    step={1}
+                    value={solverTimeLimitSeconds}
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      if (!Number.isFinite(next)) return;
+                      setSolverTimeLimitSeconds(Math.max(1, Math.min(10800, Math.floor(next))));
+                    }}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid #3c3c3c',
+                      color: '#cccccc',
+                      borderRadius: 6,
+                      padding: '6px 10px',
+                      fontSize: 12
+                    }}
+                  />
+                  <div style={{ fontSize: 10, color: '#666', marginTop: 4 }}>
+                    Le timeout sera transmis au backend OptaPlanner pour cette résolution.
+                  </div>
+                </div>
+              )}
 
               {/* Success banner */}
               {selectedPlanning.solutionOutput && !editorSolving && (

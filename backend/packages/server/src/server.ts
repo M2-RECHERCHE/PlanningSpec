@@ -2,6 +2,8 @@ import cors from 'cors';
 import express from 'express';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import http from 'node:http';
+import https from 'node:https';
 import { promisify } from 'node:util';
 
 import {
@@ -54,6 +56,8 @@ import { solvePlanningSource, validatePlanningSource } from './solver.js';
 // ---------------------------------------------------------------------------
 
 const execFileAsync = promisify(execFile);
+const OPTAPLANNER_SOLVER_ID = 'OptaPlanner';
+const OPTAPLANNER_SOLVER_LABEL = 'OptaPlanner';
 
 export interface AvailableSolver {
     id: string;       // identifiant technique MiniZinc (ex: "Highs")
@@ -76,6 +80,110 @@ const KNOWN_SOLVERS: Array<{ pattern: string; label: string; id: string }> = [
 let cachedSolvers: AvailableSolver[] = [
     { id: env.solver, label: `${env.solver} (défaut)`, isDefault: true }
 ];
+
+interface OptaPlannerHealthState {
+    isUp: boolean;
+    lastCheckedAt: string | null;
+    url: string;
+    message: string;
+}
+
+let optaPlannerHealth: OptaPlannerHealthState = {
+    isUp: false,
+    lastCheckedAt: null,
+    url: env.optaPlannerUrl,
+    message: 'Non vérifié'
+};
+
+interface SpringSolveAssignment {
+    activityInstance?: string;
+    day?: string;
+    slotInDay?: number;
+    globalSlot?: number;
+    roles?: Record<string, unknown>;
+}
+
+interface SpringSolveResult {
+    status?: string;
+    sourceName?: string;
+    score?: string;
+    hardScore?: number;
+    softScore?: number;
+    solvingTimeMillis?: number;
+    elapsedMillis?: number;
+    solveTimeMs?: number;
+    elapsedMs?: number;
+    assignments?: SpringSolveAssignment[];
+    hardViolations?: Array<{ message?: string }>;
+    softViolations?: Array<{ message?: string }>;
+    warnings?: string[];
+    notes?: string[];
+}
+
+interface HttpRequestResult {
+    statusCode: number;
+    body: string;
+}
+
+function ensureOptaPlannerSolverOption(): void {
+    const alreadyPresent = cachedSolvers.some(s => s.id === OPTAPLANNER_SOLVER_ID);
+    if (optaPlannerHealth.isUp && !alreadyPresent) {
+        cachedSolvers.push({
+            id: OPTAPLANNER_SOLVER_ID,
+            label: OPTAPLANNER_SOLVER_LABEL,
+            isDefault: false
+        });
+    }
+    if (!optaPlannerHealth.isUp && alreadyPresent) {
+        cachedSolvers = cachedSolvers.filter(s => s.id !== OPTAPLANNER_SOLVER_ID);
+    }
+}
+
+function requestHttpJson(
+    method: 'GET' | 'POST',
+    urlString: string,
+    timeoutMs: number,
+    body?: string,
+    contentType = 'application/json'
+): Promise<HttpRequestResult> {
+    return new Promise((resolve, reject) => {
+        const parsed = new URL(urlString);
+        const isHttps = parsed.protocol === 'https:';
+        const transport = isHttps ? https : http;
+
+        const req = transport.request({
+            protocol: parsed.protocol,
+            hostname: parsed.hostname,
+            port: parsed.port ? Number(parsed.port) : (isHttps ? 443 : 80),
+            path: `${parsed.pathname}${parsed.search}`,
+            method,
+            headers: {
+                Accept: 'application/json',
+                ...(body ? { 'Content-Type': contentType, 'Content-Length': Buffer.byteLength(body) } : {})
+            }
+        }, (res) => {
+            let data = '';
+            res.setEncoding('utf8');
+            res.on('data', chunk => { data += chunk; });
+            res.on('end', () => {
+                resolve({
+                    statusCode: res.statusCode ?? 500,
+                    body: data
+                });
+            });
+        });
+
+        req.on('error', reject);
+        req.setTimeout(timeoutMs, () => {
+            req.destroy(new Error(`Timeout after ${timeoutMs} ms`));
+        });
+
+        if (body) {
+            req.write(body);
+        }
+        req.end();
+    });
+}
 
 async function detectAvailableSolvers(): Promise<void> {
     try {
@@ -114,6 +222,46 @@ async function detectAvailableSolvers(): Promise<void> {
         console.log(`Solveurs détectés : ${cachedSolvers.map(s => s.label).join(', ')}`);
     } catch {
         console.warn('Impossible de détecter les solveurs MiniZinc — utilisation du solveur par défaut.');
+    }
+}
+
+async function detectOptaPlannerHealthAtStartup(): Promise<void> {
+    const healthUrl = `${env.optaPlannerUrl.replace(/\/$/, '')}/api/planning/health`;
+    try {
+        const response = await requestHttpJson('GET', healthUrl, 5_000);
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+            const body = JSON.parse(response.body) as { status?: string; service?: string };
+            const isUp = body.status === 'UP';
+            optaPlannerHealth = {
+                isUp,
+                lastCheckedAt: new Date().toISOString(),
+                url: env.optaPlannerUrl,
+                message: isUp
+                    ? `Service détecté: ${body.service ?? 'planning-solver'}`
+                    : `Réponse inattendue: status=${body.status ?? 'unknown'}`
+            };
+        } else {
+            optaPlannerHealth = {
+                isUp: false,
+                lastCheckedAt: new Date().toISOString(),
+                url: env.optaPlannerUrl,
+                message: `HTTP ${response.statusCode}`
+            };
+        }
+    } catch (error) {
+        optaPlannerHealth = {
+            isUp: false,
+            lastCheckedAt: new Date().toISOString(),
+            url: env.optaPlannerUrl,
+            message: error instanceof Error ? error.message : 'Erreur de connexion'
+        };
+    } finally {
+        ensureOptaPlannerSolverOption();
+        if (optaPlannerHealth.isUp) {
+            console.log(`OptaPlanner UP (${optaPlannerHealth.url})`);
+        } else {
+            console.warn(`OptaPlanner indisponible (${optaPlannerHealth.url}): ${optaPlannerHealth.message}`);
+        }
     }
 }
 
@@ -218,6 +366,17 @@ function normalizeSource(value: unknown): string | null {
     }
 
     return null;
+}
+
+function parseSolverTimeLimitSecondsFromBody(body: unknown): number | undefined {
+    if (!isRecord(body)) {
+        return undefined;
+    }
+    const raw = body.solverTimeLimitSeconds;
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+        return undefined;
+    }
+    return Math.max(1, Math.min(10_800, Math.floor(raw)));
 }
 
 function createEmptyPlanningData(): SolveReadyData {
@@ -1537,17 +1696,157 @@ async function createUserSession(user: UserRecord): Promise<SessionPayload> {
     };
 }
 
+function convertOptaAssignmentsToOutput(assignments: SpringSolveAssignment[], days: string[]): string {
+    const dayToIndex = new Map<string, number>();
+    days.forEach((day, index) => dayToIndex.set(day, index + 1));
+
+    const lines: string[] = [];
+    const sortedAssignments = [...assignments].sort((a, b) => (a.globalSlot ?? 0) - (b.globalSlot ?? 0));
+    for (const assignment of sortedAssignments) {
+        const instance = assignment.activityInstance ?? 'Unknown_1';
+        const globalSlot = assignment.globalSlot ?? 0;
+        const dayLabel = assignment.day ?? '';
+        const dayIndex = dayToIndex.get(dayLabel) ?? 1;
+        lines.push(`ACTIVITY: ${instance} slot=${globalSlot} day=${dayIndex}`);
+        const roles = assignment.roles ?? {};
+        for (const [role, rawResource] of Object.entries(roles)) {
+            const resources = Array.isArray(rawResource)
+                ? rawResource.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+                : (typeof rawResource === 'string' && rawResource.trim().length > 0 ? [rawResource] : []);
+            for (const resource of resources) {
+                lines.push(`ROLE: ${instance} role=${role} resource=${resource}`);
+            }
+        }
+    }
+    return lines.join('\n');
+}
+
+function extractSolveTimeMsFromOptaPayload(result: SpringSolveResult): number | null {
+    const candidates = [
+        result.solvingTimeMillis,
+        result.elapsedMillis,
+        result.solveTimeMs,
+        result.elapsedMs
+    ];
+    for (const value of candidates) {
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+            return Math.floor(value);
+        }
+    }
+    return null;
+}
+
+async function solvePlanningSourceWithOptaPlanner(
+    source: string,
+    days: string[],
+    requestedTimeLimitSeconds?: number
+): Promise<{ ok: true; result: { output: string; warnings: string[]; solveTimeMs: number } } | { ok: false; error: { status: number; code: string; message: string; details: string[]; hint?: string } }> {
+    const defaultTimeLimitSeconds = Math.max(1, Math.floor(env.optaPlannerTimeoutMs / 1000));
+    const safeTimeLimitSeconds = typeof requestedTimeLimitSeconds === 'number' && Number.isFinite(requestedTimeLimitSeconds)
+        ? Math.max(1, Math.min(10_800, Math.floor(requestedTimeLimitSeconds)))
+        : defaultTimeLimitSeconds;
+    const requestTimeoutMs = safeTimeLimitSeconds * 1000 + 10_000;
+
+    const baseUrl = env.optaPlannerUrl.replace(/\/$/, '');
+    const url = `${baseUrl}/api/planning/solve-json?timeLimitSeconds=${safeTimeLimitSeconds}`;
+    try {
+        const startedAt = Date.now();
+        const response = await requestHttpJson('POST', url, requestTimeoutMs, source, 'application/json');
+        const measuredElapsedMs = Date.now() - startedAt;
+        let payload: SpringSolveResult | { message?: string } | null = null;
+        try {
+            payload = JSON.parse(response.body);
+        } catch {
+            payload = null;
+        }
+
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            const message = (payload && 'message' in payload && typeof payload.message === 'string')
+                ? payload.message
+                : 'Le backend OptaPlanner a renvoyé une erreur.';
+            return {
+                ok: false,
+                error: {
+                    status: 502,
+                    code: 'OPTAPLANNER_ERROR',
+                    message,
+                    details: [
+                        `URL: ${url}`,
+                        `HTTP status: ${response.statusCode}`,
+                        response.body.slice(0, 1_500)
+                    ],
+                    hint: 'Vérifie les logs du service Spring Boot OptaPlanner sur le port 8084.'
+                }
+            };
+        }
+
+        const result = payload as SpringSolveResult;
+        const status = (result.status ?? '').toUpperCase();
+        const warnings = [
+            ...(result.warnings ?? []),
+            ...(result.notes ?? [])
+        ];
+        const hardDetails = (result.hardViolations ?? [])
+            .map(v => v.message)
+            .filter((msg): msg is string => typeof msg === 'string' && msg.length > 0);
+
+        if (status.includes('INFEASIBLE') || status.includes('UNSAT')) {
+            return {
+                ok: false,
+                error: {
+                    status: 422,
+                    code: 'UNSATISFIABLE',
+                    message: 'Aucune solution réalisable n’a été trouvée par OptaPlanner.',
+                    details: hardDetails.length > 0 ? hardDetails : ['Le solveur OptaPlanner a retourné un état infaisable.'],
+                    hint: 'Réduis les contraintes fortes ou augmente les ressources disponibles.'
+                }
+            };
+        }
+
+        const assignments = Array.isArray(result.assignments) ? result.assignments : [];
+        const output = convertOptaAssignmentsToOutput(assignments, days) || JSON.stringify(result, null, 2);
+        const extractedSolveTime = extractSolveTimeMsFromOptaPayload(result);
+        const solveTimeMs = extractedSolveTime ?? measuredElapsedMs;
+        return {
+            ok: true,
+            result: {
+                output,
+                warnings,
+                solveTimeMs
+            }
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            error: {
+                status: 502,
+                code: 'OPTAPLANNER_UNAVAILABLE',
+                message: 'Le service OptaPlanner est indisponible.',
+                details: [error instanceof Error ? error.message : 'Erreur de communication avec OptaPlanner.'],
+                hint: `Démarre le backend Spring Boot et vérifie ${env.optaPlannerUrl}/api/planning/health`
+            }
+        };
+    }
+}
+
 async function solveAndPersistPlanning(
     userId: string,
     planning: PlanningRecord,
     sourceOverride?: string,
-    solver: string = env.solver
+    solver: string = env.solver,
+    solverTimeLimitSeconds?: number
 ): Promise<{ ok: true; planning: PlanningRecord; output: string; warnings: string[]; solveTimeMs: number } | { ok: false; status: number; error: ApiErrorPayload }> {
     let source: string;
     let capacityWarnings: string[] = [];
+    let daysForOutput: string[] = [];
 
     if (typeof sourceOverride === "string" && sourceOverride.trim().length > 0) {
         source = sourceOverride;
+        const persistedData = getPersistedPlanningData(planning.data);
+        const persistedTime = isRecord(persistedData.time) ? persistedData.time : {};
+        daysForOutput = Array.isArray(persistedTime.days)
+            ? persistedTime.days.filter((day): day is string => typeof day === 'string' && day.trim().length > 0)
+            : [];
     } else {
         const validation = validatePlanningDataForSolve(planning.data);
         if (!validation.value) {
@@ -1573,10 +1872,13 @@ async function solveAndPersistPlanning(
         }
 
         capacityWarnings = analyzePotentialCapacityRisks(validation.value);
+        daysForOutput = validation.value.time.days;
         source = serializeSolveModelToDsl(validation.value);
     }
 
-    const solveResult = await solvePlanningSource(source, solver);
+    const solveResult = solver === OPTAPLANNER_SOLVER_ID
+        ? await solvePlanningSourceWithOptaPlanner(source, daysForOutput, solverTimeLimitSeconds)
+        : await solvePlanningSource(source, solver);
 
     if (!solveResult.ok) {
         const combinedDetails = solveResult.error.code === "UNSATISFIABLE"
@@ -1675,6 +1977,7 @@ app.get('/api/health', async (_req, res) => {
         service: "planning-spec-server",
         port: env.port,
         solver: env.solver,
+        optaPlanner: optaPlannerHealth,
         database
     });
 });
@@ -2086,9 +2389,17 @@ app.post('/api/plannings/:id/solve', authenticateRequest, async (req, res) => {
         const requestedSolver = isRecord(req.body) && typeof req.body.solver === "string"
             ? req.body.solver
             : env.solver;
-        const resolvedSolver = cachedSolvers.some(s => s.id === requestedSolver)
-            ? requestedSolver
-            : env.solver;
+        const solverSupported = cachedSolvers.some(s => s.id === requestedSolver);
+        if (isRecord(req.body) && typeof req.body.solver === "string" && !solverSupported) {
+            return sendError(res, 400, {
+                code: "BAD_REQUEST",
+                message: `Le solveur demandé "${requestedSolver}" n'est pas disponible.`,
+                details: [`Solveurs disponibles: ${cachedSolvers.map(s => s.id).join(', ')}`],
+                hint: 'Vérifie que le backend OptaPlanner est démarré si tu veux utiliser ce solveur.'
+            });
+        }
+        const resolvedSolver = solverSupported ? requestedSolver : env.solver;
+        const solverTimeLimitSeconds = parseSolverTimeLimitSecondsFromBody(req.body);
 
         const persistedData = getPersistedPlanningData(planning.data);
         const sourceOverride = isRecord(req.body) && typeof req.body.source === "string" && req.body.source.trim().length > 0
@@ -2119,7 +2430,13 @@ app.post('/api/plannings/:id/solve', authenticateRequest, async (req, res) => {
             : planning;
 
         const solveTarget = persistedPlanning ?? planning;
-        const solveResult = await solveAndPersistPlanning(auth.user.id, solveTarget, sourceOverride, resolvedSolver);
+        const solveResult = await solveAndPersistPlanning(
+            auth.user.id,
+            solveTarget,
+            sourceOverride,
+            resolvedSolver,
+            solverTimeLimitSeconds
+        );
         if (!solveResult.ok) {
             return sendError(res, solveResult.status, solveResult.error);
         }
@@ -2183,11 +2500,31 @@ app.post('/api/solve', authenticateRequest, async (req, res) => {
     const requestedSolver = isRecord(req.body) && typeof req.body.solver === "string"
         ? req.body.solver
         : env.solver;
-    const resolvedSolver = cachedSolvers.some(s => s.id === requestedSolver)
-        ? requestedSolver
-        : env.solver;
+    const solverSupported = cachedSolvers.some(s => s.id === requestedSolver);
+    if (isRecord(req.body) && typeof req.body.solver === "string" && !solverSupported) {
+        return sendError(res, 400, {
+            code: "BAD_REQUEST",
+            message: `Le solveur demandé "${requestedSolver}" n'est pas disponible.`,
+            details: [`Solveurs disponibles: ${cachedSolvers.map(s => s.id).join(', ')}`],
+            hint: 'Vérifie que le backend OptaPlanner est démarré si tu veux utiliser ce solveur.'
+        });
+    }
+    const resolvedSolver = solverSupported ? requestedSolver : env.solver;
+    const solverTimeLimitSeconds = parseSolverTimeLimitSecondsFromBody(req.body);
 
-    const solveResult = await solvePlanningSource(source, resolvedSolver);
+    let daysForOutput: string[] = [];
+    try {
+        const parsedSource = JSON.parse(source) as { time?: { days?: unknown } };
+        if (Array.isArray(parsedSource?.time?.days)) {
+            daysForOutput = parsedSource.time.days.filter((day): day is string => typeof day === 'string' && day.trim().length > 0);
+        }
+    } catch {
+        // Source may not be raw JSON. Days mapping stays empty.
+    }
+
+    const solveResult = resolvedSolver === OPTAPLANNER_SOLVER_ID
+        ? await solvePlanningSourceWithOptaPlanner(source, daysForOutput, solverTimeLimitSeconds)
+        : await solvePlanningSource(source, resolvedSolver);
     if (!solveResult.ok) {
         return sendError(res, solveResult.error.status, {
             code: solveResult.error.code,
@@ -2269,7 +2606,10 @@ app.delete('/api/tags/:id', authenticateRequest, async (req, res) => {
 });
 
 app.get('/api/solvers', (_req, res) => {
-    return sendSuccess(res, { solvers: cachedSolvers });
+    return sendSuccess(res, {
+        solvers: cachedSolvers,
+        optaPlanner: optaPlannerHealth
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -2400,6 +2740,7 @@ app.get('/', (_req, res) => {
 
 await initializeDatabase();
 await detectAvailableSolvers();
+await detectOptaPlannerHealthAtStartup();
 
 app.listen(env.port, () => {
     console.log(`Planning Spec server listening on http://localhost:${env.port}`);

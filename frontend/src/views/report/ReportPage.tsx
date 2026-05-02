@@ -57,7 +57,34 @@ export const ReportPage: React.FC = () => {
     setError(null);
     fetchReport(selectedPlanning.id, versionId)
       .then(r => { setReport(r); setCustomColors({}); })
-      .catch(e => setError(e?.response?.data?.error?.message ?? e?.message ?? 'Erreur de chargement'))
+      .catch(async (e: any) => {
+        const status = e?.response?.status;
+        const backendCode = e?.response?.data?.error?.code;
+        const shouldFallbackToCurrent =
+          Boolean(versionId) && (
+            status === 404 ||
+            backendCode === 'NOT_FOUND' ||
+            backendCode === 'NO_SOLUTION'
+          );
+        if (shouldFallbackToCurrent) {
+          try {
+            setReportVersionSelection(selectedPlanning.id, undefined);
+            setReportVersionId(undefined);
+            const fallback = await fetchReport(selectedPlanning.id, undefined);
+            setReport(fallback);
+            setCustomColors({});
+            return;
+          } catch (fallbackError: any) {
+            setError(
+              fallbackError?.response?.data?.error?.message
+              ?? fallbackError?.message
+              ?? 'Erreur de chargement'
+            );
+            return;
+          }
+        }
+        setError(e?.response?.data?.error?.message ?? e?.message ?? 'Erreur de chargement');
+      })
       .finally(() => setLoading(false));
   }, [selectedPlanning?.id]);
 
