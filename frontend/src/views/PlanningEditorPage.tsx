@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import { useApp } from '../context/AppContext';
-import { api } from '../lib/api';
+import { api, getBackendError } from '../lib/api';
 import { setReportVersionSelection } from '../lib/reportApi';
 import { AppLayout, Topbar } from '../components/layout/AppLayout';
 import { StatusBadge, ProgressBar, Button, Input, Textarea, NumberInput, Modal, Select, Card } from '../components/ui';
@@ -2653,6 +2653,30 @@ function getConsoleOutputFromPlanning(planning: Planning | null): string | null 
   return planning?.solutionOutput ?? null;
 }
 
+function buildFeasibleSolutionsConsoleOutput(
+  solutions: Array<{ output: string }>,
+  finalOutput?: string
+): string {
+  const history = solutions
+    .map((solution, index) => `=== Solution faisable #${index + 1} ===\n${solution.output}`)
+    .join('\n\n');
+
+  if (finalOutput && finalOutput.trim().length > 0) {
+    if (!history) {
+      return `=== Résultat final (dernière solution faisable) ===\n${finalOutput}`;
+    }
+    return [
+      '=== Résultat final (dernière solution faisable) ===',
+      finalOutput,
+      '',
+      '=== Historique des solutions faisables trouvées ===',
+      history,
+    ].join('\n');
+  }
+
+  return history;
+}
+
 interface Step8Props {
   data: EditorFormData;
   planning: Planning | null;
@@ -2668,6 +2692,10 @@ interface Step8Props {
   isSolving?: boolean;
   solveElapsedMs?: number;
   solverTimeMs?: number | null;
+  canStopSolve?: boolean;
+  stopRequested?: boolean;
+  bestSolutionCount?: number;
+  onStopSolve?: () => Promise<void> | void;
 }
 
 interface AvailableSolver { id: string; label: string; isDefault: boolean; }
@@ -2687,6 +2715,10 @@ const Step8: React.FC<Step8Props> = ({
   isSolving = false,
   solveElapsedMs = 0,
   solverTimeMs,
+  canStopSolve = false,
+  stopRequested = false,
+  bestSolutionCount = 0,
+  onStopSolve,
 }) => {
   const { isMobile } = useResponsive();
 
@@ -2884,10 +2916,26 @@ const Step8: React.FC<Step8Props> = ({
 
           {/* ── Live timer ── */}
           {isSolving && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 4px', color: '#7dd3fc', fontSize: 13 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 4px', color: '#7dd3fc', fontSize: 13, flexWrap: 'wrap' }}>
               <span style={{ width: 14, height: 14, border: '2px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
               <span>Résolution en cours…</span>
               <span style={{ fontFamily: 'monospace', fontSize: 13, color: '#38bdf8', minWidth: 52 }}>{formatMs(solveElapsedMs)}</span>
+              {stopRequested && (
+                <span style={{ fontSize: 12, color: '#fbbf24' }}>Arrêt demandé, finalisation en cours…</span>
+              )}
+              {!stopRequested && bestSolutionCount > 0 && (
+                <span style={{ fontSize: 12, color: '#93c5fd' }}>Solutions faisables trouvées: {bestSolutionCount}</span>
+              )}
+              {canStopSolve && onStopSolve && (
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => { void onStopSolve(); }}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  Stop
+                </Button>
+              )}
             </div>
           )}
           {!isSolving && solverTimeMs != null && (
@@ -2917,7 +2965,7 @@ const Step8: React.FC<Step8Props> = ({
         </Card>
       )}
 
-      {planning?.solutionOutput && (
+      {planning?.status === 'done' && planning.solutionOutput && (
         <div style={{
           border: '1px solid #10b981',
           borderRadius: 14,
@@ -3118,6 +3166,7 @@ export const PlanningEditorPage: React.FC = () => {
     solvePlanning,
     listPlanningVersions,
     deletePlanningVersion,
+    refreshData,
     toast,
   } = useApp();
   const { isMobile, isCompact } = useResponsive();
@@ -3130,6 +3179,9 @@ export const PlanningEditorPage: React.FC = () => {
   const [exitConfirm, setExitConfirm] = useState(false);
   const [selectedSolver, setSelectedSolver] = useState<string>('');
   const [solverTimeLimitSeconds, setSolverTimeLimitSeconds] = useState<number>(10);
+  const [optaAsyncJobId, setOptaAsyncJobId] = useState<string | null>(null);
+  const [optaStopRequested, setOptaStopRequested] = useState(false);
+  const [optaBestSolutionCount, setOptaBestSolutionCount] = useState(0);
   const [solvers, setSolvers] = useState<AvailableSolver[]>([]);
   const [loadingSolvers, setLoadingSolvers] = useState(true);
   const [solutionVersions, setSolutionVersions] = useState<PlanningSolutionVersion[]>([]);
@@ -3162,6 +3214,7 @@ export const PlanningEditorPage: React.FC = () => {
   const [solverWarnings, setSolverWarnings] = useState<string[]>([]);
   const [dslAutoSaving, setDslAutoSaving] = useState(false);
   const [showSolverPicker, setShowSolverPicker] = useState(false);
+  const optaPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // drag refs
   const dragPanelStartX = useRef(0);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -3240,6 +3293,141 @@ export const PlanningEditorPage: React.FC = () => {
     setSolutionVersions(versions);
   }, [deletePlanningVersion, listPlanningVersions, selectedPlanning]);
 
+  const clearOptaPollTimer = useCallback(() => {
+    if (optaPollTimerRef.current !== null) {
+      clearTimeout(optaPollTimerRef.current);
+      optaPollTimerRef.current = null;
+    }
+  }, []);
+
+  const pollOptaPlannerAsyncStatus = useCallback(async (planningId: string, jobId: string) => {
+    try {
+      const response = await api.get<{ data: {
+        jobId: string;
+        status: string;
+        terminal: boolean;
+        stopRequested: boolean;
+        bestSolutionCount: number;
+        bestScore: string | null;
+        liveResult: { output: string; warnings: string[]; solveTimeMs: number; feasible: boolean; hardScore: number | null } | null;
+        liveSolutions: Array<{ output: string; warnings: string[]; solveTimeMs: number; feasible: boolean; hardScore: number | null }>;
+        finalized: boolean;
+        result: { output: string; warnings: string[]; solveTimeMs: number } | null;
+        error: { message?: string } | null;
+      } }>(`/api/plannings/${planningId}/solve/async/${jobId}`);
+
+      const payload = response.data.data;
+      const liveSolutions = Array.isArray(payload.liveSolutions) ? payload.liveSolutions : [];
+      if (liveSolutions.length > 0) {
+        setOptaBestSolutionCount(liveSolutions.length);
+      } else if (typeof payload.bestSolutionCount === 'number') {
+        setOptaBestSolutionCount(payload.bestSolutionCount);
+      }
+      if (typeof payload.stopRequested === 'boolean') {
+        setOptaStopRequested(payload.stopRequested);
+      }
+      if (liveSolutions.length > 0) {
+        setSolverOutput(buildFeasibleSolutionsConsoleOutput(liveSolutions));
+        const latest = liveSolutions[liveSolutions.length - 1];
+        setSolverWarnings(latest.warnings ?? []);
+        setSolverTimeMs(latest.solveTimeMs ?? null);
+        setConsoleTab('output');
+      } else if (payload.liveResult) {
+        const liveResult = payload.liveResult;
+        const feasibilityLabel = liveResult.feasible
+          ? 'Dernière solution courante (faisable)'
+          : `Dernière solution courante (non faisable, hardScore=${liveResult.hardScore ?? 'n/a'})`;
+        setSolverOutput(`${feasibilityLabel}\n${liveResult.output}`);
+        const liveWarnings = liveResult.feasible
+          ? (liveResult.warnings ?? [])
+          : [`Aucune solution faisable pour le moment. hardScore=${liveResult.hardScore ?? 'n/a'}`, ...(liveResult.warnings ?? [])];
+        setSolverWarnings(liveWarnings);
+        setSolverTimeMs(liveResult.solveTimeMs ?? null);
+        setConsoleTab('output');
+      }
+
+      if (!payload.terminal || !payload.finalized) {
+        clearOptaPollTimer();
+        optaPollTimerRef.current = setTimeout(() => {
+          void pollOptaPlannerAsyncStatus(planningId, jobId);
+        }, 1000);
+        return;
+      }
+
+      clearOptaPollTimer();
+      setOptaAsyncJobId(null);
+      setSolving(false);
+      setEditorSolving(false);
+
+      if (payload.result) {
+        const finalOutput = buildFeasibleSolutionsConsoleOutput(liveSolutions, payload.result.output);
+        setSolverOutput(finalOutput.trim().length > 0 ? finalOutput : payload.result.output);
+        setSolverWarnings(payload.result.warnings ?? []);
+        setSolverTimeMs(payload.result.solveTimeMs ?? null);
+        setConsoleTab('output');
+        await refreshData();
+        await loadPlanningVersions(planningId);
+        toast(optaStopRequested
+          ? 'Résolution arrêtée. Meilleure solution courante sauvegardée.'
+          : 'Résolution OptaPlanner terminée avec succès.', 'success');
+      } else {
+        await refreshData();
+        if (payload.error?.message) {
+          toast(payload.error.message, 'error');
+        } else {
+          toast('Le job OptaPlanner est terminé sans résultat exploitable.', 'error');
+        }
+      }
+      setOptaStopRequested(false);
+    } catch (error) {
+      clearOptaPollTimer();
+      setOptaAsyncJobId(null);
+      setSolving(false);
+      setEditorSolving(false);
+      const backendError = getBackendError(error);
+      toast(backendError.message, 'error');
+      await refreshData();
+    }
+  }, [clearOptaPollTimer, loadPlanningVersions, optaStopRequested, refreshData, toast]);
+
+  const startOptaPlannerAsyncSolve = useCallback(async (planningId: string, source: string) => {
+    const response = await api.post<{ data: { jobId: string; status: string } }>(
+      `/api/plannings/${planningId}/solve/async/start`,
+      {
+        solver: 'OptaPlanner',
+        source,
+        solverTimeLimitSeconds,
+      }
+    );
+    const jobId = response.data.data.jobId;
+    setOptaAsyncJobId(jobId);
+    setOptaStopRequested(false);
+    setOptaBestSolutionCount(0);
+    clearOptaPollTimer();
+    optaPollTimerRef.current = setTimeout(() => {
+      void pollOptaPlannerAsyncStatus(planningId, jobId);
+    }, 600);
+  }, [clearOptaPollTimer, pollOptaPlannerAsyncStatus, solverTimeLimitSeconds]);
+
+  const handleStopOptaPlannerSolve = useCallback(async () => {
+    if (!selectedPlanning || !optaAsyncJobId) {
+      return;
+    }
+    try {
+      setOptaStopRequested(true);
+      await api.post(`/api/plannings/${selectedPlanning.id}/solve/async/${optaAsyncJobId}/stop`);
+      toast('Arrêt demandé à OptaPlanner. Finalisation en cours…', 'success');
+      clearOptaPollTimer();
+      optaPollTimerRef.current = setTimeout(() => {
+        void pollOptaPlannerAsyncStatus(selectedPlanning.id, optaAsyncJobId);
+      }, 300);
+    } catch (error) {
+      setOptaStopRequested(false);
+      const backendError = getBackendError(error);
+      toast(backendError.message, 'error');
+    }
+  }, [clearOptaPollTimer, optaAsyncJobId, pollOptaPlannerAsyncStatus, selectedPlanning, toast]);
+
   // Live solve timer — starts when editorSolving becomes true, stops on false
   useEffect(() => {
     if (editorSolving) {
@@ -3261,6 +3449,12 @@ export const PlanningEditorPage: React.FC = () => {
       }
     };
   }, [editorSolving]);
+
+  useEffect(() => {
+    return () => {
+      clearOptaPollTimer();
+    };
+  }, [clearOptaPollTimer]);
 
   const syncDslIntoPlatform = useCallback(async (
     rawSource: string,
@@ -3314,6 +3508,12 @@ export const PlanningEditorPage: React.FC = () => {
 
   useEffect(() => {
     if (!selectedPlanning) {
+      clearOptaPollTimer();
+      setOptaAsyncJobId(null);
+      setOptaStopRequested(false);
+      setOptaBestSolutionCount(0);
+      setSolving(false);
+      setEditorSolving(false);
       return;
     }
 
@@ -3332,10 +3532,16 @@ export const PlanningEditorPage: React.FC = () => {
     setSolverWarnings(selectedPlanning.status === 'error' ? [] : (selectedPlanning.solutionWarnings ?? []));
     setEditorError(null);
     setSaveTime(null);
+    clearOptaPollTimer();
+    setOptaAsyncJobId(null);
+    setOptaStopRequested(false);
+    setOptaBestSolutionCount(0);
+    setSolving(false);
+    setEditorSolving(false);
     planningHydratedRef.current = selectedPlanning.id;
     lastSyncedDslRef.current = getStoredDslSource(selectedPlanning, nextFormData);
     lastPersistedDslRef.current = getStoredDslSource(selectedPlanning, nextFormData);
-  }, [selectedPlanning, updateJsonValidationMarkers, updateSemanticValidationMarkers]);
+  }, [clearOptaPollTimer, selectedPlanning, updateJsonValidationMarkers, updateSemanticValidationMarkers]);
 
   useEffect(() => {
     if (!selectedPlanning) {
@@ -3721,12 +3927,24 @@ export const PlanningEditorPage: React.FC = () => {
 
     lastPersistedDslRef.current = source;
 
+    if (selectedSolver === 'OptaPlanner') {
+      try {
+        await startOptaPlannerAsyncSolve(selectedPlanning.id, source);
+      } catch (error) {
+        setSolving(false);
+        setEditorSolving(false);
+        const backendError = getBackendError(error);
+        toast(backendError.message, 'error');
+      }
+      return;
+    }
+
     const result = await solvePlanning(
       selectedPlanning.id,
       undefined,
       source,
       selectedSolver || undefined,
-      selectedSolver === 'OptaPlanner' ? solverTimeLimitSeconds : undefined
+      undefined
     );
     setSolverTimeMs(result?.solveTimeMs ?? null);
     setEditorSolving(false);
@@ -3764,6 +3982,7 @@ export const PlanningEditorPage: React.FC = () => {
     setSolverWarnings([]);
     setSolverTimeMs(null);
     setEditorSolving(true);
+    setSolving(true);
     setConsoleTab('output');
     setShowConsole(true);
     const saved = await savePlanningData(selectedPlanning.id, {
@@ -3777,17 +3996,32 @@ export const PlanningEditorPage: React.FC = () => {
     });
     if (!saved) {
       setEditorSolving(false);
+      setSolving(false);
       return;
     }
     lastPersistedDslRef.current = sourceToSolve;
+
+    if (selectedSolver === 'OptaPlanner') {
+      try {
+        await startOptaPlannerAsyncSolve(selectedPlanning.id, sourceToSolve);
+      } catch (error) {
+        setEditorSolving(false);
+        setSolving(false);
+        const backendError = getBackendError(error);
+        toast(backendError.message, 'error');
+      }
+      return;
+    }
+
     const result = await solvePlanning(
       selectedPlanning.id,
       undefined,
       sourceToSolve,
       selectedSolver || undefined,
-      selectedSolver === 'OptaPlanner' ? solverTimeLimitSeconds : undefined
+      undefined
     );
     setEditorSolving(false);
+    setSolving(false);
     if (result) {
       setSolverOutput(result.output);
       setSolverWarnings(result.warnings ?? []);
@@ -3850,6 +4084,10 @@ export const PlanningEditorPage: React.FC = () => {
       isSolving={solving}
       solveElapsedMs={solveElapsedMs}
       solverTimeMs={solverTimeMs}
+      canStopSolve={solving && selectedSolver === 'OptaPlanner' && Boolean(optaAsyncJobId) && !optaStopRequested}
+      stopRequested={optaStopRequested}
+      bestSolutionCount={optaBestSolutionCount}
+      onStopSolve={handleStopOptaPlannerSolve}
     />,
   ];
 
@@ -4021,9 +4259,21 @@ export const PlanningEditorPage: React.FC = () => {
                   Continuer
                 </Button>
               ) : (
-                <Button variant="success" onClick={() => { void handleSolve(); }} loading={solving} disabled={editorSolving} style={{ width: isMobile ? '100%' : undefined }}>
-                  Résoudre la planification
-                </Button>
+                <div style={{ display: 'flex', gap: 8, flexDirection: isMobile ? 'column' : 'row', width: isMobile ? '100%' : 'auto' }}>
+                  {selectedSolver === 'OptaPlanner' && solving && optaAsyncJobId && (
+                    <Button
+                      variant="danger"
+                      onClick={() => { void handleStopOptaPlannerSolve(); }}
+                      disabled={optaStopRequested}
+                      style={{ width: isMobile ? '100%' : undefined }}
+                    >
+                      {optaStopRequested ? 'Arrêt demandé…' : 'Stop'}
+                    </Button>
+                  )}
+                  <Button variant="success" onClick={() => { void handleSolve(); }} loading={solving} disabled={editorSolving} style={{ width: isMobile ? '100%' : undefined }}>
+                    {selectedSolver === 'OptaPlanner' && solving ? 'Résolution OptaPlanner…' : 'Résoudre la planification'}
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -4443,11 +4693,16 @@ export const PlanningEditorPage: React.FC = () => {
                   <div style={{ fontSize: 10, color: '#666', marginTop: 4 }}>
                     Le timeout sera transmis au backend OptaPlanner pour cette résolution.
                   </div>
+                  {solving && optaAsyncJobId && optaBestSolutionCount > 0 && (
+                    <div style={{ fontSize: 10, color: '#93c5fd', marginTop: 4 }}>
+                      Solutions faisables trouvées: {optaBestSolutionCount}
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Success banner */}
-              {selectedPlanning.solutionOutput && !editorSolving && (
+              {selectedPlanning.status === 'done' && selectedPlanning.solutionOutput && !editorSolving && (
                 <div style={{ fontSize: 12, color: '#10b981', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 7, padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span>✓ Planification résolue</span>
                   <button
@@ -4480,12 +4735,33 @@ export const PlanningEditorPage: React.FC = () => {
                 {editorSolving ? (
                   <>
                     <span style={{ width: 14, height: 14, border: '2px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
-                    Résolution en cours…
+                    {selectedSolver === 'OptaPlanner' && optaStopRequested ? 'Arrêt demandé…' : 'Résolution en cours…'}
                   </>
                 ) : dslErrorCount > 0
                   ? '⊘ Corrigez les erreurs avant de lancer'
                   : `▶  Résoudre avec ${solvers.find(s => s.id === selectedSolver)?.label ?? selectedSolver ?? 'Highs'}`}
               </button>
+
+              {selectedSolver === 'OptaPlanner' && solving && optaAsyncJobId && (
+                <button
+                  onClick={() => { void handleStopOptaPlannerSolve(); }}
+                  disabled={optaStopRequested}
+                  style={{
+                    width: '100%',
+                    background: optaStopRequested ? 'rgba(248,113,113,0.18)' : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    border: 'none',
+                    color: optaStopRequested ? '#fca5a5' : '#fee2e2',
+                    borderRadius: 7,
+                    padding: '8px 0',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: optaStopRequested ? 'not-allowed' : 'pointer',
+                    opacity: 0.95
+                  }}
+                >
+                  {optaStopRequested ? 'Arrêt demandé… finalisation' : '■ Stop OptaPlanner'}
+                </button>
+              )}
             </div>
 
           </div>

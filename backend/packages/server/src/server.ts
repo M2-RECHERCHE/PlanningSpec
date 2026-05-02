@@ -120,9 +120,58 @@ interface SpringSolveResult {
     notes?: string[];
 }
 
+interface SpringAsyncSolveStatus {
+    jobId?: string;
+    sourceName?: string;
+    status?: string;
+    stopRequested?: boolean;
+    terminal?: boolean;
+    createdAtMillis?: number;
+    startedAtMillis?: number;
+    finishedAtMillis?: number;
+    bestSolutionCount?: number;
+    bestScore?: string;
+    result?: SpringSolveResult;
+    feasibleSolutions?: SpringSolveResult[];
+    errorMessage?: string;
+}
+
+interface OptaPlannerAsyncSession {
+    jobId: string;
+    planningId: string;
+    userId: string;
+    solver: string;
+    source: string;
+    daysForOutput: string[];
+    capacityWarnings: string[];
+    createdAt: number;
+    finalized: boolean;
+    finalizing: boolean;
+    finalStatus: 'done' | 'error' | null;
+    finalPayload?: {
+        planning: PlanningRecord;
+        output: string;
+        warnings: string[];
+        solveTimeMs: number;
+    };
+    finalError?: ApiErrorPayload;
+}
+
 interface HttpRequestResult {
     statusCode: number;
     body: string;
+}
+
+const optaPlannerAsyncSessions = new Map<string, OptaPlannerAsyncSession>();
+const OPTAPLANNER_NON_OPTIMAL_WARNING =
+    'OptaPlanner retourne la meilleure solution trouvée dans le temps imparti; l’optimalité globale n’est pas prouvée.';
+
+interface OptaLivePreview {
+    output: string;
+    warnings: string[];
+    solveTimeMs: number;
+    feasible: boolean;
+    hardScore: number | null;
 }
 
 function ensureOptaPlannerSolverOption(): void {
@@ -1736,6 +1785,70 @@ function extractSolveTimeMsFromOptaPayload(result: SpringSolveResult): number | 
     return null;
 }
 
+function mapSpringSolvePayloadToInternal(
+    result: SpringSolveResult,
+    days: string[],
+    measuredElapsedMs: number
+): { ok: true; output: string; warnings: string[]; solveTimeMs: number } | { ok: false; error: { status: number; code: string; message: string; details: string[]; hint?: string } } {
+    const status = (result.status ?? '').toUpperCase();
+    const warnings = [
+        ...(result.warnings ?? []),
+        ...(result.notes ?? [])
+    ];
+    const hardDetails = (result.hardViolations ?? [])
+        .map(v => v.message)
+        .filter((msg): msg is string => typeof msg === 'string' && msg.length > 0);
+
+    if (status.includes('INFEASIBLE') || status.includes('UNSAT')) {
+        return {
+            ok: false,
+            error: {
+                status: 422,
+                code: 'UNSATISFIABLE',
+                message: 'Aucune solution réalisable n’a été trouvée par OptaPlanner.',
+                details: hardDetails.length > 0 ? hardDetails : ['Le solveur OptaPlanner a retourné un état infaisable.'],
+                hint: 'Réduis les contraintes fortes ou augmente les ressources disponibles.'
+            }
+        };
+    }
+
+    const assignments = Array.isArray(result.assignments) ? result.assignments : [];
+    const output = convertOptaAssignmentsToOutput(assignments, days) || JSON.stringify(result, null, 2);
+    const extractedSolveTime = extractSolveTimeMsFromOptaPayload(result);
+    const solveTimeMs = extractedSolveTime ?? measuredElapsedMs;
+    return {
+        ok: true,
+        output,
+        warnings,
+        solveTimeMs
+    };
+}
+
+function mapSpringSolvePayloadToLivePreview(
+    result: SpringSolveResult,
+    days: string[],
+    measuredElapsedMs: number
+): OptaLivePreview {
+    const warnings = [
+        ...(result.warnings ?? []),
+        ...(result.notes ?? [])
+    ];
+    const assignments = Array.isArray(result.assignments) ? result.assignments : [];
+    const output = convertOptaAssignmentsToOutput(assignments, days) || JSON.stringify(result, null, 2);
+    const extractedSolveTime = extractSolveTimeMsFromOptaPayload(result);
+    const solveTimeMs = extractedSolveTime ?? measuredElapsedMs;
+    const hardScore = typeof result.hardScore === 'number' && Number.isFinite(result.hardScore)
+        ? Math.trunc(result.hardScore)
+        : null;
+    return {
+        output,
+        warnings,
+        solveTimeMs,
+        feasible: hardScore === 0,
+        hardScore
+    };
+}
+
 async function solvePlanningSourceWithOptaPlanner(
     source: string,
     days: string[],
@@ -1781,38 +1894,21 @@ async function solvePlanningSourceWithOptaPlanner(
         }
 
         const result = payload as SpringSolveResult;
-        const status = (result.status ?? '').toUpperCase();
-        const warnings = [
-            ...(result.warnings ?? []),
-            ...(result.notes ?? [])
-        ];
-        const hardDetails = (result.hardViolations ?? [])
-            .map(v => v.message)
-            .filter((msg): msg is string => typeof msg === 'string' && msg.length > 0);
-
-        if (status.includes('INFEASIBLE') || status.includes('UNSAT')) {
+        const mapped = mapSpringSolvePayloadToInternal(result, days, measuredElapsedMs);
+        if (!mapped.ok) {
             return {
                 ok: false,
-                error: {
-                    status: 422,
-                    code: 'UNSATISFIABLE',
-                    message: 'Aucune solution réalisable n’a été trouvée par OptaPlanner.',
-                    details: hardDetails.length > 0 ? hardDetails : ['Le solveur OptaPlanner a retourné un état infaisable.'],
-                    hint: 'Réduis les contraintes fortes ou augmente les ressources disponibles.'
-                }
+                error: mapped.error
             };
         }
-
-        const assignments = Array.isArray(result.assignments) ? result.assignments : [];
-        const output = convertOptaAssignmentsToOutput(assignments, days) || JSON.stringify(result, null, 2);
-        const extractedSolveTime = extractSolveTimeMsFromOptaPayload(result);
-        const solveTimeMs = extractedSolveTime ?? measuredElapsedMs;
         return {
             ok: true,
             result: {
-                output,
-                warnings,
-                solveTimeMs
+                output: mapped.output,
+                warnings: mapped.warnings.includes(OPTAPLANNER_NON_OPTIMAL_WARNING)
+                    ? mapped.warnings
+                    : [...mapped.warnings, OPTAPLANNER_NON_OPTIMAL_WARNING],
+                solveTimeMs: mapped.solveTimeMs
             }
         };
     } catch (error) {
@@ -1826,6 +1922,317 @@ async function solvePlanningSourceWithOptaPlanner(
                 hint: `Démarre le backend Spring Boot et vérifie ${env.optaPlannerUrl}/api/planning/health`
             }
         };
+    }
+}
+
+async function startOptaPlannerAsyncSolve(
+    source: string,
+    requestedTimeLimitSeconds?: number
+): Promise<{ ok: true; jobId: string; status: string } | { ok: false; error: { status: number; code: string; message: string; details: string[]; hint?: string } }> {
+    const defaultTimeLimitSeconds = Math.max(1, Math.floor(env.optaPlannerTimeoutMs / 1000));
+    const safeTimeLimitSeconds = typeof requestedTimeLimitSeconds === 'number' && Number.isFinite(requestedTimeLimitSeconds)
+        ? Math.max(1, Math.min(10_800, Math.floor(requestedTimeLimitSeconds)))
+        : defaultTimeLimitSeconds;
+
+    const requestTimeoutMs = 20_000;
+    const baseUrl = env.optaPlannerUrl.replace(/\/$/, '');
+    const url = `${baseUrl}/api/planning/solve-json/async/start?timeLimitSeconds=${safeTimeLimitSeconds}`;
+    try {
+        const response = await requestHttpJson('POST', url, requestTimeoutMs, source, 'application/json');
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            return {
+                ok: false,
+                error: {
+                    status: 502,
+                    code: 'OPTAPLANNER_ERROR',
+                    message: 'Le backend OptaPlanner n’a pas pu démarrer le job asynchrone.',
+                    details: [
+                        `URL: ${url}`,
+                        `HTTP status: ${response.statusCode}`,
+                        response.body.slice(0, 1_500)
+                    ],
+                    hint: 'Vérifie les logs du service Spring Boot OptaPlanner sur le port 8084.'
+                }
+            };
+        }
+
+        const payload = JSON.parse(response.body) as { jobId?: string; status?: string };
+        if (typeof payload.jobId !== 'string' || payload.jobId.trim().length === 0) {
+            return {
+                ok: false,
+                error: {
+                    status: 502,
+                    code: 'OPTAPLANNER_BAD_PAYLOAD',
+                    message: 'Le backend OptaPlanner a répondu sans identifiant de job.',
+                    details: [response.body.slice(0, 1_500)]
+                }
+            };
+        }
+        return {
+            ok: true,
+            jobId: payload.jobId,
+            status: typeof payload.status === 'string' ? payload.status : 'QUEUED'
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            error: {
+                status: 502,
+                code: 'OPTAPLANNER_UNAVAILABLE',
+                message: 'Le service OptaPlanner est indisponible.',
+                details: [error instanceof Error ? error.message : 'Erreur de communication avec OptaPlanner.'],
+                hint: `Démarre le backend Spring Boot et vérifie ${env.optaPlannerUrl}/api/planning/health`
+            }
+        };
+    }
+}
+
+async function getOptaPlannerAsyncStatus(jobId: string): Promise<{ ok: true; payload: SpringAsyncSolveStatus } | { ok: false; error: { status: number; code: string; message: string; details: string[]; hint?: string } }> {
+    const baseUrl = env.optaPlannerUrl.replace(/\/$/, '');
+    const url = `${baseUrl}/api/planning/solve-json/async/${encodeURIComponent(jobId)}`;
+    try {
+        const response = await requestHttpJson('GET', url, 20_000);
+        if (response.statusCode === 404) {
+            return {
+                ok: false,
+                error: {
+                    status: 404,
+                    code: 'OPTAPLANNER_JOB_NOT_FOUND',
+                    message: 'Le job OptaPlanner est introuvable.',
+                    details: [`jobId=${jobId}`]
+                }
+            };
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            return {
+                ok: false,
+                error: {
+                    status: 502,
+                    code: 'OPTAPLANNER_ERROR',
+                    message: 'Le backend OptaPlanner a renvoyé une erreur pendant la lecture du statut.',
+                    details: [`HTTP status: ${response.statusCode}`, response.body.slice(0, 1_500)]
+                }
+            };
+        }
+        const payload = JSON.parse(response.body) as SpringAsyncSolveStatus;
+        return { ok: true, payload };
+    } catch (error) {
+        return {
+            ok: false,
+            error: {
+                status: 502,
+                code: 'OPTAPLANNER_UNAVAILABLE',
+                message: 'Le service OptaPlanner est indisponible.',
+                details: [error instanceof Error ? error.message : 'Erreur de communication avec OptaPlanner.'],
+                hint: `Démarre le backend Spring Boot et vérifie ${env.optaPlannerUrl}/api/planning/health`
+            }
+        };
+    }
+}
+
+async function stopOptaPlannerAsyncJob(jobId: string): Promise<{ ok: true; payload: SpringAsyncSolveStatus } | { ok: false; error: { status: number; code: string; message: string; details: string[]; hint?: string } }> {
+    const baseUrl = env.optaPlannerUrl.replace(/\/$/, '');
+    const url = `${baseUrl}/api/planning/solve-json/async/${encodeURIComponent(jobId)}/stop`;
+    try {
+        const response = await requestHttpJson('POST', url, 20_000);
+        if (response.statusCode === 404) {
+            return {
+                ok: false,
+                error: {
+                    status: 404,
+                    code: 'OPTAPLANNER_JOB_NOT_FOUND',
+                    message: 'Le job OptaPlanner est introuvable.',
+                    details: [`jobId=${jobId}`]
+                }
+            };
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+            return {
+                ok: false,
+                error: {
+                    status: 502,
+                    code: 'OPTAPLANNER_ERROR',
+                    message: 'Le backend OptaPlanner a renvoyé une erreur pendant la demande d’arrêt.',
+                    details: [`HTTP status: ${response.statusCode}`, response.body.slice(0, 1_500)]
+                }
+            };
+        }
+        const payload = JSON.parse(response.body) as SpringAsyncSolveStatus;
+        return { ok: true, payload };
+    } catch (error) {
+        return {
+            ok: false,
+            error: {
+                status: 502,
+                code: 'OPTAPLANNER_UNAVAILABLE',
+                message: 'Le service OptaPlanner est indisponible.',
+                details: [error instanceof Error ? error.message : 'Erreur de communication avec OptaPlanner.'],
+                hint: `Démarre le backend Spring Boot et vérifie ${env.optaPlannerUrl}/api/planning/health`
+            }
+        };
+    }
+}
+
+function isOptaPlannerAsyncStatusTerminal(status: SpringAsyncSolveStatus): boolean {
+    if (status.terminal === true) {
+        return true;
+    }
+    const value = (status.status ?? '').toUpperCase();
+    return value === 'COMPLETED' || value === 'TERMINATED_EARLY' || value === 'FAILED';
+}
+
+async function finalizeOptaPlannerAsyncSessionIfNeeded(
+    session: OptaPlannerAsyncSession,
+    springStatus: SpringAsyncSolveStatus
+): Promise<void> {
+    if (!isOptaPlannerAsyncStatusTerminal(springStatus)) {
+        return;
+    }
+    if (session.finalized || session.finalizing) {
+        return;
+    }
+
+    session.finalizing = true;
+    try {
+        const statusUpper = (springStatus.status ?? '').toUpperCase();
+        const planning = await getPlanningById(session.planningId, session.userId);
+        if (!planning) {
+            session.finalized = true;
+            session.finalStatus = 'error';
+            session.finalError = {
+                code: 'NOT_FOUND',
+                message: 'Planification introuvable pour finaliser la résolution OptaPlanner.',
+                details: [`planningId=${session.planningId}`]
+            };
+            return;
+        }
+
+        if (statusUpper === 'FAILED' || !springStatus.result) {
+            const details: string[] = [];
+            if (springStatus.errorMessage) {
+                details.push(springStatus.errorMessage);
+            }
+            if (session.capacityWarnings.length > 0) {
+                details.push(...session.capacityWarnings);
+            }
+
+            const payload: ApiErrorPayload = {
+                code: 'OPTAPLANNER_ERROR',
+                message: 'La résolution OptaPlanner a échoué.',
+                details: details.length > 0 ? details : ['Le solveur a terminé en erreur sans détail supplémentaire.'],
+                hint: 'Vérifie les contraintes fortes et les logs OptaPlanner.'
+            };
+
+            await updatePlanning(session.planningId, session.userId, {
+                status: 'error',
+                solutionOutput: null,
+                solutionWarnings: null,
+                solutionSolveTimeMs: null,
+                lastError: {
+                    message: payload.message,
+                    details: payload.details,
+                    hint: payload.hint
+                }
+            });
+
+            session.finalized = true;
+            session.finalStatus = 'error';
+            session.finalError = payload;
+            return;
+        }
+
+        const measuredElapsedMs = (() => {
+            if (typeof springStatus.startedAtMillis === 'number' && typeof springStatus.finishedAtMillis === 'number' && springStatus.finishedAtMillis >= springStatus.startedAtMillis) {
+                return springStatus.finishedAtMillis - springStatus.startedAtMillis;
+            }
+            return Math.max(0, Date.now() - session.createdAt);
+        })();
+
+        const mapped = mapSpringSolvePayloadToInternal(
+            springStatus.result,
+            session.daysForOutput,
+            measuredElapsedMs
+        );
+
+        if (!mapped.ok) {
+            const details = mapped.error.code === 'UNSATISFIABLE'
+                ? [...mapped.error.details, ...session.capacityWarnings]
+                : mapped.error.details;
+
+            await updatePlanning(session.planningId, session.userId, {
+                status: 'error',
+                solutionOutput: null,
+                solutionWarnings: null,
+                solutionSolveTimeMs: null,
+                lastError: {
+                    message: mapped.error.message,
+                    details,
+                    hint: mapped.error.hint
+                }
+            });
+
+            session.finalized = true;
+            session.finalStatus = 'error';
+            session.finalError = {
+                code: mapped.error.code,
+                message: mapped.error.message,
+                details,
+                hint: mapped.error.hint
+            };
+            return;
+        }
+
+        const mergedWarnings = [...mapped.warnings, ...session.capacityWarnings];
+        if (!mergedWarnings.includes(OPTAPLANNER_NON_OPTIMAL_WARNING)) {
+            mergedWarnings.push(OPTAPLANNER_NON_OPTIMAL_WARNING);
+        }
+        const updatedPlanning = await updatePlanning(session.planningId, session.userId, {
+            status: 'done',
+            currentStep: planning.totalSteps,
+            progress: 100,
+            solutionOutput: mapped.output,
+            solutionWarnings: mergedWarnings,
+            solutionSolveTimeMs: mapped.solveTimeMs,
+            lastError: null
+        });
+
+        if (!updatedPlanning) {
+            session.finalized = true;
+            session.finalStatus = 'error';
+            session.finalError = {
+                code: 'INTERNAL_ERROR',
+                message: 'La résolution a réussi, mais la planification n’a pas pu être rechargée.'
+            };
+            return;
+        }
+
+        await createPlanningSolutionVersion(session.userId, {
+            planningId: session.planningId,
+            solver: session.solver,
+            sourceSnapshot: session.source,
+            solutionOutput: mapped.output,
+            solutionWarnings: mergedWarnings,
+            solveTimeMs: mapped.solveTimeMs
+        });
+
+        session.finalized = true;
+        session.finalStatus = 'done';
+        session.finalPayload = {
+            planning: updatedPlanning,
+            output: mapped.output,
+            warnings: mergedWarnings,
+            solveTimeMs: mapped.solveTimeMs
+        };
+    } catch (error) {
+        session.finalized = true;
+        session.finalStatus = 'error';
+        session.finalError = {
+            code: 'DATABASE_ERROR',
+            message: 'La finalisation OptaPlanner a échoué.',
+            details: [error instanceof Error ? error.message : 'Unknown finalization error']
+        };
+    } finally {
+        session.finalizing = false;
     }
 }
 
@@ -1852,6 +2259,9 @@ async function solveAndPersistPlanning(
         if (!validation.value) {
             await updatePlanning(planning.id, userId, {
                 status: "error",
+                solutionOutput: null,
+                solutionWarnings: null,
+                solutionSolveTimeMs: null,
                 lastError: {
                     message: validation.error?.message ?? 'La planification est invalide.',
                     details: validation.error?.details,
@@ -1887,6 +2297,9 @@ async function solveAndPersistPlanning(
 
         await updatePlanning(planning.id, userId, {
             status: "error",
+            solutionOutput: null,
+            solutionWarnings: null,
+            solutionSolveTimeMs: null,
             lastError: {
                 message: solveResult.error.message,
                 details: combinedDetails,
@@ -2370,6 +2783,288 @@ app.delete('/api/plannings/:id', authenticateRequest, async (req, res) => {
             code: "DATABASE_ERROR",
             message: "Impossible de supprimer la planification.",
             details: [error instanceof Error ? error.message : "Unknown database error"]
+        });
+    }
+});
+
+app.post('/api/plannings/:id/solve/async/start', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const planning = await getPlanningById(planningId, auth.user.id);
+        if (!planning) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Planification introuvable.'
+            });
+        }
+
+        const requestedSolver = isRecord(req.body) && typeof req.body.solver === 'string'
+            ? req.body.solver
+            : env.solver;
+        const solverSupported = cachedSolvers.some(s => s.id === requestedSolver);
+        if (isRecord(req.body) && typeof req.body.solver === 'string' && !solverSupported) {
+            return sendError(res, 400, {
+                code: 'BAD_REQUEST',
+                message: `Le solveur demandé "${requestedSolver}" n'est pas disponible.`,
+                details: [`Solveurs disponibles: ${cachedSolvers.map(s => s.id).join(', ')}`],
+                hint: 'Vérifie que le backend OptaPlanner est démarré si tu veux utiliser ce solveur.'
+            });
+        }
+        const resolvedSolver = solverSupported ? requestedSolver : env.solver;
+        if (resolvedSolver !== OPTAPLANNER_SOLVER_ID) {
+            return sendError(res, 400, {
+                code: 'BAD_REQUEST',
+                message: 'La résolution asynchrone est disponible uniquement pour le solveur OptaPlanner.'
+            });
+        }
+
+        const solverTimeLimitSeconds = parseSolverTimeLimitSecondsFromBody(req.body);
+        const persistedData = getPersistedPlanningData(planning.data);
+        const sourceOverride = isRecord(req.body) && typeof req.body.source === 'string' && req.body.source.trim().length > 0
+            ? canonicalizePlanningSource(req.body.source)
+            : undefined;
+
+        const nextData = isRecord(req.body) && isRecord(req.body.data)
+            ? {
+                ...persistedData,
+                ...req.body.data,
+                ...(sourceOverride ? { dslSource: sourceOverride } : {})
+            }
+            : sourceOverride
+                ? {
+                    ...persistedData,
+                    dslSource: sourceOverride
+                }
+                : undefined;
+
+        const persistedPlanning = nextData
+            ? await updatePlanning(planning.id, auth.user.id, {
+                data: nextData,
+                currentStep: planning.currentStep,
+                totalSteps: planning.totalSteps,
+                progress: planning.progress,
+                status: planning.status === 'draft' ? 'active' : planning.status
+            })
+            : planning;
+
+        const solveTarget = persistedPlanning ?? planning;
+
+        let source: string;
+        let capacityWarnings: string[] = [];
+        let daysForOutput: string[] = [];
+        if (typeof sourceOverride === 'string' && sourceOverride.trim().length > 0) {
+            source = sourceOverride;
+            const persisted = getPersistedPlanningData(solveTarget.data);
+            const persistedTime = isRecord(persisted.time) ? persisted.time : {};
+            daysForOutput = Array.isArray(persistedTime.days)
+                ? persistedTime.days.filter((day): day is string => typeof day === 'string' && day.trim().length > 0)
+                : [];
+        } else {
+            const validation = validatePlanningDataForSolve(solveTarget.data);
+            if (!validation.value) {
+                await updatePlanning(planning.id, auth.user.id, {
+                    status: 'error',
+                    solutionOutput: null,
+                    solutionWarnings: null,
+                    solutionSolveTimeMs: null,
+                    lastError: {
+                        message: validation.error?.message ?? 'La planification est invalide.',
+                        details: validation.error?.details,
+                        hint: validation.error?.hint
+                    }
+                });
+
+                return sendError(res, 422, {
+                    ...validation.error!,
+                    details: validation.error?.details,
+                    fieldErrors: validation.error?.fieldErrors,
+                    hint: validation.error?.hint
+                });
+            }
+
+            capacityWarnings = analyzePotentialCapacityRisks(validation.value);
+            daysForOutput = validation.value.time.days;
+            source = serializeSolveModelToDsl(validation.value);
+        }
+
+        const startResult = await startOptaPlannerAsyncSolve(source, solverTimeLimitSeconds);
+        if (!startResult.ok) {
+            return sendError(res, startResult.error.status, {
+                code: startResult.error.code,
+                message: startResult.error.message,
+                details: startResult.error.details,
+                hint: startResult.error.hint
+            });
+        }
+
+        const session: OptaPlannerAsyncSession = {
+            jobId: startResult.jobId,
+            planningId: planning.id,
+            userId: auth.user.id,
+            solver: resolvedSolver,
+            source,
+            daysForOutput,
+            capacityWarnings,
+            createdAt: Date.now(),
+            finalized: false,
+            finalizing: false,
+            finalStatus: null
+        };
+        optaPlannerAsyncSessions.set(startResult.jobId, session);
+
+        return sendSuccess(res, {
+            jobId: startResult.jobId,
+            status: startResult.status,
+            planning: solveTarget
+        }, 'Résolution asynchrone OptaPlanner démarrée.');
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'INTERNAL_ERROR',
+            message: 'Une erreur inattendue est survenue pendant le démarrage asynchrone.',
+            details: [error instanceof Error ? error.message : 'Unknown internal error']
+        });
+    }
+});
+
+app.get('/api/plannings/:id/solve/async/:jobId', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const jobId = getSingleParam(req.params.jobId);
+        const session = optaPlannerAsyncSessions.get(jobId);
+
+        if (!session || session.planningId !== planningId || session.userId !== auth.user.id) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Job asynchrone introuvable pour cette planification.'
+            });
+        }
+
+        const statusResult = await getOptaPlannerAsyncStatus(jobId);
+        if (!statusResult.ok) {
+            return sendError(res, statusResult.error.status, {
+                code: statusResult.error.code,
+                message: statusResult.error.message,
+                details: statusResult.error.details,
+                hint: statusResult.error.hint
+            });
+        }
+
+        const springStatus = statusResult.payload;
+        const liveSolveTimeMs = (() => {
+            if (typeof springStatus.startedAtMillis === 'number' && springStatus.startedAtMillis > 0) {
+                return Math.max(0, Date.now() - springStatus.startedAtMillis);
+            }
+            return Math.max(0, Date.now() - session.createdAt);
+        })();
+        const feasibleSolutions = Array.isArray(springStatus.feasibleSolutions)
+            ? springStatus.feasibleSolutions
+            : [];
+        const liveSolutions: OptaLivePreview[] = feasibleSolutions
+            .map((solution): OptaLivePreview | null => {
+                if (solution.hardScore !== 0) {
+                    return null;
+                }
+                const mapped = mapSpringSolvePayloadToInternal(solution, session.daysForOutput, liveSolveTimeMs);
+                if (!mapped.ok) {
+                    return null;
+                }
+                return {
+                    output: mapped.output,
+                    warnings: mapped.warnings,
+                    solveTimeMs: mapped.solveTimeMs,
+                    feasible: true,
+                    hardScore: 0
+                };
+            })
+            .filter((item): item is OptaLivePreview => Boolean(item));
+        const liveMapped = springStatus.result
+            ? mapSpringSolvePayloadToLivePreview(springStatus.result, session.daysForOutput, liveSolveTimeMs)
+            : null;
+        const liveResult = liveMapped
+            ? liveMapped
+            : (liveSolutions.length > 0 ? liveSolutions[liveSolutions.length - 1] : null);
+
+        await finalizeOptaPlannerAsyncSessionIfNeeded(session, springStatus);
+
+        return sendSuccess(res, {
+            jobId,
+            status: springStatus.status ?? 'UNKNOWN',
+            terminal: isOptaPlannerAsyncStatusTerminal(springStatus),
+            stopRequested: springStatus.stopRequested ?? false,
+            bestSolutionCount: liveSolutions.length > 0 ? liveSolutions.length : (springStatus.bestSolutionCount ?? 0),
+            bestScore: springStatus.bestScore ?? null,
+            liveResult,
+            liveSolutions,
+            finalized: session.finalized,
+            planning: session.finalPayload?.planning,
+            result: session.finalPayload
+                ? {
+                    output: session.finalPayload.output,
+                    warnings: session.finalPayload.warnings,
+                    solveTimeMs: session.finalPayload.solveTimeMs
+                }
+                : null,
+            error: session.finalError ?? null
+        });
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'INTERNAL_ERROR',
+            message: 'Impossible de lire le statut du job OptaPlanner.',
+            details: [error instanceof Error ? error.message : 'Unknown internal error']
+        });
+    }
+});
+
+app.post('/api/plannings/:id/solve/async/:jobId/stop', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const jobId = getSingleParam(req.params.jobId);
+        const session = optaPlannerAsyncSessions.get(jobId);
+
+        if (!session || session.planningId !== planningId || session.userId !== auth.user.id) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Job asynchrone introuvable pour cette planification.'
+            });
+        }
+
+        const stopResult = await stopOptaPlannerAsyncJob(jobId);
+        if (!stopResult.ok) {
+            return sendError(res, stopResult.error.status, {
+                code: stopResult.error.code,
+                message: stopResult.error.message,
+                details: stopResult.error.details,
+                hint: stopResult.error.hint
+            });
+        }
+
+        const springStatus = stopResult.payload;
+        await finalizeOptaPlannerAsyncSessionIfNeeded(session, springStatus);
+
+        return sendSuccess(res, {
+            jobId,
+            status: springStatus.status ?? 'UNKNOWN',
+            terminal: isOptaPlannerAsyncStatusTerminal(springStatus),
+            stopRequested: springStatus.stopRequested ?? true,
+            finalized: session.finalized,
+            planning: session.finalPayload?.planning,
+            result: session.finalPayload
+                ? {
+                    output: session.finalPayload.output,
+                    warnings: session.finalPayload.warnings,
+                    solveTimeMs: session.finalPayload.solveTimeMs
+                }
+                : null,
+            error: session.finalError ?? null
+        }, 'Demande d’arrêt envoyée à OptaPlanner.');
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'INTERNAL_ERROR',
+            message: 'Impossible de demander l’arrêt du job OptaPlanner.',
+            details: [error instanceof Error ? error.message : 'Unknown internal error']
         });
     }
 });
