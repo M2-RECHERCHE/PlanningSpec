@@ -2,7 +2,7 @@ import type { Planification } from 'planning-spec-language';
 import { createPlanningSpecServices, PlanningSpecLanguageMetaData } from 'planning-spec-language';
 import chalk from 'chalk';
 import { Command } from 'commander';
-import { extractAstNode } from './util.js';
+import { extractAstNode, extractDocument } from './util.js';
 import { generateJavaScript } from './generator.js';
 import { NodeFileSystem } from 'langium/node';
 import * as url from 'node:url';
@@ -20,11 +20,21 @@ export const generateAction = async (fileName: string, opts: GenerateOptions): P
     console.log(chalk.green(`JavaScript code generated successfully: ${generatedFilePath}`));
 };
 
+export const generateMiniZincAction = async (fileName: string, opts: GenerateOptions): Promise<void> => {
+    const services = createPlanningSpecServices(NodeFileSystem).PlanningSpec;
+    const document = await extractDocument(fileName, services);
+    const outputDirectory = opts.destination
+        ? path.resolve(opts.destination)
+        : path.resolve(process.cwd(), 'generated_mzn');
+    const generatedFilePath = services.generator.Generator.generateToFile(document, outputDirectory);
+    console.log(chalk.green(`MiniZinc code generated successfully: ${generatedFilePath}`));
+};
+
 export type GenerateOptions = {
     destination?: string;
 }
 
-export default function(): void {
+export default async function(): Promise<void> {
     const program = new Command();
 
     program.version(JSON.parse(packageContent).version);
@@ -37,5 +47,12 @@ export default function(): void {
         .description('generates JavaScript code that prints "Hello, {name}!" for each greeting in a source file')
         .action(generateAction);
 
-    program.parse(process.argv);
+    program
+        .command('generate-mzn')
+        .argument('<file>', `source file (possible file extensions: ${fileExtensions})`)
+        .option('-d, --destination <dir>', 'destination directory of MiniZinc files')
+        .description('generates a MiniZinc model from a .planning file')
+        .action(generateMiniZincAction);
+
+    await program.parseAsync(process.argv);
 }

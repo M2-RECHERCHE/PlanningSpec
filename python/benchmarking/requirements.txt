@@ -1,0 +1,6 @@
+minizinc
+pandas
+matplotlib
+jupyterlab
+notebook
+ipykernel

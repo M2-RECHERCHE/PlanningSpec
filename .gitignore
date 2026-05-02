@@ -32,6 +32,14 @@ yarn-debug.log*
 yarn-error.log*
 tmp/
 temp/
+__pycache__/
+.pytest_cache/
+
+# Python benchmarking outputs
+python/benchmarking/.venv/
+python/benchmarking/generated_mzn/
+python/benchmarking/benchmark_results.csv
+python/benchmarking/result/
 
 # Environment files
 .env

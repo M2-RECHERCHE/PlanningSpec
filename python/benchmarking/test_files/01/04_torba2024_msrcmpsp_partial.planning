@@ -1,0 +1,62 @@
+{
+  "time": {
+    "days": ["D1", "D2", "D3", "D4", "D5", "D6"],
+    "slotsPerDay": 6
+  },
+  "activities": {
+    "P1_Diagnostic": { "count": 1, "duration": 2 },
+    "P1_RepairA": { "count": 1, "duration": 3 },
+    "P1_Test": { "count": 1, "duration": 1 },
+    "P2_Diagnostic": { "count": 1, "duration": 2 },
+    "P2_RepairB": { "count": 1, "duration": 2 },
+    "P2_Test": { "count": 1, "duration": 1 }
+  },
+  "resources": {
+    "OperatorMech": ["OM1", "OM2", "OM3"],
+    "OperatorElec": ["OE1", "OE2"],
+    "MachinePit": ["MP1", "MP2"]
+  },
+  "roles": {
+    "P1_RepairA": {
+      "Mechanic": "OperatorMech",
+      "Electrician": "OperatorElec",
+      "Bay": "MachinePit"
+    },
+    "P2_RepairB": {
+      "Mechanic": "OperatorMech",
+      "Electrician": "OperatorElec",
+      "Bay": "MachinePit"
+    }
+  },
+  "constraints": [
+    { "type": "instance_precedence", "beforeActivityInstance": "P1_Diagnostic_1", "afterActivityInstance": "P1_RepairA_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "P1_RepairA_1", "afterActivityInstance": "P1_Test_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "P2_Diagnostic_1", "afterActivityInstance": "P2_RepairB_1" },
+    { "type": "instance_precedence", "beforeActivityInstance": "P2_RepairB_1", "afterActivityInstance": "P2_Test_1" },
+
+    { "type": "mandatory_roles", "activity": "P1_RepairA" },
+    { "type": "mandatory_roles", "activity": "P2_RepairB" },
+
+    { "type": "cardinality_per_activity", "activity": "P1_RepairA", "role": "Mechanic", "min": 1, "max": 2 },
+    { "type": "cardinality_per_activity", "activity": "P1_RepairA", "role": "Electrician", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "P1_RepairA", "role": "Bay", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "P2_RepairB", "role": "Mechanic", "min": 1, "max": 2 },
+    { "type": "cardinality_per_activity", "activity": "P2_RepairB", "role": "Electrician", "min": 1, "max": 1 },
+    { "type": "cardinality_per_activity", "activity": "P2_RepairB", "role": "Bay", "min": 1, "max": 1 },
+
+    { "type": "resource_exclusivity", "resourceType": "MachinePit", "activity": "P1_RepairA", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "MachinePit", "activity": "P2_RepairB", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "OperatorMech", "activity": "P1_RepairA", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "OperatorMech", "activity": "P2_RepairB", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "OperatorElec", "activity": "P1_RepairA", "scope": "slot", "max": 1 },
+    { "type": "resource_exclusivity", "resourceType": "OperatorElec", "activity": "P2_RepairB", "scope": "slot", "max": 1 },
+
+    { "type": "time_window", "activityInstance": "P1_Test_1", "minSlot": 1, "maxSlot": 30 },
+    { "type": "time_window", "activityInstance": "P2_Test_1", "minSlot": 1, "maxSlot": 30 }
+  ],
+  "preferences": [
+    { "type": "max_per_scope", "resourceType": "OperatorMech", "activity": "P1_RepairA", "scope": "day", "max": 1, "weight": 2 },
+    { "type": "max_per_scope", "resourceType": "OperatorMech", "activity": "P2_RepairB", "scope": "day", "max": 1, "weight": 2 },
+    { "type": "avoid_participation_on_date", "resource": "OE2", "date": "D4", "weight": 3 }
+  ]
+}
