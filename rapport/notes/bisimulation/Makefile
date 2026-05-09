@@ -1,7 +1,7 @@
 TARGET = main
 
-export TEXINPUTS=..:
-export BIBINPUTS=..:
+# export TEXINPUTS=..:
+# export BIBINPUTS=../:
 
 all: $(TARGET).pdf
 

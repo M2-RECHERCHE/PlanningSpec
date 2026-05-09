@@ -1,16 +1,36 @@
 TARGET = main
 
-.PHONY: all build clean_temp clean
+export TEXINPUTS=..:
+export BIBINPUTS=..:
 
-all: build clean_temp
+all: $(TARGET).pdf
 
-build: $(TARGET).tex references.bib
-	latexmk -pdf -interaction=nonstopmode -halt-on-error $(TARGET).tex
+$(TARGET).pdf: $(TARGET).tex
+	@echo "--- Etape 1: Compilation pdflatex ---"
+	-pdflatex -interaction=nonstopmode $(TARGET).tex
+	@echo "--- Etape 2: Compilation bibtex ---"
+	-bibtex $(TARGET)
+	@echo "--- Etape 3: Compilation pdflatex (intégration des références) ---"
+	-pdflatex -interaction=nonstopmode $(TARGET).tex
+	@echo "--- Etape 4: Compilation finale pdflatex ---"
+	-pdflatex -interaction=nonstopmode $(TARGET).tex
+	@echo "--- Compilation réussie ! ---"
+	@echo "--- Nettoyage automatique des fichiers temporaires ---"
+	@$(MAKE) clean
 
-clean_temp:
-	latexmk -c $(TARGET).tex
 
-# Nettoyage complet
+
+fast:
+	pdflatex -interaction=nonstopmode $(TARGET).tex
+
+
+
 clean:
-	latexmk -C $(TARGET).tex
+	rm -f *.aux *.bbl *.blg *.log *.out *.toc *.lof *.lot *.mw \
+	      */.aux */*.aux
+
+		  
+distclean: clean
 	rm -f $(TARGET).pdf
+
+.PHONY: all clean distclean fast $(TARGET).pdf

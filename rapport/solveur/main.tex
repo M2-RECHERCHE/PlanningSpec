@@ -3,249 +3,430 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[french]{babel}
-\usepackage{amsmath,amssymb,amsthm}
+\usepackage{amsmath,amssymb}
 \usepackage{geometry}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{array}
-\usepackage{hyperref}
-\usepackage{listings}
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{enumitem}
+\usepackage{hyperref}
 \usepackage{pdflscape}
 \usepackage{makecell}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{xurl}
 
 \geometry{margin=2.5cm}
+\graphicspath{{img/}}
+
 \hypersetup{
   colorlinks=true,
   linkcolor=blue,
   urlcolor=blue,
   citecolor=blue,
-  pdftitle={Justification du choix du solveur HiGHS pour la plateforme DSL-MiniZinc}
+  pdftitle={Etude comparative de solveurs pour une plateforme DSL-MiniZinc de planification}
 }
 
-\lstset{
-  basicstyle=\ttfamily\small,
-  frame=single,
-  columns=fullflexible,
-  breaklines=true
-}
+\setlist[itemize]{leftmargin=1.2cm}
+\setlist[enumerate]{leftmargin=1.2cm}
 
-\newtheorem{definition}{Définition}[section]
-\newtheorem{proposition}{Proposition}[section]
-\newtheorem{remark}{Remarque}[section]
+\newcommand{\solver}[1]{\textnormal{\textsc{#1}}}
+\newcommand{\mzn}{MiniZinc}
+\newcommand{\dsl}{\textnormal{\textsc{DSL}}}
+\newcommand{\sat}{\texttt{SAT}}
+\newcommand{\opt}{\texttt{OPT}}
 
-\title{Justification du Choix du Solveur HiGHS\\pour une Plateforme de Planification DSL $\rightarrow$ MiniZinc}
-\author{}
+\title{Etude comparative de solveurs pour une plateforme \dsl{} de planification déclarative}
+\author{Mémoire de Master Recherche en Intelligence Artificielle}
 \date{\today}
 
 \begin{document}
 
 \maketitle
 \thispagestyle{empty}
-\clearpage
 
 \begin{abstract}
-Cette section autonome justifie le choix actuel du solveur HiGHS pour une plateforme qui transforme des instances de planification \texttt{.planning} en modèles MiniZinc. L'argument principal est structurel : la formulation générée est majoritairement composée de variables binaires et de contraintes linéaires ou linéarisables, ce qui la rapproche d'un modèle MILP. La justification reste volontairement nuancée : HiGHS est le solveur le plus adapté à la formulation actuelle, sans prétendre qu'il soit universellement optimal pour toutes les variantes de problèmes de planning.
+Ce rapport présente une étude expérimentale du choix de solveur pour une plateforme qui traduit des spécifications de planification écrites dans un \dsl{} vers \mzn{}, puis exécute plusieurs solveurs. La contribution principale n'est pas seulement un classement empirique: elle consiste à construire un protocole de benchmark reproductible, à séparer explicitement les instances de satisfaction et les instances d'optimisation, à mesurer plus que la moyenne, puis à interpréter les résultats à la lumière des paradigmes de résolution. La campagne actuelle comporte 10 instances de soutenances, 5 solveurs et 50 exécutions. Tous les solveurs réussissent toutes les instances sans timeout. \solver{Gecode} obtient la meilleure médiane globale de \texttt{T\_total} sur ces petites instances, mais \solver{Chuffed} obtient la meilleure moyenne globale et le meilleur comportement de passage à l'échelle sur les tailles les plus grandes. La recommandation retenue est donc nuancée: \solver{Gecode} est très compétitif sur les petites instances simples, tandis que \solver{Chuffed} est le candidat le plus robuste pour devenir le solveur par défaut lorsque la taille et la combinatoire augmentent.
 \end{abstract}
 
+\clearpage
 \tableofcontents
 \clearpage
 
-\section{Contexte et objectif}
+\section{Introduction}
 
-La plateforme étudiée suit la chaîne de traitement suivante : un fichier DSL \texttt{.planning} est analysé, traduit en MiniZinc, aplati par le compilateur MiniZinc, puis transmis à un solveur. MiniZinc peut cibler plusieurs solveurs, notamment HiGHS, Gecode, Chuffed, OR-Tools CP-SAT, CBC, SCIP, Gurobi et CPLEX, selon la configuration disponible \cite{minizinc-solvers,minizinc-downloads}.
+Le mémoire porte sur la \emph{conception d'un \dsl{} pour la spécification déclarative de problèmes de planification et leur résolution par des approches de satisfaction de contraintes}. Dans ce cadre, l'utilisateur exprime un problème métier dans un fichier \texttt{.planning}: activités, ressources, rôles, contraintes et éventuellement préférences. La plateforme transforme ensuite cette description en \mzn{}, qui sert de passerelle vers plusieurs solveurs.
 
-Tous ces solveurs ne sont pas équivalents sur une même instance. Le point clé est le suivant :
-\begin{quote}
-Le choix du solveur ne dépend pas uniquement de la nature générale du problème de planification, mais aussi de la manière dont ce problème est représenté dans MiniZinc.
-\end{quote}
-
-L'objectif de cette section est donc d'établir, avec un raisonnement explicite, pourquoi HiGHS apparaît actuellement comme le solveur le plus cohérent avec la formulation produite par la plateforme.
-
-\section{Nature du modèle généré par la plateforme}
-
-\subsection{Paramètres de taille et familles de variables}
-
-On introduit les paramètres :
-\[
-A=\text{nombre d'activités},\quad
-R=\text{nombre de ressources},\quad
-K=\text{nombre de rôles},\quad
-T=\text{nombre de slots temporels}.
-\]
-
-Les variables majeures du modèle sont typiquement :
-\begin{itemize}
-  \item \texttt{start\_time[a]} : variable entière (ou discrète) de début de l'activité $a$ ;
-  \item \texttt{assignment[a,r]} : booléen d'affectation activité--ressource ;
-  \item \texttt{role\_assignment[a,k,r]} : booléen d'affectation activité--rôle--ressource.
-\end{itemize}
-
-\begin{proposition}[Comptage des variables principales]
-Sous cette modélisation,
-\[
-N_{\text{start}}=A,\quad N_{\text{assign}}=A\times R,\quad N_{\text{role}}=A\times K\times R,
-\]
-et
-\[
-N_{\text{variables}}=A+A\times R+A\times K\times R.
-\]
-\end{proposition}
-
-\begin{proof}
-Le résultat suit directement du nombre d'indices nécessaires pour instancier chaque famille de variables : un indice pour \texttt{start\_time}, deux indices pour \texttt{assignment}, et trois indices pour \texttt{role\_assignment}. La somme donne le total.
-\end{proof}
-
-\subsection{Structure des contraintes}
-
-La formulation contient principalement :
-\begin{itemize}
-  \item contraintes de cardinalité (sommes de booléens),
-  \item contraintes de capacité (inégalités linéaires),
-  \item contraintes de non-chevauchement (souvent décomposées),
-  \item contraintes de disponibilité,
-  \item contraintes de précédence,
-  \item implications logiques,
-  \item éventuellement une fonction objectif additive (pénalités/préférences).
-\end{itemize}
-
-Cette structure produit un modèle dominé par :
-\begin{enumerate}[label=\arabic*.]
-  \item des décisions binaires,
-  \item des agrégations linéaires de booléens,
-  \item des contraintes linéaires ou linéarisables,
-  \item un objectif fréquemment linéaire.
-\end{enumerate}
-
-\begin{remark}
-Même si le problème métier est un problème de planification combinatoire, la représentation mathématique actuelle est proche d'une formulation MILP.
-\end{remark}
-
-\section{Pourquoi la formulation actuelle favorise HiGHS}
-
-HiGHS est un solveur d'optimisation linéaire open source, conçu pour les problèmes LP/MIP (et QP) \cite{highs-site}. Dans l'écosystème MiniZinc, il est disponible comme backend dédié \cite{minizinc-downloads,minizinc-changelog}.
-
-L'adéquation avec la formulation actuelle s'explique par :
-\begin{itemize}
-  \item la forte proportion de variables binaires ;
-  \item des contraintes de cardinalité exprimables comme sommes de binaires ;
-  \item des contraintes de capacité naturellement linéaires ;
-  \item une fonction objectif souvent additive ;
-  \item des implications logiques fréquemment linéarisables.
-\end{itemize}
+La question de recherche traitée dans ce rapport est la suivante:
 
 \begin{quote}
-HiGHS est pertinent non pas parce que le problème de planification est simple, mais parce que la formulation MiniZinc produite par la plateforme se rapproche d'un modèle linéaire en variables binaires.
+Quel solveur choisir pour résoudre efficacement les problèmes de planification générés par notre \dsl{}, et comment justifier ce choix expérimentalement et théoriquement?
 \end{quote}
 
-\section{Problème de planification et formulation mathématique}
+Le choix du solveur ne peut pas être déduit uniquement du fait que le problème soit un problème de planification. Un même problème peut être formulé comme un problème de satisfaction de contraintes, comme une optimisation en variables entières, comme un problème booléen ou comme un modèle hybride. \mzn{} permet de cibler plusieurs backends, mais cette portabilité ne garantit pas des performances identiques \cite{minizinc-solvers}. L'étude doit donc tenir compte de la formulation générée, de la famille d'instance et du comportement empirique des solveurs.
 
-Un même problème de planning peut être encodé selon plusieurs paradigmes :
-\begin{enumerate}[label=\arabic*.]
-  \item programmation par contraintes (CP),
-  \item SAT/CP-SAT,
-  \item MILP,
-  \item hybride.
+\section{Contribution méthodologique}
+
+Cette étude apporte trois éléments utiles pour le mémoire.
+
+\begin{enumerate}
+  \item \textbf{Une séparation explicite des familles de problèmes.} Une instance de satisfaction contient uniquement des contraintes dures et un tableau \texttt{preferences} vide. Une instance d'optimisation contient aussi des préférences, traduites en pénalités à minimiser dans le modèle \mzn{}.
+  \item \textbf{Un générateur d'instances contrôlées.} Le générateur de soutenances produit des instances simples, paramétrées par $A$, $R$, $K$ et $T$, avec des tailles volontairement modestes afin d'éviter que le benchmark mesure seulement des timeouts.
+  \item \textbf{Une analyse statistique multi-critères.} Le pipeline produit les temps de flattening, les temps de résolution, les temps bout en bout, les statuts, les taux de succès, les médianes, les quartiles, les courbes cactus, l'analyse par taille et l'analyse par famille.
 \end{enumerate}
 
-Ainsi, le solveur optimal dépend du \emph{modèle effectivement généré} :
+Ce protocole transforme le choix d'un solveur en argument scientifique: on ne dit pas seulement qu'un solveur est meilleur, on précise sur quelles familles, avec quelles tailles, selon quelles métriques, et avec quelles limites.
+
+\section{Chaîne de résolution}
+
+La chaîne évaluée est la suivante:
+
+\begin{center}
+\texttt{.planning} $\longrightarrow$ génération \mzn{} $\longrightarrow$ aplatissement FlatZinc $\longrightarrow$ solveur $\longrightarrow$ solution
+\end{center}
+
+Le benchmark est réalisé par \texttt{python/benchmarking/benchmark\_pipeline.py}. Pour chaque instance, le pipeline génère le modèle \mzn{} via le CLI du projet, exécute les solveurs disponibles avec le même timeout, collecte les statistiques puis produit les artefacts dans \texttt{python/benchmarking/result}.
+
+Les solveurs comparés sont:
+
+\begin{center}
+\solver{Gecode}, \solver{Chuffed}, \solver{HiGHS}, \solver{OR-Tools CP-SAT}, \solver{COIN-BC}.
+\end{center}
+
+\section{SAT ou optimisation dans notre \dsl{}}
+
+Dans notre langage, la différence entre une instance de satisfaction et une instance d'optimisation est portée par le bloc \texttt{preferences}.
+
+\subsection{Instance de satisfaction}
+
+Une instance est classée dans la famille \textbf{satisfaction} lorsque:
+
 \begin{itemize}
-  \item si la formulation exploite fortement des contraintes globales de scheduling, un solveur CP peut être très pertinent ;
-  \item si la formulation est fortement logique/booleenne, CP-SAT peut devenir très compétitif ;
-  \item si la formulation est majoritairement binaire + linéaire, un solveur MILP tel que HiGHS est naturellement cohérent.
+  \item le bloc \texttt{constraints} contient les contraintes obligatoires;
+  \item le bloc \texttt{preferences} est vide;
+  \item le modèle \mzn{} généré se termine par une résolution de type \texttt{satisfy}.
 \end{itemize}
 
-\section{Comparaison avec Gecode, Chuffed et OR-Tools CP-SAT}
+Dans ce cas, le solveur doit seulement trouver un planning valide. Le statut attendu est \sat{} lorsque le planning est trouvé.
 
-\subsection{Gecode}
+\subsection{Instance d'optimisation}
 
-Gecode est un solveur CP orienté domaines finis, avec un support natif de nombreuses contraintes globales dans MiniZinc \cite{minizinc-solvers,gecode-site}. Il peut être excellent sur des modèles de scheduling exprimés en contraintes globales riches.
+Une instance est classée dans la famille \textbf{optimisation} lorsque:
 
-Dans la formulation actuelle, il peut être moins naturellement favorisé si :
 \begin{itemize}
-  \item les contraintes sont déjà très décomposées ;
-  \item le non-chevauchement est formulé principalement en paire-à-paire ;
-  \item la structure linéaire domine la structure CP globale.
+  \item le bloc \texttt{constraints} contient toujours les contraintes obligatoires;
+  \item le bloc \texttt{preferences} contient au moins une préférence;
+  \item les préférences sont traduites en une variable de pénalité;
+  \item le modèle \mzn{} généré se termine par une résolution de type
+  \texttt{minimize penalty}.
 \end{itemize}
 
-\textbf{Conclusion nuancée :} Gecode peut être performant sur certains modèles de planning, mais il est moins naturellement aligné avec une formulation majoritairement linéaire et booléenne.
-
-\subsection{Chuffed}
-
-Chuffed est un solveur CP à \emph{lazy clause generation}, combinant propagation CP et apprentissage de clauses \cite{minizinc-solvers,chuffed-github}. Il est souvent pertinent sur des modèles logiques/combinatoires denses.
-
-Il reste un candidat sérieux à évaluer, en particulier lorsque les implications logiques sont centrales. Cependant, si l'essentiel du modèle est représenté par des sommes linéaires de binaires et un objectif linéaire, HiGHS peut garder un avantage structurel.
-
-\textbf{Conclusion nuancée :} Chuffed est un candidat crédible à comparer expérimentalement, mais HiGHS reste plus cohérent avec la structure linéaire actuelle.
-
-\subsection{OR-Tools CP-SAT}
-
-OR-Tools CP-SAT est un solveur hybride très performant sur de nombreux problèmes entiers et booléens, avec capacités de raisonnement logique et contraintes linéaires sur entiers \cite{ortools-cpsat,ortools-mpsolver}.
-
-Il peut donc être très pertinent pour la plateforme. Néanmoins, son efficacité dépend de la forme exacte du modèle aplati, de l'intégration MiniZinc et du compromis entre raisonnement logique et exploitation de relaxations linéaires.
-
-\textbf{Conclusion nuancée :} OR-Tools CP-SAT est probablement l'un des meilleurs solveurs à tester en complément de HiGHS, surtout si la formulation évolue vers davantage de logique ou de scheduling global.
-
-\section{Critères de choix d'un solveur}
-
-On peut retenir les critères suivants :
-\begin{itemize}
-  \item nature des variables (continues/entières/binaires),
-  \item linéarité des contraintes,
-  \item présence et nature de l'objectif,
-  \item proportion de booléens,
-  \item présence de contraintes globales,
-  \item capacité à prouver l'optimalité,
-  \item temps de résolution et robustesse,
-  \item disponibilité MiniZinc,
-  \item simplicité d'intégration,
-  \item contraintes de licence,
-  \item stabilité sur des familles d'instances variées.
-\end{itemize}
-
-Pour la formulation actuelle, HiGHS est favorable sur plusieurs critères : open source, intégration MiniZinc, cohérence LP/MIP, efficacité attendue sur contraintes linéaires et variables binaires.
-
-\section{Justification synthétique du choix de HiGHS}
-
-Le raisonnement peut être résumé ainsi :
-\begin{enumerate}[label=\arabic*.]
-  \item la plateforme génère un modèle MiniZinc ;
-  \item le modèle contient de nombreuses variables booléennes ;
-  \item les contraintes sont majoritairement linéaires ou linéarisables ;
-  \item l'objectif éventuel est additif ;
-  \item l'ensemble correspond à une structure de type MILP ;
-  \item HiGHS est conçu pour LP/MIP ;
-  \item HiGHS est donc le solveur le plus cohérent avec la formulation actuelle ;
-  \item d'autres solveurs restent pertinents si la formulation change.
-\end{enumerate}
+Dans ce cas, le solveur ne doit pas seulement trouver un planning valide. Il doit aussi minimiser la pénalité. Le statut \opt{} signifie que le solveur a prouvé qu'aucune solution meilleure n'existe selon l'objectif.
 
 \begin{quote}
-Le choix de HiGHS est donc justifié par l'adéquation entre la structure du modèle généré et la classe de problèmes pour laquelle HiGHS est conçu.
+Dans notre protocole, la famille du problème vient donc du modèle généré: \texttt{preferences = []} implique satisfaction; \texttt{preferences} non vide implique optimisation.
 \end{quote}
 
-\section{Limites de la justification}
+\section{Instances étudiées}
 
-La conclusion doit rester conditionnelle :
+Les instances de la campagne actuelle sont des instances synthétiques de soutenances générées pour être simples et résolubles rapidement. Elles ne visent pas à saturer les solveurs; elles servent d'abord à comparer proprement les comportements sur deux familles de problèmes et plusieurs tailles.
+
+Les paramètres sont:
+
+\begin{align*}
+A &= \text{nombre de soutenances}, &
+R &= \text{nombre d'enseignants},\\
+K &= \text{nombre de salles}, &
+T &= \text{nombre de créneaux par jour}.
+\end{align*}
+
+La campagne contient 10 instances: 5 de satisfaction et 5 d'optimisation. Les deux familles partagent les mêmes tailles afin que la comparaison SAT/OPT soit contrôlée.
+
+\begin{table}[htbp]
+\centering
+\caption{Instances de la campagne expérimentale}
+\label{tab:instances}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Famille} & \textbf{$A$} & \textbf{$R$} & \textbf{$K$} & \textbf{$T$} & \textbf{Préférences} \\
+\midrule
+satisfaction & 3 & 9  & 2 & 3 & 0 \\
+satisfaction & 4 & 12 & 2 & 4 & 0 \\
+satisfaction & 5 & 15 & 3 & 4 & 0 \\
+satisfaction & 6 & 18 & 3 & 5 & 0 \\
+satisfaction & 8 & 24 & 4 & 5 & 0 \\
+optimisation & 3 & 9  & 2 & 3 & 3 \\
+optimisation & 4 & 12 & 2 & 4 & 3 \\
+optimisation & 5 & 15 & 3 & 4 & 3 \\
+optimisation & 6 & 18 & 3 & 5 & 3 \\
+optimisation & 8 & 24 & 4 & 5 & 3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Les contraintes de base imposent les rôles obligatoires d'une soutenance: président, rapporteur, membre, salle et candidat. Le candidat est fixé pour chaque soutenance. Une partie des jurys est également fixée afin de réduire la symétrie et de produire des instances faciles à résoudre. Les instances d'optimisation ajoutent seulement trois préférences simples; elles restent volontairement légères pour que le benchmark mesure la qualité de résolution et non une explosion artificielle de complexité.
+
+\section{Métriques expérimentales}
+
+Les métriques collectées sont:
+
 \begin{itemize}
-  \item HiGHS n'est pas nécessairement le meilleur solveur pour toutes les formulations de planning ;
-  \item un solveur CP peut devenir supérieur si les contraintes globales sont davantage exploitées ;
-  \item OR-Tools CP-SAT peut surpasser HiGHS sur des formulations très logiques ;
-  \item Gurobi/CPLEX peuvent être plus performants sur certaines grandes instances MILP ;
-  \item la décision finale doit être validée expérimentalement sur les mêmes instances \texttt{.planning}.
+  \item \textbf{\texttt{T\_flat}}: temps de génération/aplatissement du modèle;
+  \item \textbf{\texttt{T\_solve}}: temps de recherche du solveur;
+  \item \textbf{\texttt{T\_total}}: temps bout en bout observé par le pipeline;
+  \item \textbf{statut}: \sat{}, \opt{}, \texttt{UNSAT}, \texttt{TIMEOUT} ou \texttt{ERROR};
+  \item \textbf{Success rate}: proportion d'exécutions conclues par \sat{}, \opt{} ou \texttt{UNSAT};
+  \item \textbf{OPT rate}: proportion d'exécutions prouvées optimales sur l'ensemble des runs.
 \end{itemize}
+
+Le timeout de référence est 180 secondes par couple solveur-instance. Dans cette campagne, aucun solveur n'atteint ce timeout.
+
+\section{Résultats globaux}
+
+La campagne contient 50 exécutions, soit 10 instances évaluées par 5 solveurs. Aucun échec, aucun timeout et aucune instance non résolue n'ont été observés. La comparaison se déplace donc naturellement vers la qualité temporelle de la résolution: temps de recherche pur, temps total bout en bout et sensibilité à la taille.
+
+Le tableau \ref{tab:global} montre immédiatement qu'un classement unique serait réducteur. \solver{Gecode} possède la meilleure médiane de \texttt{T\_total}, ce qui traduit un très bon comportement sur le coeur de la distribution. \solver{Chuffed}, en revanche, obtient la meilleure moyenne globale ainsi que le meilleur \texttt{T\_solve} médian. Cette dissociation est importante pour le mémoire: un solveur peut être excellent sur les petites tailles sans être celui qui encaisse le mieux la montée en complexité.
+
+\begin{table}[H]
+\centering
+\caption{Synthèse globale par solveur}
+\label{tab:global}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Solveur} & \textbf{\makecell{Moy.\\\texttt{T\_total}}} & \textbf{\makecell{Méd.\\\texttt{T\_total}}} & \textbf{\makecell{Méd.\\\texttt{T\_solve}}} & \textbf{Succès} & \textbf{\opt} \\
+\midrule
+\solver{Gecode} & 1.024 & 0.268 & 0.250 & 100\% & 50\% \\
+\solver{Chuffed} & 0.384 & 0.317 & 0.062 & 100\% & 50\% \\
+\solver{OR-Tools CP-SAT} & 0.594 & 0.392 & 0.263 & 100\% & 50\% \\
+\solver{HiGHS} & 1.296 & 1.137 & 0.546 & 100\% & 50\% \\
+\solver{COIN-BC} & 1.493 & 0.888 & 0.755 & 100\% & 50\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La figure \ref{fig:boxplot-total} met en évidence la dispersion des temps totaux. \solver{Gecode} garde une médiane très basse, mais sa boîte et sa moustache supérieure montrent qu'il est davantage pénalisé par les grandes instances. \solver{Chuffed} présente une distribution plus compacte, signe d'un comportement plus régulier. \solver{HiGHS} et \solver{COIN-BC} restent en retrait sur ce benchmark, ce qui suggère que la formulation actuelle favorise davantage la propagation de contraintes et les décisions combinatoires que l'exploitation d'une relaxation linéaire forte.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curve_01_boxplot_t_total.png}
+\caption{Distribution du temps total \texttt{T\_total} par solveur sur l'ensemble de la campagne}
+\label{fig:boxplot-total}
+\end{figure}
+
+La figure \ref{fig:boxplot-solve} isole ensuite le temps de recherche. Une fois soustrait le coût d'aplatissement, \solver{Chuffed} devient le plus net: sa médiane de \texttt{T\_solve} est proche de 0.062 seconde, contre environ 0.250 seconde pour \solver{Gecode} et 0.263 seconde pour \solver{OR-Tools CP-SAT}. Cette hiérarchie confirme que la partie recherche profite ici de la lazy clause generation, tandis que les solveurs MILP supportent un coût de résolution plus marqué.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curve_02_boxplot_t_solve.png}
+\caption{Distribution du temps de recherche \texttt{T\_solve} par solveur}
+\label{fig:boxplot-solve}
+\end{figure}
+
+La figure \ref{fig:mean-times} complète cette lecture en séparant le coût de génération \texttt{T\_flat}, le coût de recherche \texttt{T\_solve} et le temps total \texttt{T\_total}. Sur des instances simples, \texttt{T\_flat} représente encore une part visible du coût global. Il ne suffit donc pas d'observer le solveur pur. Le solveur retenu pour la plateforme doit offrir un bon équilibre entre traduction \mzn{}, intégration technique et vitesse de recherche. Sur ce point, \solver{Chuffed} obtient le compromis le plus stable.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curve_03_mean_times.png}
+\caption{Comparaison des temps moyens de génération, de résolution et de bout en bout}
+\label{fig:mean-times}
+\end{figure}
+
+\section{Analyse par famille}
+
+La séparation entre satisfaction et optimisation est centrale dans notre contribution, car elle évite de mélanger deux comportements de résolution distincts. Dans les instances de satisfaction, le solveur doit uniquement produire un planning valide. Dans les instances d'optimisation, il doit en plus prouver la qualité de la meilleure solution selon l'objectif introduit par les préférences.
+
+Le tableau \ref{tab:family} montre que \solver{Gecode} garde la meilleure médiane de \texttt{T\_total} dans les deux familles. L'écart avec \solver{Chuffed} reste toutefois modéré, alors que les solveurs MILP demeurent plus lents. Ce résultat indique que les préférences légères introduites dans notre modèle ne suffisent pas encore à déplacer le centre de gravité du problème vers une structure typiquement MILP.
+
+\begin{table}[H]
+\centering
+\caption{Médiane de \texttt{T\_total} par famille}
+\label{tab:family}
+\begin{tabular}{llrrr}
+\toprule
+\textbf{Famille} & \textbf{Solveur} & \textbf{Runs} & \textbf{\makecell{Méd.\\\texttt{T\_total}}} & \textbf{Succès} \\
+\midrule
+optimisation & \solver{Gecode} & 5 & 0.266 & 100\% \\
+optimisation & \solver{Chuffed} & 5 & 0.344 & 100\% \\
+optimisation & \solver{OR-Tools CP-SAT} & 5 & 0.392 & 100\% \\
+optimisation & \solver{COIN-BC} & 5 & 0.913 & 100\% \\
+optimisation & \solver{HiGHS} & 5 & 1.203 & 100\% \\
+\midrule
+satisfaction & \solver{Gecode} & 5 & 0.269 & 100\% \\
+satisfaction & \solver{Chuffed} & 5 & 0.290 & 100\% \\
+satisfaction & \solver{OR-Tools CP-SAT} & 5 & 0.393 & 100\% \\
+satisfaction & \solver{HiGHS} & 5 & 0.828 & 100\% \\
+satisfaction & \solver{COIN-BC} & 5 & 0.862 & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La figure \ref{fig:family-time} rend cette comparaison visuelle. Les profils des solveurs restent proches d'une famille à l'autre, ce qui est cohérent avec la façon dont les instances ont été construites: les variantes d'optimisation ne changent pas l'ossature des contraintes, elles ajoutent seulement un petit objectif de pénalité. Le benchmark mesure donc bien l'effet de l'objectif, sans brouiller l'analyse par une modification brutale de la structure du problème.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.94\textwidth]{curve_10_median_ttotal_by_family.png}
+\caption{Temps total médian selon la famille du problème}
+\label{fig:family-time}
+\end{figure}
+
+La figure \ref{fig:opt-rate} confirme que toutes les instances d'optimisation ont été menées jusqu'à une preuve d'optimalité, quel que soit le solveur. Pour les instances de satisfaction, le taux \opt{} reste naturellement nul puisqu'aucun objectif n'est demandé. Ce point est méthodologiquement important: notre comparaison ne porte pas sur des solutions partielles ou sur des compromis arrêtés avant preuve, mais bien sur des résultats conclusifs.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.94\textwidth]{curve_11_opt_rate_by_family.png}
+\caption{Taux de preuve d'optimalité selon la famille considérée}
+\label{fig:opt-rate}
+\end{figure}
+
+\section{Analyse des statuts et de la robustesse}
+
+La robustesse du protocole se vérifie d'abord par les statuts retournés. Le tableau \ref{tab:statuts} montre une répartition parfaitement conforme à la nature des instances: cinq résolutions \opt{} pour les instances d'optimisation et cinq résolutions \sat{} pour les instances de satisfaction, pour chacun des solveurs testés.
+
+\begin{table}[H]
+\centering
+\caption{Répartition des statuts par solveur}
+\label{tab:statuts}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Solveur} & \textbf{\opt} & \textbf{\sat} \\
+\midrule
+\solver{COIN-BC} & 5 & 5 \\
+\solver{Chuffed} & 5 & 5 \\
+\solver{Gecode} & 5 & 5 \\
+\solver{HiGHS} & 5 & 5 \\
+\solver{OR-Tools CP-SAT} & 5 & 5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La figure \ref{fig:status} traduit visuellement ce constat. Aucun solveur ne produit d'erreur, de timeout ou de statut ambigu. La campagne est donc suffisamment simple pour isoler le comportement temporel sans être parasitée par des échecs techniques ou des cas pathologiques.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curve_04_status_stacked.png}
+\caption{Répartition des statuts retournés par solveur}
+\label{fig:status}
+\end{figure}
+
+La figure \ref{fig:success-timeout} enfonce le même résultat sous l'angle des taux agrégés: 100\% de succès et 0\% de timeout pour tous les solveurs. Autrement dit, la robustesse ne permet pas ici de départager les candidats. Ce sont la vitesse et surtout l'évolution de cette vitesse avec la taille qui deviennent les critères discriminants.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curve_05_success_timeout_rates.png}
+\caption{Taux de succès et de timeout observés pendant la campagne}
+\label{fig:success-timeout}
+\end{figure}
+
+La figure \ref{fig:cactus} propose enfin une lecture cumulative. Le cactus plot ordonne les instances par difficulté croissante et cumule les temps de résolution. Une courbe plus basse signifie que le solveur accumule plus vite les instances résolues. \solver{Chuffed}, \solver{Gecode} et \solver{OR-Tools CP-SAT} dominent nettement la partie basse du graphe, tandis que \solver{HiGHS} et \solver{COIN-BC} progressent plus lentement. Cette représentation est précieuse car elle évite qu'une seule valeur moyenne masque la dynamique globale d'un solveur sur tout le benchmark.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curve_06_cactus_t_total.png}
+\caption{Cactus plot basé sur le temps total de résolution}
+\label{fig:cactus}
+\end{figure}
+
+\section{Analyse du passage à l'échelle}
+
+Les courbes par taille sont essentielles, car le but du mémoire n'est pas seulement de résoudre de petites instances, mais d'identifier le solveur qui reste pertinent quand le nombre d'activités augmente. La taille $A$ sert ici de paramètre directeur, avec une croissance synchronisée du nombre d'enseignants, de salles et de créneaux.
+
+La figure \ref{fig:ttotal-a} montre que \solver{Gecode} conserve un léger avantage sur les tailles intermédiaires, notamment pour $A=4$ et $A=5$. Dès que l'on atteint $A=6$, puis surtout $A=8$, \solver{Chuffed} devient nettement plus favorable. À $A=8$, la hiérarchie change clairement: environ 0.849 seconde pour \solver{Chuffed}, 1.449 seconde pour \solver{OR-Tools CP-SAT}, 2.578 secondes pour \solver{HiGHS}, 3.746 secondes pour \solver{COIN-BC} et 4.067 secondes pour \solver{Gecode}. Ce point justifie à lui seul qu'on ne retienne pas uniquement la médiane globale.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curve_07_ttotal_vs_A.png}
+\caption{Évolution du temps total médian en fonction du nombre d'activités $A$}
+\label{fig:ttotal-a}
+\end{figure}
+
+La figure \ref{fig:tsolve-a} confirme cette tendance lorsque l'on observe uniquement le temps solveur. \solver{Chuffed} devient alors le plus compétitif sur la partie haute de la gamme. Cette observation s'accorde avec la littérature sur la lazy clause generation: l'apprentissage de clauses exploite les conflits rencontrés pendant la recherche et aide à éviter des explorations redondantes \cite{feydy-stuckey-lcg}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curve_08_tsolve_vs_A.png}
+\caption{Évolution du temps de recherche médian en fonction du nombre d'activités $A$}
+\label{fig:tsolve-a}
+\end{figure}
+
+La figure \ref{fig:success-a} complète cette analyse en montrant que la montée en taille, dans la plage étudiée, ne dégrade pas encore le taux de succès. C'est un point positif pour le protocole: les instances restent suffisamment maîtrisées pour produire une comparaison nette. En revanche, cela signifie aussi qu'une future campagne devra pousser plus loin la difficulté si l'on veut différencier les solveurs sur la robustesse et non plus seulement sur le temps.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{curve_09_success_rate_vs_A.png}
+\caption{Taux de succès en fonction du nombre d'activités $A$}
+\label{fig:success-a}
+\end{figure}
+
+\FloatBarrier
+
+\section{Interprétation par la littérature}
+
+\subsection{\solver{Gecode}: CP classique et petites instances}
+
+\solver{Gecode} est un solveur de programmation par contraintes sur domaines finis. Il est conçu pour exploiter la propagation de contraintes et dispose d'un support riche de contraintes globales dans l'écosystème \mzn{} \cite{minizinc-solvers,gecode-site}. Sur les petites instances de cette campagne, il obtient la meilleure médiane globale et la meilleure médiane dans les deux familles. Ce résultat est cohérent: les instances sont simples, fortement contraintes par des affectations fixées, et ne nécessitent pas une exploration très profonde.
+
+Cependant, le passage à $A=8$ montre une dégradation plus forte. Cela ne signifie pas que \solver{Gecode} est mauvais; cela indique seulement que, dans notre formulation actuelle, son avantage initial peut diminuer lorsque la combinatoire des affectations augmente.
+
+\subsection{\solver{Chuffed}: lazy clause generation et montée en taille}
+
+\solver{Chuffed} utilise la lazy clause generation, une approche hybride combinant propagation CP et apprentissage de clauses \cite{feydy-stuckey-lcg}. Cette stratégie est pertinente pour des modèles comportant de nombreuses décisions booléennes, des affectations et des conflits de ressources. Dans notre benchmark, \solver{Chuffed} obtient la meilleure moyenne globale, le meilleur temps solveur médian et le meilleur comportement sur les plus grandes instances.
+
+Cette observation est importante pour le mémoire: même si \solver{Gecode} gagne à la médiane sur des instances simples, \solver{Chuffed} est le solveur qui semble le mieux préparer le passage à des instances plus grandes ou plus combinatoires.
+
+\subsection{\solver{OR-Tools CP-SAT}: candidat hybride solide}
+
+\solver{OR-Tools CP-SAT} est un solveur hybride pour problèmes entiers et booléens. Sa documentation insiste sur les variables entières, les contraintes discrètes et les statuts de faisabilité ou d'optimalité \cite{ortools-cpsat}. Dans cette campagne, il n'est jamais premier, mais il reste régulier et arrive souvent après \solver{Chuffed} et \solver{Gecode}. Ce comportement en fait un candidat stratégique à conserver dans les campagnes futures, notamment lorsque les préférences ou les contraintes logiques deviendront plus nombreuses.
+
+\subsection{\solver{HiGHS} et \solver{COIN-BC}: solveurs MILP}
+
+\solver{HiGHS} et \solver{COIN-BC} appartiennent à la famille des solveurs d'optimisation linéaire en nombres entiers. \solver{HiGHS} vise les problèmes LP, MIP et QP \cite{highs-site,huangfu-hall}; \solver{COIN-BC} est un solveur branch-and-cut open source \cite{cbc-intro}. Ils sont donc naturellement pertinents lorsque le modèle \mzn{} se traduit en une formulation MILP forte.
+
+Dans cette campagne, ils résolvent toutes les instances et prouvent l'optimalité sur les cas d'optimisation, mais ils sont plus lents que les solveurs CP/LCG. Cela suggère que notre formulation actuelle reste d'abord combinatoire: décisions d'affectation, rôles, ressources et non-chevauchement. Les relaxations linéaires ne semblent pas apporter, sur ces instances, un avantage suffisant pour compenser le coût de la traduction MILP.
+
+\section{Décision expérimentale}
+
+La conclusion doit distinguer trois niveaux.
+
+\begin{enumerate}
+  \item \textbf{Petites instances simples.} \solver{Gecode} est le meilleur choix si l'on retient strictement la médiane globale de \texttt{T\_total}. Il est très efficace sur les instances centrales du benchmark.
+  \item \textbf{Passage à l'échelle.} \solver{Chuffed} est le meilleur candidat lorsque $A$ augmente. Il obtient la meilleure moyenne globale et le meilleur comportement sur la plus grande taille testée.
+  \item \textbf{Solveur par défaut pour la plateforme.} Pour une plateforme destinée à évoluer vers des instances plus grandes et plus contraintes, \solver{Chuffed} est le choix le plus prudent comme solveur par défaut, avec \solver{Gecode} comme alternative rapide sur petites instances de satisfaction.
+\end{enumerate}
+
+La recommandation finale est donc:
+
+\begin{quote}
+\solver{Chuffed} doit être retenu comme solveur par défaut expérimental pour la plateforme, car il combine un très bon temps de recherche, une robustesse complète et une meilleure tenue lorsque la taille augmente. \solver{Gecode} doit rester disponible comme alternative très performante sur les petites instances simples.
+\end{quote}
+
+\section{Limites}
+
+La campagne présentée dans ce chapitre correspond à une première phase volontairement simple, construite pour garantir des résolutions rapides et une lecture propre des résultats. Ce choix a permis de comparer les solveurs sans bruit expérimental, mais il limite encore la portée des conclusions. Les résultats n'épuisent pas le comportement des solveurs sur des tailles plus hautes ni sur des variantes un peu plus tendues.
+
+Les limites principales sont:
+
+\begin{itemize}
+  \item une seule seed par taille;
+  \item seulement cinq tailles;
+  \item des préférences volontairement légères;
+  \item absence d'instances infaisables;
+  \item absence de variantes très contraintes en fenêtres temporelles ou disponibilités;
+  \item pas encore d'étude détaillée des options de recherche propres à chaque solveur.
+\end{itemize}
+
+Pour pallier ces limites, l'outillage expérimental a été étendu dans une seconde configuration de benchmark plafonnée à 300 secondes par couple solveur-instance. Cette extension conserve les deux familles \textbf{satisfaction} et \textbf{optimisation}, mais ajoute trois tailles supplémentaires, dont deux nouvelles tailles à \mbox{$A=15$} et \mbox{$A=20$}. Elle introduit aussi une difficulté graduelle à l'intérieur de chaque famille: légère baisse du taux de jury fixé, quelques précédences, quelques fenêtres temporelles, quelques interdictions d'affectation et, pour l'optimisation, un ensemble de préférences un peu plus riche à partir des grandes tailles.
+
+La famille ne doit donc pas être confondue avec la difficulté. Une instance de satisfaction peut rester simple ou devenir plus structurée; une instance d'optimisation peut conserver un objectif léger ou intégrer davantage de préférences. Cette séparation est essentielle pour la suite du mémoire, car elle permet d'analyser indépendamment la nature du problème et son niveau réel de complexité.
 
 \section{Conclusion}
 
-Dans l'état actuel de la plateforme, HiGHS apparaît comme le solveur le plus adapté, car la formulation MiniZinc générée est proche d'un MILP dominé par des variables binaires et des contraintes linéaires/linéarisables.
+Cette campagne apporte une contribution concrète au mémoire: elle établit une méthode reproductible pour comparer les solveurs de la plateforme \dsl{}-\mzn{}. Les instances sont identifiées par famille, taille et seed; les métriques séparent compilation, recherche et temps total; les résultats sont interprétés par famille, par statut et par taille.
 
-Ce résultat doit toutefois être lu comme une conclusion \emph{contextuelle} : Gecode, Chuffed, OR-Tools CP-SAT, CBC, SCIP, Gurobi et CPLEX restent des alternatives pertinentes selon l'évolution de la formulation, la taille des instances et les contraintes d'intégration.
+Les résultats montrent que tous les solveurs testés sont capables de résoudre les instances actuelles. La différence ne se situe donc pas dans la correction, mais dans l'efficacité. \solver{Gecode} est le plus rapide en médiane sur ces petites instances. \solver{Chuffed} est le plus intéressant pour la plateforme parce qu'il domine en moyenne, en temps solveur et en passage à l'échelle. \solver{OR-Tools CP-SAT} reste un candidat solide. \solver{HiGHS} et \solver{COIN-BC} sont utiles comme références MILP, mais ne sont pas les meilleurs choix pour la formulation actuelle.
 
-La formulation la plus rigoureuse est donc :
-\begin{quote}
-HiGHS apparaît comme le choix le plus approprié pour la formulation MiniZinc actuelle de la plateforme.
-\end{quote}
+La conclusion scientifique est donc nuancée et défendable: le choix du solveur dépend de la famille, de la taille et de la formulation générée. Pour l'état actuel du \dsl{}, \solver{Chuffed} apparaît comme le meilleur solveur par défaut, tandis que \solver{Gecode} constitue une excellente alternative pour les instances simples de satisfaction.
 
 \begin{thebibliography}{99}
 
@@ -254,24 +435,14 @@ MiniZinc Handbook,
 \textit{Solving Technologies and Solver Backends},
 \url{https://docs.minizinc.dev/en/latest/solvers.html}.
 
-\bibitem{minizinc-downloads}
+\bibitem{minizinc-challenge}
 MiniZinc,
-\textit{Downloads and Available Solvers},
-\url{https://www.minizinc.org/downloads/}.
-
-\bibitem{minizinc-changelog}
-MiniZinc Handbook,
-\textit{Change Log (HiGHS interface in MiniZinc)},
-\url{https://docs.minizinc.dev/en/2.9.0/changelog.html}.
-
-\bibitem{highs-site}
-HiGHS,
-\textit{High-performance linear optimization software},
-\url{https://highs.dev/}.
+\textit{MiniZinc Challenge},
+\url{https://www.minizinc.org/challenge/}.
 
 \bibitem{gecode-site}
 Gecode,
-\textit{Constraint solving toolkit},
+\textit{An open, free, efficient constraint solving toolkit},
 \url{https://www.gecode.dev/}.
 
 \bibitem{chuffed-github}
@@ -279,35 +450,31 @@ Chuffed,
 \textit{The Chuffed CP solver},
 \url{https://github.com/chuffed/chuffed}.
 
+\bibitem{feydy-stuckey-lcg}
+T. Feydy and P. J. Stuckey,
+\textit{Lazy clause generation reengineered},
+Proceedings of the 15th International Conference on Principles and Practice of Constraint Programming, 2009.
+
 \bibitem{ortools-cpsat}
 Google OR-Tools,
 \textit{CP-SAT Solver},
 \url{https://developers.google.com/optimization/cp/cp_solver}.
 
-\bibitem{ortools-mpsolver}
-Google OR-Tools,
-\textit{MPSolver Interface},
-\url{https://developers.google.com/optimization/lp/mpsolver}.
+\bibitem{highs-site}
+HiGHS,
+\textit{High-performance parallel linear optimization software},
+\url{https://highs.dev/}.
+
+\bibitem{huangfu-hall}
+Q. Huangfu and J. A. J. Hall,
+\textit{Parallelizing the dual revised simplex method},
+Mathematical Programming Computation, 10(1), 119--142, 2018.
+\url{https://doi.org/10.1007/s12532-017-0130-5}.
 
 \bibitem{cbc-intro}
 COIN-OR,
 \textit{Introduction to CBC},
 \url{https://coin-or.github.io/Cbc/intro.html}.
-
-\bibitem{scip-site}
-SCIP,
-\textit{SCIP Optimization Suite},
-\url{https://www.scipopt.org/}.
-
-\bibitem{gurobi-doc}
-Gurobi,
-\textit{Gurobi Optimizer Reference Manual},
-\url{https://docs.gurobi.com/projects/optimizer/en/current/index.html}.
-
-\bibitem{cplex-site}
-IBM,
-\textit{CPLEX Optimizer},
-\url{https://www.ibm.com/products/ilog-cplex-optimization-studio/cplex-optimizer}.
 
 \end{thebibliography}
 

@@ -1,0 +1,985 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+\usepackage{hyperref}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{float}
+
+% Définition des environnements pour les théorèmes
+\newtheorem{definition}{Définition}[section]
+\newtheorem{theorem}{Théorème}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{lemma}{Lemme}[section]
+\newtheorem{remark}{Remarque}[section]
+
+\lstdefinelanguage{MiniZinc}{
+  morekeywords={array,of,var,int,bool,constraint,forall,where,in,enum,set,function,solve,minimize,satisfy,output,if,then,else,endif,let,true,false,max,min,sum,div,mod},
+  sensitive=true,
+  morecomment=[l]{\%},
+  morestring=[b]"
+}
+
+\lstdefinelanguage{JSON}{
+  morestring=[b]",
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/}
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!8},
+  columns=fullflexible,
+  keepspaces=true
+}
+
+\newcommand{\DSL}{\textsc{PlanningSpec}}
+\newcommand{\MZN}{\textsc{MiniZinc}}
+\newcommand{\sem}[1]{\llbracket #1 \rrbracket}
+\newcommand{\encode}{\mathsf{encode}}
+\newcommand{\decode}{\mathsf{decode}}
+\newcommand{\gen}{\mathsf{Gen}}
+\newcommand{\scoreDSL}{\mathsf{score}_{DSL}}
+\newcommand{\scoreMZN}{\mathsf{score}_{MZN}}
+
+\title{Bisimulation sémantique entre un DSL déclaratif de planification et MiniZinc}
+\author{Notes de recherche -- Master 2}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Ce rapport étudie la préservation sémantique entre le langage spécifique au domaine \DSL{} et le modèle \MZN{} généré automatiquement par l'implémentation du projet. Le but n'est pas de prouver le fonctionnement interne des solveurs utilisés par \MZN{}, mais de montrer que la traduction \DSL{} vers \MZN{} conserve le sens du problème de planification exprimé par l'utilisateur. Nous formulons cette étude comme une bisimulation sémantique adaptée aux langages déclaratifs : chaque solution valide du DSL doit correspondre à une affectation valide des variables \MZN{}, et toute solution retournée par \MZN{} doit pouvoir être décodée en une solution valide du DSL. Pour les préférences, la preuve porte en plus sur la conservation du score d'optimisation.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+Le projet étudié propose un langage déclaratif, nommé \DSL{}, permettant de spécifier des problèmes de planification. Une spécification contient des jours, des créneaux, des activités, des ressources, des rôles, des contraintes dures et des préférences. La résolution effective est assurée par une génération automatique vers \MZN{}, puis par l'appel à un solveur compatible avec \MZN{}.
+
+Cette architecture soulève une question fondamentale : le modèle \MZN{} généré résout-il exactement le problème exprimé dans le DSL ? Autrement dit, le générateur ne doit ni ajouter des solutions qui ne sont pas valides dans le DSL, ni supprimer des solutions qui devraient être autorisées, ni modifier le score associé aux préférences.
+
+L'objectif de ce rapport est de fournir une étude claire de cette correspondance. On appelle ici \emph{bisimulation sémantique} la relation bidirectionnelle entre les solutions du DSL et les solutions \MZN{} générées. Dans ce contexte déclaratif, la notion de bisimulation ne compare pas des transitions d'automates ; elle compare deux interprétations d'un même problème de planification.
+
+\section{Vue générale du pipeline}
+
+Le pipeline considéré est le suivant :
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=2.2cm,
+  box/.style={rectangle, rounded corners, draw, align=center, minimum width=3cm, minimum height=1cm, fill=gray!8},
+  arr/.style={-{Latex[length=3mm]}, thick}
+]
+\node[box] (dsl) {Spécification\\\DSL{}};
+\node[box, right=of dsl] (gen) {Générateur\\DSL{} $\to$ \MZN{}};
+\node[box, right=of gen] (mzn) {Modèle\\\MZN{}};
+\node[box, below=of mzn] (solver) {Solveur\\MiniZinc};
+\node[box, left=of solver] (out) {Sortie structurée\\ACTIVITY / ASSIGNMENT / ROLE};
+\node[box, left=of out] (rep) {Solution\\décodée DSL};
+\draw[arr] (dsl) -- (gen);
+\draw[arr] (gen) -- (mzn);
+\draw[arr] (mzn) -- (solver);
+\draw[arr] (solver) -- (out);
+\draw[arr] (out) -- (rep);
+\end{tikzpicture}
+\end{center}
+
+Dans le code du projet, les éléments essentiels de ce pipeline sont les suivants :
+
+\begin{itemize}[leftmargin=1.2cm]
+  \item la grammaire du langage est définie dans \texttt{planning-spec.langium} ;
+  \item le générateur \MZN{} est défini dans \texttt{planning-spec-minizinc-generator.ts} ;
+  \item la sortie \MZN{} est structurée sous les préfixes \texttt{ACTIVITY:}, \texttt{ASSIGNMENT:} et \texttt{ROLE:} ;
+  \item le décodage de cette sortie est assuré côté serveur et côté interface par des parseurs dédiés.
+\end{itemize}
+
+\section{Notion de bisimulation sémantique}
+
+\subsection{Pourquoi parler de bisimulation ?}
+
+La bisimulation classique est utilisée pour comparer deux systèmes de transition : si un système effectue une action, l'autre doit pouvoir effectuer une action correspondante, et inversement. Ici, le DSL et \MZN{} ne sont pas des systèmes de transition. Ils sont plutôt deux langages déclaratifs qui décrivent un même ensemble de solutions.
+
+Nous utilisons donc le terme \emph{bisimulation sémantique} dans un sens adapté : deux modèles sont bisimilaires s'ils décrivent le même espace de solutions, à encodage et décodage près.
+
+\begin{definition}[Bisimulation sémantique adaptée]
+Soit $P$ une spécification \DSL{} et soit $\gen(P)$ le modèle \MZN{} généré à partir de $P$. On dit que $P$ et $\gen(P)$ sont sémantiquement bisimilaires si :
+\begin{enumerate}[label=\arabic*)]
+  \item toute solution valide du DSL peut être encodée en une solution valide du modèle \MZN{} ;
+  \item toute solution valide du modèle \MZN{} peut être décodée en une solution valide du DSL ;
+  \item si des préférences existent, le score d'une solution est conservé par la traduction.
+\end{enumerate}
+\end{definition}
+
+Cette définition se décompose en trois propriétés :
+
+\begin{description}[leftmargin=1.2cm]
+  \item[Correction.] MiniZinc ne doit pas produire de fausses solutions.
+  \item[Complétude.] MiniZinc ne doit pas perdre de solutions valides du DSL.
+  \item[Préservation du score.] Les préférences du DSL doivent induire la même optimisation dans \MZN{}.
+\end{description}
+
+\section{Modèle sémantique du DSL}
+
+Une spécification \DSL{} est un objet de la forme :
+
+\begin{lstlisting}[language=JSON]
+{
+  "time": ...,
+  "activities": ...,
+  "resources": ...,
+  "roles": ...,
+  "constraints": ...,
+  "preferences": ...
+}
+\end{lstlisting}
+
+On note une spécification DSL par :
+\[
+P = (T, A, R, L, C, Q)
+\]
+où :
+
+\begin{itemize}[leftmargin=1.2cm]
+  \item $T$ est la structure temporelle ;
+  \item $A$ est l'ensemble des activités et de leurs instances ;
+  \item $R$ est l'ensemble des ressources typées ;
+  \item $L$ est l'ensemble des rôles applicables aux activités ;
+  \item $C$ est l'ensemble des contraintes dures ;
+  \item $Q$ est l'ensemble des préférences souples.
+\end{itemize}
+
+\begin{definition}[Solution DSL]
+Une solution DSL associe à chaque instance d'activité :
+\begin{itemize}[leftmargin=1.2cm]
+  \item un créneau global de début ;
+  \item un ensemble de ressources participantes ;
+  \item pour chaque rôle applicable, une ou plusieurs ressources jouant ce rôle selon les contraintes de cardinalité.
+\end{itemize}
+Elle est valide si elle respecte toutes les contraintes dures du DSL.
+\end{definition}
+
+\section{Modèle sémantique MiniZinc généré}
+
+Le générateur produit un modèle \MZN{} construit autour de quatre familles d'objets :
+
+\begin{itemize}[leftmargin=1.2cm]
+  \item des constantes de temps : \texttt{NUM\_DAYS}, \texttt{SLOTS\_PER\_DAY}, \texttt{TOTAL\_SLOTS} ;
+  \item des énumérations : \texttt{RESOURCE}, \texttt{ACT\_TYPE}, \texttt{ACT\_INST}, et éventuellement \texttt{ROLE} ;
+  \item des variables de décision : \texttt{start\_time}, \texttt{assignment}, \texttt{role\_assignment} ;
+  \item des contraintes et une éventuelle fonction objectif \texttt{penalty}.
+\end{itemize}
+
+Les variables centrales sont :
+
+\begin{lstlisting}[language=MiniZinc]
+array[ACT_INST] of var 1..TOTAL_SLOTS: start_time;
+array[ACT_INST, RESOURCE] of var bool: assignment;
+array[ACT_INST, ROLE, RESOURCE] of var bool: role_assignment;
+\end{lstlisting}
+
+Le sens attendu est le suivant :
+
+\begin{itemize}[leftmargin=1.2cm]
+  \item \texttt{start\_time[a] = t} signifie que l'instance d'activité $a$ commence au créneau global $t$ ;
+  \item \texttt{assignment[a,r] = true} signifie que la ressource $r$ participe à l'activité $a$ ;
+  \item \texttt{role\_assignment[a,ro,r] = true} signifie que la ressource $r$ joue le rôle $ro$ dans l'activité $a$.
+\end{itemize}
+
+\section{Fonctions de correspondance}
+
+\subsection{Fonction d'encodage}
+
+La fonction $\encode$ transforme une solution DSL en affectation de variables \MZN{} :
+
+\[
+\encode : Sol_{DSL}(P) \longrightarrow Sol_{MZN}(\gen(P))
+\]
+
+Elle est définie ainsi :
+
+\begin{itemize}[leftmargin=1.2cm]
+  \item si une instance $a$ commence au créneau $t$ dans le DSL, alors \texttt{start\_time[a] = t} ;
+  \item si une ressource $r$ participe à $a$, alors \texttt{assignment[a,r] = true} ;
+  \item si $r$ joue le rôle $ro$ dans $a$, alors \texttt{role\_assignment[a,ro,r] = true} ;
+  \item toutes les autres affectations booléennes non utilisées valent \texttt{false}.
+\end{itemize}
+
+\subsection{Fonction de décodage}
+
+La fonction $\decode$ transforme une sortie \MZN{} en solution DSL :
+
+\[
+\decode : Sol_{MZN}(\gen(P)) \longrightarrow Sol_{DSL}(P)
+\]
+
+Dans l'implémentation, cette fonction est matérialisée par la sortie :
+
+\begin{lstlisting}
+ACTIVITY: <instance> slot=<globalSlot> day=<day>
+ASSIGNMENT: <instance> resource=<resource>
+ROLE: <instance> role=<role> resource=<resource>
+\end{lstlisting}
+
+Puis par un parseur qui reconstruit, pour chaque instance, son jour, son créneau local, ses ressources participantes et ses rôles.
+
+\section{Correspondance élément par élément}
+
+Cette section montre comment chaque construction du DSL est traduite en \MZN{} en conservant son sens.
+
+\subsection{Temps}
+
+\subsubsection*{Construction DSL}
+
+Le DSL contient :
+
+\begin{lstlisting}[language=JSON]
+"time": {
+  "days": ["Lundi", "Mardi"],
+  "slotsPerDay": 4
+}
+\end{lstlisting}
+
+Sa signification est : le planning est composé d'un nombre fini de jours, chaque jour contenant le même nombre de créneaux.
+
+\subsubsection*{Traduction MiniZinc}
+
+Le générateur produit :
+
+\begin{lstlisting}[language=MiniZinc]
+int: NUM_DAYS = ...;
+int: SLOTS_PER_DAY = ...;
+int: TOTAL_SLOTS = NUM_DAYS * SLOTS_PER_DAY;
+function var int: dayOf(var int: t) = ((t-1) div SLOTS_PER_DAY) + 1;
+function int: dayStart(int: d) = (d-1)*SLOTS_PER_DAY + 1;
+function int: dayEnd(int: d) = d*SLOTS_PER_DAY;
+\end{lstlisting}
+
+\subsubsection*{Argument de conservation du sens}
+
+Le DSL définit les créneaux par paires $(d,k)$ où $d$ est un jour et $k$ un créneau local du jour. Le modèle \MZN{} les représente par un créneau global :
+\[
+t = (d-1) \times SLOTS\_PER\_DAY + k.
+\]
+La fonction \texttt{dayOf} permet de retrouver le jour à partir du créneau global. Ainsi, la représentation globale de \MZN{} est équivalente à la représentation jour/créneau du DSL.
+
+Le générateur ajoute aussi :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(i in ACT_INST) (
+  ((start_time[i] - 1) mod SLOTS_PER_DAY) + duration[i] <= SLOTS_PER_DAY
+);
+\end{lstlisting}
+
+Cette contrainte garantit qu'une activité ne déborde pas sur le jour suivant. Elle conserve donc le sens naturel d'une activité planifiée dans une journée.
+
+\begin{proposition}[Préservation du temps]
+Toute valeur de début produite par \MZN{} correspond à un créneau global valide du DSL, et tout créneau valide du DSL correspond à une valeur possible de \texttt{start\_time}, sous réserve des autres contraintes.
+\end{proposition}
+
+\begin{proof}
+Le domaine de \texttt{start\_time} est \texttt{1..TOTAL\_SLOTS}. Or \texttt{TOTAL\_SLOTS = NUM\_DAYS * SLOTS\_PER\_DAY}. Toute valeur de ce domaine appartient donc à l'ensemble des créneaux définis par le DSL. Réciproquement, tout couple $(d,k)$ valide du DSL se traduit par un entier $t$ compris entre 1 et \texttt{TOTAL\_SLOTS}. La contrainte de non-débordement assure que la durée reste dans la journée de départ.
+\end{proof}
+
+\subsection{Activités}
+
+\subsubsection*{Construction DSL}
+
+Une activité est déclarée par un nom, un nombre d'instances et une durée optionnelle :
+
+\begin{lstlisting}[language=JSON]
+"activities": {
+  "Soutenance": { "count": 3, "duration": 2 }
+}
+\end{lstlisting}
+
+Si la durée n'est pas indiquée, l'implémentation lui donne la valeur par défaut $1$.
+
+\subsubsection*{Traduction MiniZinc}
+
+Le générateur produit :
+
+\begin{lstlisting}[language=MiniZinc]
+enum ACT_TYPE = { Soutenance };
+enum ACT_INST = { Soutenance_1, Soutenance_2, Soutenance_3 };
+array[ACT_INST] of int: duration = [2, 2, 2];
+array[ACT_INST] of ACT_TYPE: act_type = [Soutenance, Soutenance, Soutenance];
+\end{lstlisting}
+
+\subsubsection*{Argument de conservation du sens}
+
+Chaque activité déclarée avec \texttt{count = n} devient exactement $n$ instances dans \texttt{ACT\_INST}. La durée de chaque instance est copiée dans le tableau \texttt{duration}. Le tableau \texttt{act\_type} conserve le lien entre l'instance et son type d'activité.
+
+\begin{proposition}[Préservation des activités]
+Pour chaque activité $A$ déclarée dans le DSL avec $n$ instances et une durée $d$, le modèle \MZN{} contient exactement $n$ instances de type $A$, chacune associée à la durée $d$.
+\end{proposition}
+
+\begin{proof}
+Le générateur parcourt chaque activité et crée les identifiants $A\_1, \ldots, A\_n$. Pour chacun de ces identifiants, il ajoute une entrée dans \texttt{duration} et dans \texttt{act\_type}. Il n'existe aucune autre source de création d'instances. La correspondance est donc bijective.
+\end{proof}
+
+\subsection{Ressources typées}
+
+\subsubsection*{Construction DSL}
+
+Le DSL classe les ressources par type :
+
+\begin{lstlisting}[language=JSON]
+"resources": {
+  "Teacher": ["T1", "T2"],
+  "Room": ["R1", "R2"]
+}
+\end{lstlisting}
+
+\subsubsection*{Traduction MiniZinc}
+
+Le générateur produit une énumération globale et des ensembles typés :
+
+\begin{lstlisting}[language=MiniZinc]
+enum RESOURCE = { T1, T2, R1, R2 };
+set of RESOURCE: RES_Teacher = { T1, T2 };
+set of RESOURCE: RES_Room = { R1, R2 };
+\end{lstlisting}
+
+\subsubsection*{Argument de conservation du sens}
+
+Le DSL distingue les ressources par type. \MZN{} représente toutes les ressources dans une énumération globale, puis reconstitue les types par des sous-ensembles. Une ressource appartient donc au même type dans \MZN{} que dans le DSL.
+
+\begin{proposition}[Préservation du typage des ressources]
+Une ressource déclarée dans un type $RType$ du DSL appartient exactement à l'ensemble \texttt{RES\_$RType$} correspondant dans \MZN{}.
+\end{proposition}
+
+\begin{proof}
+Le générateur parcourt chaque entrée \texttt{ResourceEntry}. Les instances sont ajoutées à \texttt{RESOURCE} et simultanément à l'ensemble \texttt{RES\_Type}. Ainsi, l'appartenance typée du DSL est conservée dans \MZN{}.
+\end{proof}
+
+\subsection{Rôles}
+
+\subsubsection*{Construction DSL}
+
+Le DSL associe des rôles à chaque type d'activité :
+
+\begin{lstlisting}[language=JSON]
+"roles": {
+  "Soutenance": {
+    "President": "Teacher",
+    "Salle": "Room"
+  }
+}
+\end{lstlisting}
+
+Cela signifie que les instances de \texttt{Soutenance} peuvent recevoir un rôle \texttt{President} joué par une ressource de type \texttt{Teacher}, et un rôle \texttt{Salle} joué par une ressource de type \texttt{Room}.
+
+\subsubsection*{Traduction MiniZinc}
+
+Le générateur produit :
+
+\begin{lstlisting}[language=MiniZinc]
+enum ROLE = { President, Salle };
+array[ACT_INST, ROLE] of bool: role_applicable = ...;
+array[ACT_INST, ROLE, RESOURCE] of var bool: role_assignment;
+\end{lstlisting}
+
+Puis il impose :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(a in ACT_INST, ro in ROLE, r in RESOURCE) (
+  if not role_applicable[a, ro]
+  then role_assignment[a, ro, r] = false
+  else true endif
+);
+\end{lstlisting}
+
+et, pour chaque rôle, l'incompatibilité des types :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(a in ACT_INST where act_type[a] == Soutenance,
+                  r in RESOURCE where not (r in RES_Teacher)) (
+  role_assignment[a, President, r] = false
+);
+\end{lstlisting}
+
+Enfin, toute ressource jouant un rôle est aussi marquée comme participante :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(a in ACT_INST where act_type[a] == Soutenance,
+                  r in RES_Teacher) (
+  role_assignment[a, President, r] -> assignment[a, r]
+);
+\end{lstlisting}
+
+\subsubsection*{Argument de conservation du sens}
+
+La matrice \texttt{role\_applicable} conserve la relation entre une activité et ses rôles. Les contraintes de compatibilité empêchent d'affecter une ressource d'un mauvais type à un rôle. L'implication vers \texttt{assignment} garantit qu'une ressource qui joue un rôle participe bien à l'activité.
+
+\begin{proposition}[Préservation des rôles]
+Si le DSL déclare qu'un rôle $ro$ d'une activité $A$ attend une ressource de type $RType$, alors le modèle \MZN{} n'autorise pour ce rôle que les ressources de \texttt{RES\_$RType$} et interdit ce rôle pour les autres activités.
+\end{proposition}
+
+\begin{proof}
+La construction \texttt{role\_applicable} vaut vrai uniquement pour les couples activité-rôle déclarés dans le DSL. Lorsque le rôle n'est pas applicable, toutes les variables \texttt{role\_assignment} correspondantes sont contraintes à \texttt{false}. Lorsque le rôle est applicable, les ressources hors du type attendu sont également contraintes à \texttt{false}. Les seules affectations possibles sont donc celles permises par le DSL.
+\end{proof}
+
+\subsection{Affectation générale des ressources}
+
+Le générateur utilise aussi une variable générale :
+
+\begin{lstlisting}[language=MiniZinc]
+array[ACT_INST, RESOURCE] of var bool: assignment;
+\end{lstlisting}
+
+Cette variable représente la participation d'une ressource à une activité, indépendamment du rôle précis. Elle est reliée aux rôles par l'implication :
+
+\begin{lstlisting}[language=MiniZinc]
+role_assignment[a, ro, r] -> assignment[a, r]
+\end{lstlisting}
+
+et par la contrainte :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(a in ACT_INST, r in RESOURCE) (
+  sum(ro in ROLE where role_applicable[a, ro])
+      (bool2int(role_assignment[a, ro, r])) <= 1
+);
+\end{lstlisting}
+
+Cela signifie qu'une même ressource ne peut pas jouer deux rôles différents dans la même instance d'activité.
+
+\section{Préservation des contraintes dures}
+
+Les contraintes dures définissent l'espace des solutions admissibles. Pour chacune, nous montrons que la traduction \MZN{} exprime la même condition.
+
+\subsection{Contrainte \texttt{mandatory\_roles}}
+
+\subsubsection*{Sens DSL}
+
+\begin{lstlisting}[language=JSON]
+{ "type": "mandatory_roles", "activity": "Soutenance" }
+\end{lstlisting}
+
+Tous les rôles applicables à chaque instance de l'activité concernée doivent recevoir au moins une ressource.
+
+\subsubsection*{Traduction MiniZinc}
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(a in ACT_INST where act_type[a] == Soutenance,
+                  ro in ROLE where role_applicable[a, ro]) (
+  sum(r in RESOURCE) (bool2int(role_assignment[a, ro, r])) >= 1
+);
+\end{lstlisting}
+
+\subsubsection*{Preuve}
+
+La somme compte le nombre de ressources affectées au rôle \texttt{ro} dans l'instance \texttt{a}. La contrainte impose que cette somme soit au moins égale à 1. C'est exactement le sens de l'obligation de remplir chaque rôle applicable.
+
+\subsection{Contrainte \texttt{cardinality\_per\_activity}}
+
+\subsubsection*{Cas 1 : cardinalité sur un type de ressource}
+
+DSL :
+
+\begin{lstlisting}[language=JSON]
+{
+  "type": "cardinality_per_activity",
+  "activity": "Soutenance",
+  "target": "Teacher",
+  "min": 2,
+  "max": 3
+}
+\end{lstlisting}
+
+Traduction \MZN{} :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(a in ACT_INST where a in { Soutenance_1, Soutenance_2 }) (
+  sum(r in RES_Teacher) (bool2int(assignment[a,r])) >= 2 /\
+  sum(r in RES_Teacher) (bool2int(assignment[a,r])) <= 3
+);
+\end{lstlisting}
+
+La somme compte les ressources du type ciblé affectées à chaque instance d'activité. La borne inférieure et la borne supérieure sont recopiées depuis le DSL. Le sens est donc préservé.
+
+\subsubsection*{Cas 2 : cardinalité sur un rôle}
+
+DSL :
+
+\begin{lstlisting}[language=JSON]
+{
+  "type": "cardinality_per_activity",
+  "activity": "Soutenance",
+  "role": "President",
+  "min": 1,
+  "max": 1
+}
+\end{lstlisting}
+
+Traduction \MZN{} :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(a in ACT_INST where a in { Soutenance_1, Soutenance_2 }) (
+  sum(r in RES_Teacher)
+    (bool2int(role_assignment[a, President, r])) >= 1 /\
+  sum(r in RES_Teacher)
+    (bool2int(role_assignment[a, President, r])) <= 1
+);
+\end{lstlisting}
+
+La somme compte les ressources affectées au rôle. Les bornes imposent exactement la cardinalité demandée.
+
+\subsubsection*{Cas 3 : cardinalité sur \texttt{slot}}
+
+Dans l'implémentation actuelle, chaque instance d'activité possède exactement une variable \texttt{start\_time}. Le générateur traduit donc une cardinalité sur \texttt{slot} par :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint min <= 1 /\ 1 <= max;
+\end{lstlisting}
+
+Cette traduction exprime que l'activité possède toujours exactement un créneau de début.
+
+\subsection{Contrainte \texttt{resource\_exclusivity}}
+
+\subsubsection*{Sens DSL}
+
+Cette contrainte limite le nombre d'utilisations d'une ressource d'un type donné, pour une activité donnée, selon un périmètre \texttt{slot} ou \texttt{day}.
+
+Exemple :
+
+\begin{lstlisting}[language=JSON]
+{
+  "type": "resource_exclusivity",
+  "resourceType": "Teacher",
+  "activity": "Soutenance",
+  "scope": "slot",
+  "max": 1
+}
+\end{lstlisting}
+
+\subsubsection*{Traduction MiniZinc pour \texttt{slot}}
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(r in RES_Teacher, t in 1..TOTAL_SLOTS) (
+  sum(a in ACT_INST where act_type[a] == Soutenance) (
+    bool2int(assignment[a,r] /\
+             start_time[a] <= t /\
+             t < start_time[a] + duration[a])
+  ) <= 1
+);
+\end{lstlisting}
+
+Cette contrainte compte, pour chaque ressource et chaque créneau, le nombre d'activités qui utilisent cette ressource à ce moment. La valeur ne doit pas dépasser \texttt{max}.
+
+\subsubsection*{Traduction MiniZinc pour \texttt{day}}
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(r in RES_Teacher, d in 1..NUM_DAYS) (
+  sum(a in ACT_INST where act_type[a] == Soutenance) (
+    bool2int(assignment[a,r] /\ dayOf(start_time[a]) == d)
+  ) <= 1
+);
+\end{lstlisting}
+
+Cette variante compte les participations par jour.
+
+\subsubsection*{Preuve}
+
+Dans le cas \texttt{slot}, la condition
+\[
+start\_time[a] \leq t < start\_time[a] + duration[a]
+\]
+signifie exactement que l'activité $a$ occupe le créneau $t$. La somme représente donc le nombre d'activités utilisant la ressource $r$ au créneau $t$. La borne \texttt{max} est celle du DSL. Dans le cas \texttt{day}, la fonction \texttt{dayOf} ramène le créneau global au jour. La contrainte est donc équivalente à la limite journalière du DSL.
+
+\subsection{Non-chevauchement global des ressources}
+
+En plus des contraintes explicites du DSL, le générateur ajoute une règle générique forte :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(r in RESOURCE) (
+  forall(i, j in ACT_INST where i < j) (
+    (assignment[i, r] /\ assignment[j, r]) ->
+      (start_time[i] + duration[i] <= start_time[j] \/
+       start_time[j] + duration[j] <= start_time[i])
+  )
+);
+\end{lstlisting}
+
+Cette contrainte exprime qu'une même ressource ne peut pas être utilisée simultanément par deux activités quelconques.
+
+\begin{remark}
+Cette règle est plus générale que la contrainte \texttt{resource\_exclusivity} ciblée par type et par activité. Pour que la bisimulation soit exacte, cette règle doit être considérée comme faisant partie de la sémantique opérationnelle du DSL dans l'implémentation : toute ressource participante est indisponible pendant la durée de l'activité. Si l'on voulait une sémantique DSL plus permissive, il faudrait rendre cette règle optionnelle ou exclusivement pilotée par les contraintes explicites.
+\end{remark}
+
+\subsection{Contrainte \texttt{fixed\_assignment}}
+
+\subsubsection*{Sens DSL}
+
+Une ressource doit obligatoirement être affectée à un rôle donné d'une instance d'activité.
+
+\begin{lstlisting}[language=JSON]
+{
+  "type": "fixed_assignment",
+  "activityInstance": "Soutenance_1",
+  "role": "President",
+  "resource": "T1"
+}
+\end{lstlisting}
+
+\subsubsection*{Traduction MiniZinc}
+
+\begin{lstlisting}[language=MiniZinc]
+constraint assignment[Soutenance_1, T1] = true;
+constraint role_assignment[Soutenance_1, President, T1] = true;
+\end{lstlisting}
+
+\subsubsection*{Preuve}
+
+La première contrainte impose la participation de la ressource à l'activité. La seconde impose son rôle précis. Toute solution \MZN{} contient donc l'affectation demandée, et toute solution DSL valide doit la contenir.
+
+\subsection{Contrainte \texttt{forbidden\_assignment}}
+
+\subsubsection*{Sens DSL}
+
+Une ressource ne doit pas être affectée à un rôle donné d'une instance d'activité.
+
+\subsubsection*{Traduction MiniZinc}
+
+\begin{lstlisting}[language=MiniZinc]
+constraint role_assignment[Soutenance_1, President, T1] = false;
+\end{lstlisting}
+
+\subsubsection*{Preuve}
+
+La variable booléenne représentant exactement cette affectation est contrainte à \texttt{false}. La traduction interdit donc précisément l'affectation interdite par le DSL.
+
+\subsection{Contrainte \texttt{temporal\_precedence}}
+
+\subsubsection*{Sens DSL}
+
+Une activité de type $A$ doit se terminer avant une activité de type $B$.
+
+\begin{lstlisting}[language=JSON]
+{
+  "type": "temporal_precedence",
+  "beforeActivity": "Preparation",
+  "afterActivity": "Soutenance"
+}
+\end{lstlisting}
+
+\subsubsection*{Traduction MiniZinc}
+
+Le générateur impose cette contrainte pour toutes les paires d'instances concernées :
+
+\begin{lstlisting}[language=MiniZinc]
+constraint forall(b in { Preparation_1, Preparation_2 },
+                  a in { Soutenance_1, Soutenance_2 }) (
+  start_time[b] + duration[b] <= start_time[a]
+);
+\end{lstlisting}
+
+\subsubsection*{Preuve}
+
+L'expression \texttt{start\_time[b] + duration[b]} représente le premier créneau après la fin de $b$. L'inégalité impose que $a$ commence après cette fin. Comme la contrainte est appliquée à toutes les instances de l'activité avant et de l'activité après, elle exprime exactement la précédence globale du DSL.
+
+\subsection{Contrainte \texttt{instance\_precedence}}
+
+\subsubsection*{Sens DSL}
+
+Une instance particulière doit précéder une autre instance particulière.
+
+\subsubsection*{Traduction MiniZinc}
+
+\begin{lstlisting}[language=MiniZinc]
+constraint start_time[Preparation_1] + duration[Preparation_1]
+           <= start_time[Soutenance_1];
+\end{lstlisting}
+
+\subsubsection*{Preuve}
+
+C'est la même condition temporelle que précédemment, mais appliquée à deux instances nommées. La traduction conserve donc exactement le sens de la contrainte.
+
+\subsection{Contrainte \texttt{time\_window}}
+
+\subsubsection*{Sens DSL}
+
+Une instance d'activité doit être planifiée entre deux créneaux globaux.
+
+\begin{lstlisting}[language=JSON]
+{
+  "type": "time_window",
+  "activityInstance": "Soutenance_1",
+  "minSlot": 3,
+  "maxSlot": 8
+}
+\end{lstlisting}
+
+\subsubsection*{Traduction MiniZinc}
+
+\begin{lstlisting}[language=MiniZinc]
+constraint start_time[Soutenance_1] >= 3;
+constraint start_time[Soutenance_1] + duration[Soutenance_1] - 1 <= 8;
+\end{lstlisting}
+
+\subsubsection*{Preuve}
+
+La première contrainte impose que l'activité ne commence pas avant \texttt{minSlot}. La seconde impose que son dernier créneau occupé ne dépasse pas \texttt{maxSlot}. Cela correspond exactement au sens d'une fenêtre temporelle fermée.
+
+\subsection{Contrainte \texttt{required\_resource}}
+
+\subsubsection*{Sens DSL}
+
+Une instance d'activité requiert la participation d'une ressource donnée, sans nécessairement préciser son rôle.
+
+\subsubsection*{Traduction MiniZinc}
+
+\begin{lstlisting}[language=MiniZinc]
+constraint assignment[Soutenance_1, T1] = true;
+\end{lstlisting}
+
+\subsubsection*{Preuve}
+
+La variable de participation de la ressource dans l'activité est contrainte à vrai. La ressource est donc nécessairement présente dans toute solution \MZN{}, comme demandé dans le DSL.
+
+\section{Préservation des préférences}
+
+Les préférences ne définissent pas l'espace des solutions valides, mais la qualité des solutions. Le générateur les traduit en termes de pénalité. Si au moins une préférence existe, le modèle contient :
+
+\begin{lstlisting}[language=MiniZinc]
+var int: penalty = ...;
+solve :: int_search([start_time[i] | i in ACT_INST],
+                    first_fail, indomain_min, complete)
+       minimize penalty;
+\end{lstlisting}
+
+Sinon, il résout simplement un problème de satisfaction :
+
+\begin{lstlisting}[language=MiniZinc]
+solve :: int_search([start_time[i] | i in ACT_INST],
+                    first_fail, indomain_min, complete)
+       satisfy;
+\end{lstlisting}
+
+La propriété attendue est :
+\[
+\scoreDSL(s) = \scoreMZN(\encode(s)).
+\]
+
+\subsection{Préférence \texttt{avoid\_participation\_on\_date}}
+
+\subsubsection*{Sens DSL}
+
+Une ressource devrait éviter de participer à une activité à une date donnée. Si elle participe au moins une fois ce jour-là, une pénalité est ajoutée.
+
+\subsubsection*{Traduction MiniZinc}
+
+\begin{lstlisting}[language=MiniZinc]
+weight * bool2int(
+  sum(a in ACT_INST)
+    (bool2int(assignment[a, Ressource] /\ dayOf(start_time[a]) == d)) > 0
+)
+\end{lstlisting}
+
+\subsubsection*{Argument}
+
+La somme détecte les activités du jour $d$ auxquelles la ressource participe. Le booléen vaut vrai si le nombre de participations est strictement positif. La pénalité est donc appliquée une seule fois, conformément à une interprétation forfaitaire de cette préférence.
+
+\subsection{Préférence \texttt{preferred\_resource}}
+
+\subsubsection*{Sens DSL}
+
+Une ressource est préférée pour un rôle ou une activité. Ne pas choisir cette ressource ajoute une pénalité.
+
+\subsubsection*{Traduction MiniZinc}
+
+Avec rôles :
+
+\begin{lstlisting}[language=MiniZinc]
+weight * bool2int(not role_assignment[Instance, Role, Resource])
+\end{lstlisting}
+
+Sans rôles :
+
+\begin{lstlisting}[language=MiniZinc]
+weight * bool2int(not assignment[Instance, Resource])
+\end{lstlisting}
+
+\subsubsection*{Argument}
+
+La pénalité est nulle si la ressource préférée est effectivement choisie. Elle vaut \texttt{weight} sinon. Cela correspond exactement à la préférence du DSL.
+
+\subsection{Préférence \texttt{max\_per\_scope}}
+
+\subsubsection*{Sens DSL}
+
+On souhaite limiter souplement le nombre de participations d'une ressource, par créneau ou par jour. Dépasser la limite n'invalide pas la solution, mais ajoute une pénalité proportionnelle à l'excès.
+
+\subsubsection*{Traduction MiniZinc pour \texttt{slot}}
+
+\begin{lstlisting}[language=MiniZinc]
+sum(r in RES_Type, t in 1..TOTAL_SLOTS) (
+  weight * max(0,
+    (sum(a in ACT_INST where act_type[a] == Activity)
+      (bool2int(assignment[a, r] /\
+                start_time[a] <= t /\
+                t < start_time[a] + duration[a]))) - max
+  )
+)
+\end{lstlisting}
+
+\subsubsection*{Argument}
+
+La formule compte les utilisations effectives de la ressource dans chaque périmètre. La fonction \texttt{max(0, count - max)} calcule uniquement le dépassement positif. Le poids du DSL multiplie ce dépassement. La pénalité correspond donc à l'interprétation souple de la limite.
+
+\subsection{Préférence \texttt{room\_stability\_for\_role}}
+
+\subsubsection*{Sens DSL}
+
+Pour une activité et un rôle donnés, on souhaite qu'un même acteur conserve la même salle, soit sur une journée, soit globalement.
+
+\subsubsection*{Traduction MiniZinc}
+
+Le générateur compte, pour chaque acteur jouant le rôle, le nombre de salles différentes utilisées. Il pénalise le nombre de salles au-delà de 1 :
+
+\begin{lstlisting}[language=MiniZinc]
+weight * max(0, number_of_used_rooms - 1)
+\end{lstlisting}
+
+\subsubsection*{Argument}
+
+Si l'acteur utilise une seule salle, la pénalité est nulle. Chaque salle supplémentaire crée une pénalité pondérée. Cela correspond au sens de stabilité de salle.
+
+\subsection{Préférence \texttt{compact\_schedule\_for\_role}}
+
+\subsubsection*{Sens DSL}
+
+Pour une activité et un rôle donnés, on souhaite que l'emploi du temps d'une ressource soit compact, c'est-à-dire avec peu de trous entre ses participations.
+
+\subsubsection*{Traduction MiniZinc}
+
+Le générateur calcule :
+
+\begin{itemize}[leftmargin=1.2cm]
+  \item \texttt{busy\_units} : le nombre total de créneaux réellement occupés ;
+  \item \texttt{first\_slot} : le premier créneau occupé ;
+  \item \texttt{last\_slot} : le dernier créneau occupé.
+\end{itemize}
+
+La pénalité est :
+
+\[
+weight \times ((last\_slot - first\_slot + 1) - busy\_units).
+\]
+
+\subsubsection*{Argument}
+
+Le terme $(last\_slot - first\_slot + 1)$ mesure la longueur de l'enveloppe temporelle. En retirant les créneaux réellement occupés, on obtient le nombre de trous. La pénalité représente donc exactement le manque de compacité.
+
+\section{Théorème principal de bisimulation}
+
+\begin{theorem}[Correction et complétude de la traduction]
+Soit $P$ une spécification \DSL{} bien formée, et soit $\gen(P)$ le modèle \MZN{} généré. Sous l'hypothèse que toutes les références du DSL sont valides et que seuls les périmètres supportés par l'implémentation sont utilisés, alors pour toute solution $s$ :
+\[
+s \models P \quad \Longleftrightarrow \quad \encode(s) \models \gen(P).
+\]
+De plus, pour toute solution \MZN{} $m$ :
+\[
+m \models \gen(P) \quad \Longrightarrow \quad \decode(m) \models P.
+\]
+\end{theorem}
+
+\begin{proof}
+La preuve se fait par construction sur les éléments de la spécification.
+
+Premièrement, les éléments structurels sont conservés. Les jours et créneaux du DSL sont représentés par \texttt{NUM\_DAYS}, \texttt{SLOTS\_PER\_DAY} et \texttt{TOTAL\_SLOTS}. Les activités du DSL sont représentées par \texttt{ACT\_TYPE} et \texttt{ACT\_INST}. Les ressources typées sont représentées par \texttt{RESOURCE} et les ensembles \texttt{RES\_Type}. Les rôles sont représentés par \texttt{ROLE}, \texttt{role\_applicable} et \texttt{role\_assignment}.
+
+Deuxièmement, les variables de décision \MZN{} correspondent exactement aux choix constitutifs d'une solution DSL : date de début, participation d'une ressource et affectation d'un rôle. La fonction $\encode$ affecte ces variables selon les choix de la solution DSL. La fonction $\decode$ lit ces mêmes variables dans la sortie structurée.
+
+Troisièmement, chaque contrainte dure du DSL est traduite par une formule \MZN{} équivalente : les cardinalités sont traduites par des sommes bornées, les précédences par des inégalités sur les dates de fin et de début, les fenêtres temporelles par des bornes sur le début et la fin, les affectations fixes ou interdites par des égalités booléennes, et les ressources obligatoires par des variables de participation contraintes à vrai.
+
+Ainsi, si une solution DSL satisfait toutes les contraintes du DSL, son encodage satisfait toutes les contraintes \MZN{}. Réciproquement, si une affectation \MZN{} satisfait toutes les contraintes générées, son décodage respecte les contraintes du DSL, puisque chaque contrainte \MZN{} exprime précisément la condition DSL correspondante. Les deux ensembles de solutions sont donc équivalents, à encodage et décodage près.
+\end{proof}
+
+\begin{theorem}[Préservation de l'optimisation]
+Si une spécification $P$ contient des préférences et si $\gen(P)$ génère la variable \texttt{penalty}, alors pour toute solution DSL $s$ :
+\[
+\scoreDSL(s) = \scoreMZN(\encode(s)).
+\]
+Par conséquent, toute solution optimale minimisant \texttt{penalty} dans \MZN{} correspond à une solution optimale du DSL selon les préférences implémentées.
+\end{theorem}
+
+\begin{proof}
+Chaque préférence du DSL ajoute un terme à \texttt{penalty}. Le terme produit par le générateur est nul lorsque la préférence est satisfaite et strictement positif, selon le poids fourni par le DSL, lorsqu'elle est violée. Pour \texttt{preferred\_resource}, la pénalité est exactement le poids si la ressource préférée n'est pas choisie. Pour \texttt{avoid\_participation\_on\_date}, elle est appliquée si la ressource participe au moins une fois à la date indiquée. Pour \texttt{max\_per\_scope}, elle correspond au dépassement de la limite. Pour \texttt{room\_stability\_for\_role}, elle correspond au nombre de salles supplémentaires. Pour \texttt{compact\_schedule\_for\_role}, elle correspond au nombre de trous dans l'enveloppe temporelle. La somme de ces termes est donc égale au score défini par la sémantique opérationnelle du DSL.
+\end{proof}
+
+\section{Table de synthèse de la correspondance}
+
+\begin{longtable}{p{3.4cm}p{5.4cm}p{5.3cm}}
+\toprule
+\textbf{Élément DSL} & \textbf{Traduction MiniZinc} & \textbf{Sens conservé} \\
+\midrule
+\endhead
+\texttt{time.days} & \texttt{NUM\_DAYS}, fonction \texttt{dayOf} & Les jours du DSL sont retrouvables à partir des créneaux globaux. \\
+\texttt{slotsPerDay} & \texttt{SLOTS\_PER\_DAY}, \texttt{TOTAL\_SLOTS} & Le nombre total de créneaux est identique. \\
+\texttt{activities} & \texttt{ACT\_TYPE}, \texttt{ACT\_INST} & Chaque activité et chaque instance sont conservées. \\
+\texttt{duration} & tableau \texttt{duration} & La durée utilisée par le solveur est celle du DSL. \\
+\texttt{resources} & \texttt{RESOURCE}, \texttt{RES\_Type} & Le typage des ressources est conservé. \\
+\texttt{roles} & \texttt{ROLE}, \texttt{role\_applicable}, \texttt{role\_assignment} & Les rôles applicables et leurs types de ressources sont conservés. \\
+\texttt{mandatory\_roles} & somme des \texttt{role\_assignment} $\geq 1$ & Chaque rôle obligatoire reçoit une ressource. \\
+\texttt{cardinality\_per\_activity} & sommes bornées par \texttt{min} et \texttt{max} & Les nombres de ressources ou rôles affectés respectent les bornes. \\
+\texttt{resource\_exclusivity} & sommes par créneau ou par jour $\leq max$ & Les limites d'utilisation des ressources sont conservées. \\
+\texttt{fixed\_assignment} & égalité booléenne à \texttt{true} & L'affectation imposée est présente. \\
+\texttt{forbidden\_assignment} & égalité booléenne à \texttt{false} & L'affectation interdite est absente. \\
+\texttt{temporal\_precedence} & \texttt{start\_before + duration <= start\_after} & La précédence entre types d'activités est conservée. \\
+\texttt{instance\_precedence} & même inégalité entre instances & La précédence entre instances est conservée. \\
+\texttt{time\_window} & bornes sur début et fin & L'activité reste dans la fenêtre autorisée. \\
+\texttt{required\_resource} & \texttt{assignment[a,r] = true} & La ressource requise participe à l'activité. \\
+\texttt{preferences} & variable \texttt{penalty} & Les violations souples sont évaluées par le même score. \\
+\bottomrule
+\end{longtable}
+
+\section{Hypothèses et limites de la preuve}
+
+La preuve précédente s'appuie sur les hypothèses suivantes :
+
+\begin{enumerate}[leftmargin=1.2cm]
+  \item La spécification DSL est syntaxiquement valide selon la grammaire Langium.
+  \item Les références utilisées dans les contraintes existent effectivement : activité, instance, rôle, ressource et type de ressource.
+  \item Les périmètres utilisés sont ceux supportés par l'implémentation : \texttt{slot} et \texttt{day} pour \texttt{resource\_exclusivity} et \texttt{max\_per\_scope}, \texttt{day} et \texttt{global} pour \texttt{room\_stability\_for\_role} et \texttt{compact\_schedule\_for\_role}.
+  \item La règle de non-chevauchement global des ressources est considérée comme faisant partie de la sémantique du DSL implémenté.
+  \item La normalisation des identifiants du DSL vers \MZN{} ne provoque pas de collision de noms. Par exemple, deux noms différents du DSL ne doivent pas devenir le même identifiant \MZN{} après remplacement des espaces et caractères spéciaux.
+\end{enumerate}
+
+Ces hypothèses sont importantes. Elles ne remettent pas en cause la traduction, mais elles indiquent les conditions sous lesquelles l'équivalence sémantique est garantie. Pour renforcer encore le projet, il serait utile d'ajouter des validations statiques supplémentaires détectant les références inconnues et les collisions d'identifiants.
+
+\section{Conclusion}
+
+Cette étude montre que la traduction de \DSL{} vers \MZN{} peut être comprise comme une bisimulation sémantique adaptée aux langages déclaratifs. Le DSL exprime un problème de planification à un niveau métier ; \MZN{} exprime le même problème sous forme de variables, domaines, contraintes et objectif. La correspondance repose sur deux fonctions conceptuelles : $\encode$, qui transforme une solution DSL en affectation \MZN{}, et $\decode$, qui reconstruit une solution DSL à partir de la sortie \MZN{}.
+
+La preuve se fait élément par élément. Les jours, créneaux, activités, ressources, rôles, contraintes dures et préférences sont traduits par des constructions \MZN{} ayant le même sens. Les contraintes dures préservent l'espace des solutions valides. Les préférences préservent le score optimisé par le solveur.
+
+La propriété centrale obtenue est donc :
+\[
+s \models P \quad \Longleftrightarrow \quad \encode(s) \models \gen(P),
+\]
+et, pour l'optimisation :
+\[
+\scoreDSL(s) = \scoreMZN(\encode(s)).
+\]
+
+Ainsi, sous les hypothèses explicitées, MiniZinc ne résout pas un problème différent de celui exprimé par l'utilisateur : il résout exactement la traduction sémantiquement équivalente de la spécification \DSL{}.
+
+\end{document}

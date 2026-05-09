@@ -8,7 +8,7 @@
   },
   "activities": {
     "Soutenance": {
-      "count": 15,
+      "count": 20,
       "duration": 1
     }
   },
@@ -58,7 +58,22 @@
       "Teacher_42",
       "Teacher_43",
       "Teacher_44",
-      "Teacher_45"
+      "Teacher_45",
+      "Teacher_46",
+      "Teacher_47",
+      "Teacher_48",
+      "Teacher_49",
+      "Teacher_50",
+      "Teacher_51",
+      "Teacher_52",
+      "Teacher_53",
+      "Teacher_54",
+      "Teacher_55",
+      "Teacher_56",
+      "Teacher_57",
+      "Teacher_58",
+      "Teacher_59",
+      "Teacher_60"
     ],
     "Room": [
       "Room_1",
@@ -83,7 +98,12 @@
       "Student_12",
       "Student_13",
       "Student_14",
-      "Student_15"
+      "Student_15",
+      "Student_16",
+      "Student_17",
+      "Student_18",
+      "Student_19",
+      "Student_20"
     ]
   },
   "roles": {
@@ -248,57 +268,159 @@
     },
     {
       "type": "fixed_assignment",
-      "activityInstance": "Soutenance_1",
+      "activityInstance": "Soutenance_16",
+      "role": "Candidat",
+      "resource": "Student_16"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_17",
+      "role": "Candidat",
+      "resource": "Student_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_18",
+      "role": "Candidat",
+      "resource": "Student_18"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_19",
+      "role": "Candidat",
+      "resource": "Student_19"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_20",
+      "role": "Candidat",
+      "resource": "Student_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_2",
       "role": "President",
       "resource": "Teacher_1"
     },
     {
       "type": "fixed_assignment",
-      "activityInstance": "Soutenance_1",
+      "activityInstance": "Soutenance_2",
       "role": "Rapporteur",
       "resource": "Teacher_2"
     },
     {
       "type": "fixed_assignment",
-      "activityInstance": "Soutenance_1",
+      "activityInstance": "Soutenance_2",
       "role": "Membre",
       "resource": "Teacher_3"
     },
     {
       "type": "fixed_assignment",
-      "activityInstance": "Soutenance_2",
+      "activityInstance": "Soutenance_4",
       "role": "President",
       "resource": "Teacher_4"
     },
     {
       "type": "fixed_assignment",
-      "activityInstance": "Soutenance_2",
+      "activityInstance": "Soutenance_4",
       "role": "Rapporteur",
       "resource": "Teacher_5"
     },
     {
       "type": "fixed_assignment",
-      "activityInstance": "Soutenance_2",
+      "activityInstance": "Soutenance_4",
       "role": "Membre",
       "resource": "Teacher_6"
     },
     {
       "type": "fixed_assignment",
-      "activityInstance": "Soutenance_3",
+      "activityInstance": "Soutenance_8",
       "role": "President",
       "resource": "Teacher_7"
     },
     {
       "type": "fixed_assignment",
-      "activityInstance": "Soutenance_3",
+      "activityInstance": "Soutenance_8",
       "role": "Rapporteur",
       "resource": "Teacher_8"
     },
     {
       "type": "fixed_assignment",
-      "activityInstance": "Soutenance_3",
+      "activityInstance": "Soutenance_8",
       "role": "Membre",
       "resource": "Teacher_9"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_11",
+      "role": "President",
+      "resource": "Teacher_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_11",
+      "role": "Rapporteur",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_11",
+      "role": "Membre",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_15",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_15",
+      "role": "Rapporteur",
+      "resource": "Teacher_14"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_15",
+      "role": "Membre",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_16",
+      "role": "President",
+      "resource": "Teacher_16"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_16",
+      "role": "Rapporteur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_16",
+      "role": "Membre",
+      "resource": "Teacher_18"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_17",
+      "role": "President",
+      "resource": "Teacher_19"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_17",
+      "role": "Rapporteur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_17",
+      "role": "Membre",
+      "resource": "Teacher_21"
     },
     {
       "type": "instance_precedence",
@@ -316,125 +438,106 @@
       "afterActivityInstance": "Soutenance_4"
     },
     {
-      "type": "time_window",
-      "activityInstance": "Soutenance_1",
-      "minSlot": 1,
-      "maxSlot": 9
+      "type": "instance_precedence",
+      "beforeActivityInstance": "Soutenance_4",
+      "afterActivityInstance": "Soutenance_5"
     },
     {
       "type": "time_window",
-      "activityInstance": "Soutenance_2",
+      "activityInstance": "Soutenance_9",
       "minSlot": 1,
+      "maxSlot": 4
+    },
+    {
+      "type": "time_window",
+      "activityInstance": "Soutenance_11",
+      "minSlot": 3,
+      "maxSlot": 6
+    },
+    {
+      "type": "time_window",
+      "activityInstance": "Soutenance_12",
+      "minSlot": 7,
       "maxSlot": 10
     },
     {
       "type": "time_window",
+      "activityInstance": "Soutenance_17",
+      "minSlot": 11,
+      "maxSlot": 14
+    },
+    {
+      "type": "forbidden_assignment",
+      "activityInstance": "Soutenance_1",
+      "role": "President",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "forbidden_assignment",
+      "activityInstance": "Soutenance_2",
+      "role": "Rapporteur",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "forbidden_assignment",
       "activityInstance": "Soutenance_3",
-      "minSlot": 1,
-      "maxSlot": 11
+      "role": "Membre",
+      "resource": "Teacher_36"
     },
     {
-      "type": "time_window",
+      "type": "forbidden_assignment",
       "activityInstance": "Soutenance_4",
-      "minSlot": 1,
-      "maxSlot": 12
+      "role": "President",
+      "resource": "Teacher_38"
     },
     {
-      "type": "time_window",
+      "type": "forbidden_assignment",
       "activityInstance": "Soutenance_5",
-      "minSlot": 1,
-      "maxSlot": 13
-    }
-  ],
-  "preferences": [
-    {
-      "type": "avoid_participation_on_date",
-      "resource": "Teacher_1",
-      "date": "Jour_1",
-      "weight": 4
+      "role": "Rapporteur",
+      "resource": "Teacher_44"
     },
     {
-      "type": "avoid_participation_on_date",
-      "resource": "Teacher_2",
-      "date": "Jour_1",
-      "weight": 4
+      "type": "forbidden_assignment",
+      "activityInstance": "Soutenance_6",
+      "role": "Membre",
+      "resource": "Teacher_17"
     },
     {
-      "type": "avoid_participation_on_date",
-      "resource": "Teacher_3",
-      "date": "Jour_1",
-      "weight": 4
-    },
-    {
-      "type": "avoid_participation_on_date",
-      "resource": "Teacher_4",
-      "date": "Jour_1",
-      "weight": 4
-    },
-    {
-      "type": "preferred_resource",
+      "type": "fixed_assignment",
       "activityInstance": "Soutenance_1",
       "role": "Salle",
-      "resource": "Room_1",
-      "weight": 3
+      "resource": "Room_1"
     },
     {
-      "type": "preferred_resource",
+      "type": "fixed_assignment",
       "activityInstance": "Soutenance_2",
       "role": "Salle",
-      "resource": "Room_2",
-      "weight": 3
+      "resource": "Room_2"
     },
     {
-      "type": "preferred_resource",
+      "type": "fixed_assignment",
       "activityInstance": "Soutenance_3",
       "role": "Salle",
-      "resource": "Room_3",
-      "weight": 3
+      "resource": "Room_3"
     },
     {
-      "type": "preferred_resource",
+      "type": "fixed_assignment",
       "activityInstance": "Soutenance_4",
       "role": "Salle",
-      "resource": "Room_4",
-      "weight": 3
+      "resource": "Room_4"
     },
     {
-      "type": "preferred_resource",
+      "type": "fixed_assignment",
       "activityInstance": "Soutenance_5",
       "role": "Salle",
-      "resource": "Room_5",
-      "weight": 3
+      "resource": "Room_5"
     },
     {
-      "type": "preferred_resource",
+      "type": "fixed_assignment",
       "activityInstance": "Soutenance_6",
       "role": "Salle",
-      "resource": "Room_6",
-      "weight": 3
-    },
-    {
-      "type": "room_stability_for_role",
-      "activity": "Soutenance",
-      "role": "President",
-      "roomResourceType": "Room",
-      "scope": "day",
-      "weight": 2
-    },
-    {
-      "type": "compact_schedule_for_role",
-      "activity": "Soutenance",
-      "role": "President",
-      "scope": "day",
-      "weight": 2
-    },
-    {
-      "type": "max_per_scope",
-      "resourceType": "Teacher",
-      "activity": "Soutenance",
-      "scope": "day",
-      "max": 1,
-      "weight": 2
+      "resource": "Room_6"
     }
-  ]
+  ],
+  "preferences": []
 }

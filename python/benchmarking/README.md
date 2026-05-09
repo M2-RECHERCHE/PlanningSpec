@@ -104,38 +104,47 @@ python3 python/benchmarking/benchmark_pipeline.py \
   "rapport/notes/expressivite/cases/*.planning"
 ```
 
-### Campagne par taille (A/R/K/T)
+### Campagne par familles et tailles (A/R/K/T)
 
-Generer des instances parametrees de soutenances:
+Generer une suite etendue pour des runs avec timeout de 5 minutes par solveur-instance:
 
 ```bash
 python3 python/benchmarking/generate_soutenance_instances.py \
   --output-dir python/benchmarking/test_files/scaling \
-  --A-list 10,20,30,40 \
-  --R-list 30,60,90,120 \
-  --K-list 4,6,8,10 \
-  --T-list 6,8,10,12 \
-  --mode zipped
+  --preset research-5min \
+  --families all \
+  --seeds 1 \
+  --clear
 ```
 
-```
+Le nom des fichiers encode maintenant la famille et la taille:
+
+`soutenance_Foptimisation_A8_R24_K4_T5_S1.planning`
+
+Le generateur ecrit aussi un `manifest.csv` avec famille, taille, niveau de difficulte, ratios de fenetres temporelles / precedences / interdictions, nombre de contraintes, nombre de preferences et timeout recommande.
+
+Familles disponibles:
+- `satisfaction`: contraintes de planning sans fonction objectif;
+- `optimisation`: contraintes de planning avec preferences a minimiser.
+
+Pour une verification rapide:
+
+```bash
 python3 python/benchmarking/generate_soutenance_instances.py \
   --output-dir python/benchmarking/test_files/scaling \
-  --A-list 5,8,10,12,15 \
-  --R-list 15,24,30,36,45 \
-  --K-list 3,4,4,5,6 \
-  --T-list 5,6,6,8,8 \
-  --mode zipped
-
+  --preset quick \
+  --families satisfaction,optimisation \
+  --seeds 1 \
+  --clear
 ```
 
-Lancer le benchmark sur ces tailles:
+Lancer le benchmark sur ces familles:
 
 ```bash
 python3 python/benchmarking/benchmark_pipeline.py \
   python/benchmarking/test_files/scaling \
   --minizinc-bin /snap/minizinc/current/bin/minizinc \
-  --timeout 1800 \
+  --timeout 300 \
   --result-dir python/benchmarking/result
 ```
 
@@ -146,7 +155,7 @@ python3 python/benchmarking/benchmark_pipeline.py \
 - `--output-csv <path>`: chemin du fichier de résultats (défaut: `python/benchmarking/benchmark_results.csv`)
 - `--result-dir <path>`: dossier des courbes et tableaux de synthèse (défaut: `python/benchmarking/result`)
 - `--generated-mzn-dir <path>`: dossier de sortie des `.mzn` générés
-- `--timeout <sec>`: timeout par solveur/instance (défaut: 1800, soit 30 minutes)
+- `--timeout <sec>`: timeout par solveur/instance (défaut: 300, soit 5 minutes)
 - `--skip-backend-build`: saute le `pnpm --filter planning-spec-cli build`
 - `--repo-root <path>`: racine du monorepo
 - `--minizinc-bin <path>`: force le binaire MiniZinc (utile si plusieurs installations coexistent)
@@ -160,7 +169,7 @@ Exemple complet:
 ```bash
 python3 python/benchmarking/benchmark_pipeline.py \
   backend/test_files \
-  --timeout 1800 \
+  --timeout 300 \
   --minizinc-bin /snap/minizinc/current/bin/minizinc \
   --result-dir python/benchmarking/result \
   --output-csv python/benchmarking/results_etude_v1.csv
@@ -288,6 +297,8 @@ Le script génère automatiquement dans le dossier `result`:
 - `status_by_solver.csv` (table de contingence statuts vs solveurs)
 - `analysis_report.md` (description des figures + conclusion automatique)
 - `size_summary_by_A.csv` (synthèse par taille A)
+- `family_summary.csv` (médiane, quartiles et taux succès/OPT/timeout par famille et solveur)
+- `family_ranking.csv` (classement par famille de problème)
 - `curve_01_boxplot_t_total.png`
 - `curve_02_boxplot_t_solve.png`
 - `curve_03_mean_times.png`
@@ -297,6 +308,8 @@ Le script génère automatiquement dans le dossier `result`:
 - `curve_07_ttotal_vs_A.png`
 - `curve_08_tsolve_vs_A.png`
 - `curve_09_success_rate_vs_A.png`
+- `curve_10_median_ttotal_by_family.png`
+- `curve_11_opt_rate_by_family.png`
 
 Ces courbes couvrent les comparaisons nécessaires pour justifier le choix du solveur:
 - performance brute (`T_total`, `T_solve`),

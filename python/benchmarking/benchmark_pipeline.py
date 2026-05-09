@@ -42,9 +42,10 @@ except ModuleNotFoundError:
 if TYPE_CHECKING:
     import minizinc
 
-DEFAULT_TIMEOUT_SECONDS = 1800
+DEFAULT_TIMEOUT_SECONDS = 300
 CSV_COLUMNS = [
     "Instance",
+    "Family",
     "A",
     "R",
     "K",
@@ -79,6 +80,8 @@ PLOT_FILES = {
     "curve_07_ttotal_vs_A.png": "Evolution de T_total median selon A (taille activites)",
     "curve_08_tsolve_vs_A.png": "Evolution de T_solve median selon A",
     "curve_09_success_rate_vs_A.png": "Taux de succes selon A",
+    "curve_10_median_ttotal_by_family.png": "T_total median par famille de probleme",
+    "curve_11_opt_rate_by_family.png": "Taux de preuve d'optimalite par famille",
 }
 
 
@@ -112,6 +115,28 @@ def extract_params(_filename: str) -> Tuple[int, int, int, int]:
             values[key] = int(match.group("v"))
 
     return (values["A"], values["R"], values["K"], values["T"])
+
+
+def extract_family(_filename: str) -> str:
+    """
+    Extrait la famille depuis un nom encode par generate_soutenance_instances.py:
+    - soutenance_Foptimisation_A10_R30_K4_T6_S1.planning -> optimisation
+
+    Retourne "unknown" si le nom n'encode pas de famille.
+    """
+    filename = Path(_filename).stem
+    match = re.search(r"(?:^|[_-])F(?P<family>[A-Za-z0-9][A-Za-z0-9_-]*?)(?=_(?:A\d+|R\d+|K\d+|T\d+|S\d+)|$)", filename)
+    if match:
+        return match.group("family")
+    known_families = [
+        "satisfaction",
+        "optimisation",
+        "scaling",
+    ]
+    for family in known_families:
+        if family in filename:
+            return family
+    return "unknown"
 
 
 def parse_args() -> argparse.Namespace:
@@ -554,6 +579,26 @@ def generate_textual_conclusion(
         except Exception:
             pass
 
+    family_summary_path = result_dir / "family_summary.csv"
+    if family_summary_path.exists():
+        try:
+            family_df = pd.read_csv(family_summary_path)
+            if not family_df.empty:
+                lines.append("\n## Analyse Par Famille")
+                for family, group in family_df.groupby("Family"):
+                    best = group.sort_values(
+                        ["Success_Rate", "Timeout_Rate", "Median_T_total"],
+                        ascending=[False, True, True],
+                    ).iloc[0]
+                    lines.append(
+                        f"- **{family}**: meilleur compromis = **{best['Solveur']}** "
+                        f"(median T_total={best['Median_T_total']:.3f}s, "
+                        f"success={best['Success_Rate'] * 100:.1f}%, "
+                        f"OPT={best['OPT_Rate'] * 100:.1f}%)."
+                    )
+        except Exception:
+            pass
+
     report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -653,6 +698,75 @@ def build_size_analysis_artifacts(df_export: Any, result_dir: Path) -> None:
         plt.close(fig)
 
 
+def build_family_analysis_artifacts(df_export: Any, result_dir: Path) -> None:
+    if "Family" not in df_export.columns:
+        return
+
+    df_family = df_export.copy()
+    df_family["Family"] = df_family["Family"].fillna("unknown").astype(str)
+    if df_family["Family"].nunique() <= 1 and df_family["Family"].iloc[0] == "unknown":
+        return
+
+    df_family["T_total"] = pd.to_numeric(df_family["T_total"], errors="coerce")
+    df_family["T_solve"] = pd.to_numeric(df_family["T_solve"], errors="coerce")
+    df_family["Statut"] = df_family["Statut"].astype(str)
+
+    family_summary = (
+        df_family.groupby(["Family", "Solveur"], dropna=False)
+        .agg(
+            Runs=("Instance", "count"),
+            Mean_T_total=("T_total", "mean"),
+            Median_T_total=("T_total", "median"),
+            Q1_T_total=("T_total", lambda s: s.quantile(0.25)),
+            Q3_T_total=("T_total", lambda s: s.quantile(0.75)),
+            Mean_T_solve=("T_solve", "mean"),
+            Median_T_solve=("T_solve", "median"),
+            Success_Rate=("Statut", lambda s: float(s.isin(["SAT", "UNSAT", "OPT"]).mean())),
+            OPT_Rate=("Statut", lambda s: float((s == "OPT").mean())),
+            Timeout_Rate=("Statut", lambda s: float((s == "TIMEOUT").mean())),
+            Error_Rate=("Statut", lambda s: float(s.str.startswith("ERROR").mean())),
+        )
+        .reset_index()
+        .sort_values(["Family", "Median_T_total", "Solveur"])
+    )
+    family_summary.to_csv(result_dir / "family_summary.csv", index=False)
+
+    # Classement par famille: utile directement dans le rapport.
+    family_ranking = family_summary.sort_values(
+        ["Family", "Success_Rate", "Timeout_Rate", "Median_T_total"],
+        ascending=[True, False, True, True],
+    )
+    family_ranking.to_csv(result_dir / "family_ranking.csv", index=False)
+
+    if plt is None:
+        return
+
+    # Median T_total par famille et solveur.
+    pivot = family_summary.pivot(index="Family", columns="Solveur", values="Median_T_total")
+    if not pivot.empty:
+        fig, ax = plt.subplots(figsize=(13, 6))
+        pivot.plot(kind="bar", ax=ax)
+        ax.set_title("T_total median par famille de probleme")
+        ax.set_xlabel("Famille")
+        ax.set_ylabel("Temps total median (s)")
+        ax.tick_params(axis="x", rotation=25)
+        ax.legend(title="Solveur")
+        save_figure(fig, result_dir / "curve_10_median_ttotal_by_family.png")
+
+    # Taux OPT par famille et solveur. Les familles SAT resteront naturellement a 0.
+    pivot_opt = family_summary.pivot(index="Family", columns="Solveur", values="OPT_Rate") * 100.0
+    if not pivot_opt.empty:
+        fig, ax = plt.subplots(figsize=(13, 6))
+        pivot_opt.plot(kind="bar", ax=ax)
+        ax.set_title("Taux de preuve OPT par famille")
+        ax.set_xlabel("Famille")
+        ax.set_ylabel("OPT rate (%)")
+        ax.set_ylim(0, 100)
+        ax.tick_params(axis="x", rotation=25)
+        ax.legend(title="Solveur")
+        save_figure(fig, result_dir / "curve_11_opt_rate_by_family.png")
+
+
 def build_result_artifacts(df: Any, result_dir: Path) -> None:
     result_dir.mkdir(parents=True, exist_ok=True)
 
@@ -681,6 +795,10 @@ def build_result_artifacts(df: Any, result_dir: Path) -> None:
             Median_T_solve=("T_solve", "median"),
             Mean_T_total=("T_total", "mean"),
             Median_T_total=("T_total", "median"),
+            Q1_T_total=("T_total", lambda s: s.quantile(0.25)),
+            Q3_T_total=("T_total", lambda s: s.quantile(0.75)),
+            Min_T_total=("T_total", "min"),
+            Max_T_total=("T_total", "max"),
         )
         .reset_index()
     )
@@ -712,6 +830,16 @@ def build_result_artifacts(df: Any, result_dir: Path) -> None:
         .to_numpy()
     )
     solver_summary["Success_Rate"] = solver_summary["Success_Count"] / solver_summary["Runs"]
+    solver_summary["OPT_Count"] = (
+        df_export[df_export["Statut"] == "OPT"]
+        .groupby("Solveur")["Instance"]
+        .count()
+        .reindex(solver_summary["Solveur"])
+        .fillna(0)
+        .astype(int)
+        .to_numpy()
+    )
+    solver_summary["OPT_Rate"] = solver_summary["OPT_Count"] / solver_summary["Runs"]
     solver_summary.to_csv(result_dir / "solver_summary.csv", index=False)
 
     if plt is None:
@@ -818,6 +946,7 @@ def build_result_artifacts(df: Any, result_dir: Path) -> None:
         plt.close(fig)
 
     build_size_analysis_artifacts(df_export, result_dir)
+    build_family_analysis_artifacts(df_export, result_dir)
     generate_textual_conclusion(df_export, solver_summary, status_by_solver, result_dir)
 
 
@@ -951,6 +1080,7 @@ async def run_benchmark(args: argparse.Namespace) -> None:
             continue
 
         a, r, k, t = extract_params(instance_path.name)
+        family = extract_family(instance_path.name)
 
         for solver_label, solver in available_solvers.items():
             print(f"Traitement de {mzn_path.name} avec {solver_label}... [En cours]")
@@ -969,6 +1099,7 @@ async def run_benchmark(args: argparse.Namespace) -> None:
             rows.append(
                 {
                     "Instance": mzn_path.name,
+                    "Family": family,
                     "A": a,
                     "R": r,
                     "K": k,
