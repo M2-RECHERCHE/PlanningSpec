@@ -53,6 +53,8 @@
 \newcommand{\gen}{\mathsf{Gen}}
 \newcommand{\scoreDSL}{\mathsf{score}_{DSL}}
 \newcommand{\scoreMZN}{\mathsf{score}_{MZN}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\codecell}[1]{\texttt{\footnotesize #1}}
 
 \title{Bisimulation sémantique entre un DSL déclaratif de planification et MiniZinc}
 \author{Notes de recherche -- Master 2}
@@ -927,29 +929,91 @@ Chaque préférence du DSL ajoute un terme à \texttt{penalty}. Le terme produit
 
 \section{Table de synthèse de la correspondance}
 
-\begin{longtable}{p{3.4cm}p{5.4cm}p{5.3cm}}
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.18}
+\begin{longtable}{@{}L{0.28\textwidth}L{0.34\textwidth}L{0.30\textwidth}@{}}
+\caption{Synthèse de la correspondance sémantique entre \DSL{} et \MZN{}.}
+\label{tab:correspondance-dsl-minizinc}\\
+\toprule
+\textbf{Élément DSL} & \textbf{Traduction MiniZinc} & \textbf{Sens conservé} \\
+\midrule
+\endfirsthead
+
 \toprule
 \textbf{Élément DSL} & \textbf{Traduction MiniZinc} & \textbf{Sens conservé} \\
 \midrule
 \endhead
-\texttt{time.days} & \texttt{NUM\_DAYS}, fonction \texttt{dayOf} & Les jours du DSL sont retrouvables à partir des créneaux globaux. \\
-\texttt{slotsPerDay} & \texttt{SLOTS\_PER\_DAY}, \texttt{TOTAL\_SLOTS} & Le nombre total de créneaux est identique. \\
-\texttt{activities} & \texttt{ACT\_TYPE}, \texttt{ACT\_INST} & Chaque activité et chaque instance sont conservées. \\
-\texttt{duration} & tableau \texttt{duration} & La durée utilisée par le solveur est celle du DSL. \\
-\texttt{resources} & \texttt{RESOURCE}, \texttt{RES\_Type} & Le typage des ressources est conservé. \\
-\texttt{roles} & \texttt{ROLE}, \texttt{role\_applicable}, \texttt{role\_assignment} & Les rôles applicables et leurs types de ressources sont conservés. \\
-\texttt{mandatory\_roles} & somme des \texttt{role\_assignment} $\geq 1$ & Chaque rôle obligatoire reçoit une ressource. \\
-\texttt{cardinality\_per\_activity} & sommes bornées par \texttt{min} et \texttt{max} & Les nombres de ressources ou rôles affectés respectent les bornes. \\
-\texttt{resource\_exclusivity} & sommes par créneau ou par jour $\leq max$ & Les limites d'utilisation des ressources sont conservées. \\
-\texttt{fixed\_assignment} & égalité booléenne à \texttt{true} & L'affectation imposée est présente. \\
-\texttt{forbidden\_assignment} & égalité booléenne à \texttt{false} & L'affectation interdite est absente. \\
-\texttt{temporal\_precedence} & \texttt{start\_before + duration <= start\_after} & La précédence entre types d'activités est conservée. \\
-\texttt{instance\_precedence} & même inégalité entre instances & La précédence entre instances est conservée. \\
-\texttt{time\_window} & bornes sur début et fin & L'activité reste dans la fenêtre autorisée. \\
-\texttt{required\_resource} & \texttt{assignment[a,r] = true} & La ressource requise participe à l'activité. \\
-\texttt{preferences} & variable \texttt{penalty} & Les violations souples sont évaluées par le même score. \\
+
 \bottomrule
+\endlastfoot
+
+\codecell{time.days} &
+\codecell{NUM\_DAYS}, fonction \codecell{dayOf} &
+Les jours du DSL sont retrouvables à partir des créneaux globaux. \\
+
+\codecell{slotsPerDay} &
+\codecell{SLOTS\_PER\_DAY}, \codecell{TOTAL\_SLOTS} &
+Le nombre total de créneaux est identique. \\
+
+\codecell{activities} &
+\codecell{ACT\_TYPE}, \codecell{ACT\_INST} &
+Chaque activité et chaque instance sont conservées. \\
+
+\codecell{duration} &
+tableau \codecell{duration} &
+La durée utilisée par le solveur est celle du DSL. \\
+
+\codecell{resources} &
+\codecell{RESOURCE}, \codecell{RES\_Type} &
+Le typage des ressources est conservé. \\
+
+\codecell{roles} &
+\codecell{ROLE}, \codecell{role\_applicable}, \codecell{role\_assignment} &
+Les rôles applicables et leurs types de ressources sont conservés. \\
+
+\codecell{mandatory\_\allowbreak roles} &
+somme des \codecell{role\_assignment} $\geq 1$ &
+Chaque rôle obligatoire reçoit une ressource. \\
+
+\codecell{cardinality\_\allowbreak per\_\allowbreak activity} &
+sommes bornées par \codecell{min} et \codecell{max} &
+Les nombres de ressources ou rôles affectés respectent les bornes. \\
+
+\codecell{resource\_\allowbreak exclusivity} &
+sommes par créneau ou par jour $\leq max$ &
+Les limites d'utilisation des ressources sont conservées. \\
+
+\codecell{fixed\_\allowbreak assignment} &
+égalité booléenne à \codecell{true} &
+L'affectation imposée est présente. \\
+
+\codecell{forbidden\_\allowbreak assignment} &
+égalité booléenne à \codecell{false} &
+L'affectation interdite est absente. \\
+
+\codecell{temporal\_\allowbreak precedence} &
+\codecell{start\_before + duration <= start\_after} &
+La précédence entre types d'activités est conservée. \\
+
+\codecell{instance\_\allowbreak precedence} &
+même inégalité entre instances &
+La précédence entre instances est conservée. \\
+
+\codecell{time\_\allowbreak window} &
+bornes sur début et fin &
+L'activité reste dans la fenêtre autorisée. \\
+
+\codecell{required\_\allowbreak resource} &
+\codecell{assignment[a,r] = true} &
+La ressource requise participe à l'activité. \\
+
+\codecell{preferences} &
+variable \codecell{penalty} &
+Les violations souples sont évaluées par le même score. \\
 \end{longtable}
+\endgroup
 
 \section{Hypothèses et limites de la preuve}
 

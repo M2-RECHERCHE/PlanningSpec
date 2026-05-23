@@ -425,7 +425,7 @@ function parseSolverTimeLimitSecondsFromBody(body: unknown): number | undefined 
     if (typeof raw !== 'number' || !Number.isFinite(raw)) {
         return undefined;
     }
-    return Math.max(1, Math.min(10_800, Math.floor(raw)));
+    return Math.max(1, Math.min(72_000, Math.floor(raw)));
 }
 
 function createEmptyPlanningData(): SolveReadyData {
@@ -1856,7 +1856,7 @@ async function solvePlanningSourceWithOptaPlanner(
 ): Promise<{ ok: true; result: { output: string; warnings: string[]; solveTimeMs: number } } | { ok: false; error: { status: number; code: string; message: string; details: string[]; hint?: string } }> {
     const defaultTimeLimitSeconds = Math.max(1, Math.floor(env.optaPlannerTimeoutMs / 1000));
     const safeTimeLimitSeconds = typeof requestedTimeLimitSeconds === 'number' && Number.isFinite(requestedTimeLimitSeconds)
-        ? Math.max(1, Math.min(10_800, Math.floor(requestedTimeLimitSeconds)))
+        ? Math.max(1, Math.min(72_000, Math.floor(requestedTimeLimitSeconds)))
         : defaultTimeLimitSeconds;
     const requestTimeoutMs = safeTimeLimitSeconds * 1000 + 10_000;
 
@@ -1931,7 +1931,7 @@ async function startOptaPlannerAsyncSolve(
 ): Promise<{ ok: true; jobId: string; status: string } | { ok: false; error: { status: number; code: string; message: string; details: string[]; hint?: string } }> {
     const defaultTimeLimitSeconds = Math.max(1, Math.floor(env.optaPlannerTimeoutMs / 1000));
     const safeTimeLimitSeconds = typeof requestedTimeLimitSeconds === 'number' && Number.isFinite(requestedTimeLimitSeconds)
-        ? Math.max(1, Math.min(10_800, Math.floor(requestedTimeLimitSeconds)))
+        ? Math.max(1, Math.min(72_000, Math.floor(requestedTimeLimitSeconds)))
         : defaultTimeLimitSeconds;
 
     const requestTimeoutMs = 20_000;

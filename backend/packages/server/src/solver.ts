@@ -181,7 +181,7 @@ export async function solvePlanningSource(source: string, solver: string): Promi
 
     try {
         // Keep solver runs alive long enough on dense instances.
-        const minimumTimeoutMs = 36_000_000; // 10 hours
+        const minimumTimeoutMs = 72_000_000; // 20 hours
         const timeoutMs = Math.max(env.solverTimeoutMs, minimumTimeoutMs);
 
         const mznPath = generator.generateToFile(analysis.document as never, analysis.tmpDir);

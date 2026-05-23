@@ -3178,7 +3178,7 @@ export const PlanningEditorPage: React.FC = () => {
   const [saveTime, setSaveTime] = useState<string | null>(null);
   const [exitConfirm, setExitConfirm] = useState(false);
   const [selectedSolver, setSelectedSolver] = useState<string>('');
-  const [solverTimeLimitSeconds, setSolverTimeLimitSeconds] = useState<number>(10);
+  const [solverTimeLimitSeconds, setSolverTimeLimitSeconds] = useState<number>(72_000);
   const [optaAsyncJobId, setOptaAsyncJobId] = useState<string | null>(null);
   const [optaStopRequested, setOptaStopRequested] = useState(false);
   const [optaBestSolutionCount, setOptaBestSolutionCount] = useState(0);
@@ -4672,13 +4672,13 @@ export const PlanningEditorPage: React.FC = () => {
                   <input
                     type="number"
                     min={1}
-                    max={10800}
+                    max={72_000}
                     step={1}
                     value={solverTimeLimitSeconds}
                     onChange={(e) => {
                       const next = Number(e.target.value);
                       if (!Number.isFinite(next)) return;
-                      setSolverTimeLimitSeconds(Math.max(1, Math.min(10800, Math.floor(next))));
+                      setSolverTimeLimitSeconds(Math.max(1, Math.min(72_000, Math.floor(next))));
                     }}
                     style={{
                       width: '100%',

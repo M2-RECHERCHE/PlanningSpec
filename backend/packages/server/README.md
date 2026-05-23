@@ -18,6 +18,6 @@ Lors d'un appel `POST /api/plannings/:id/solve` ou `POST /api/solve`, vous pouve
 - `PORT` : port HTTP, défaut `4000`
 - `ALLOWED_ORIGINS` : origines CORS séparées par des virgules
 - `MINIZINC_SOLVER` : solveur MiniZinc, défaut `Highs`
-- `MINIZINC_TIMEOUT_MS` : timeout solveur en millisecondes, défaut `36000000` (10h)
+- `MINIZINC_TIMEOUT_MS` : timeout solveur en millisecondes, défaut `72000000` (20h)
 - `OPTAPLANNER_URL` : URL du backend Spring Boot OptaPlanner, défaut `http://localhost:8084`
-- `OPTAPLANNER_TIMEOUT_MS` : timeout OptaPlanner en millisecondes, défaut `1800000` (30 min)
+- `OPTAPLANNER_TIMEOUT_MS` : timeout OptaPlanner en millisecondes, défaut `72000000` (20h)
