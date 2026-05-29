@@ -3548,10 +3548,13 @@ export const PlanningEditorPage: React.FC = () => {
       planningHydratedRef.current = null;
       return;
     }
+    if (solving || editorSolving) {
+      return;
+    }
 
     setSolverOutput(getConsoleOutputFromPlanning(selectedPlanning));
     setSolverWarnings(selectedPlanning.status === 'error' ? [] : (selectedPlanning.solutionWarnings ?? []));
-  }, [selectedPlanning]);
+  }, [selectedPlanning, solving, editorSolving]);
 
   useEffect(() => {
     const planningId = selectedPlanning?.id;
