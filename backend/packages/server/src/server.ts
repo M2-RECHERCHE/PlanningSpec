@@ -68,13 +68,15 @@ export interface AvailableSolver {
 // Solveurs connus adaptés à la planification, avec leurs labels lisibles.
 // La clé est un pattern (substring) matchant l'id ou le name MiniZinc.
 const KNOWN_SOLVERS: Array<{ pattern: string; label: string; id: string }> = [
-    { pattern: "highs",   label: "Highs",    id: "Highs"    },
+    { pattern: "highs",   label: "HiGHS",    id: "Highs"    },
     { pattern: "gecode",  label: "Gecode",   id: "Gecode"   },
     { pattern: "chuffed", label: "Chuffed",  id: "Chuffed"  },
-    { pattern: "ortools", label: "OR-Tools", id: "org.sat4j.sat4j" },
-    { pattern: "coinbc",  label: "Coin-BC",  id: "COIN-BC"  },
-    { pattern: "cplex",   label: "CPLEX",    id: "CPLEX"    },
-    { pattern: "sat4j",   label: "SAT4J",    id: "SAT4J"    },
+    { pattern: "or tools", label: "OR-Tools", id: "OR-Tools" },
+    { pattern: "ortools",  label: "OR-Tools", id: "OR-Tools" },
+    { pattern: "cp-sat",   label: "OR-Tools", id: "OR-Tools" },
+    { pattern: "coinbc",   label: "COIN-BC",  id: "COIN-BC"  },
+    { pattern: "cplex",    label: "CPLEX",    id: "CPLEX"    },
+    { pattern: "sat4j",    label: "SAT4J",    id: "SAT4J"    },
 ];
 
 let cachedSolvers: AvailableSolver[] = [
@@ -1856,7 +1858,7 @@ async function solvePlanningSourceWithOptaPlanner(
 ): Promise<{ ok: true; result: { output: string; warnings: string[]; solveTimeMs: number } } | { ok: false; error: { status: number; code: string; message: string; details: string[]; hint?: string } }> {
     const defaultTimeLimitSeconds = Math.max(1, Math.floor(env.optaPlannerTimeoutMs / 1000));
     const safeTimeLimitSeconds = typeof requestedTimeLimitSeconds === 'number' && Number.isFinite(requestedTimeLimitSeconds)
-        ? Math.max(1, Math.min(72_000, Math.floor(requestedTimeLimitSeconds)))
+        ? Math.max(1, Math.min(108_000, Math.floor(requestedTimeLimitSeconds)))
         : defaultTimeLimitSeconds;
     const requestTimeoutMs = safeTimeLimitSeconds * 1000 + 10_000;
 
@@ -1931,7 +1933,7 @@ async function startOptaPlannerAsyncSolve(
 ): Promise<{ ok: true; jobId: string; status: string } | { ok: false; error: { status: number; code: string; message: string; details: string[]; hint?: string } }> {
     const defaultTimeLimitSeconds = Math.max(1, Math.floor(env.optaPlannerTimeoutMs / 1000));
     const safeTimeLimitSeconds = typeof requestedTimeLimitSeconds === 'number' && Number.isFinite(requestedTimeLimitSeconds)
-        ? Math.max(1, Math.min(72_000, Math.floor(requestedTimeLimitSeconds)))
+        ? Math.max(1, Math.min(108_000, Math.floor(requestedTimeLimitSeconds)))
         : defaultTimeLimitSeconds;
 
     const requestTimeoutMs = 20_000;

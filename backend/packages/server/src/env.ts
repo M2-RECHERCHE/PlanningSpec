@@ -48,9 +48,9 @@ loadEnvFile();
 export const env = {
     port: readInt(process.env.PORT, 4000),
     solver: process.env.MINIZINC_SOLVER ?? 'Highs',
-    solverTimeoutMs: readInt(process.env.MINIZINC_TIMEOUT_MS, 72_000_000),
+    solverTimeoutMs: readInt(process.env.MINIZINC_TIMEOUT_MS, 108_000_000),
     optaPlannerUrl: process.env.OPTAPLANNER_URL ?? 'http://localhost:8084',
-    optaPlannerTimeoutMs: readInt(process.env.OPTAPLANNER_TIMEOUT_MS, 72_000_000),
+    optaPlannerTimeoutMs: readInt(process.env.OPTAPLANNER_TIMEOUT_MS, 108_000_000),
     allowedOrigins: (process.env.ALLOWED_ORIGINS ?? 'http://localhost:3000')
         .split(',')
         .map(origin => origin.trim())
