@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import { useApp } from '../context/AppContext';
-import { api, getBackendError } from '../lib/api';
+import { api, getBackendError, isNetworkError } from '../lib/api';
 import { setReportVersionSelection } from '../lib/reportApi';
 import { buildRoute } from '../lib/routing';
 import { AppLayout, Topbar } from '../components/layout/AppLayout';
@@ -3132,7 +3132,7 @@ const Step8: React.FC<Step8Props> = ({
                             {statusLabel}
                           </span>
                           {version.objectiveValue !== undefined && (
-                            <span>objectif: <span style={{ color: '#fde68a', fontFamily: 'monospace' }}>{version.objectiveValue}</span></span>
+                            <span>pénalité pondérée: <span style={{ color: '#fde68a', fontFamily: 'monospace' }}>{version.objectiveValue}</span></span>
                           )}
                         </div>
                       </div>
@@ -3388,6 +3388,37 @@ export const PlanningEditorPage: React.FC = () => {
     });
   }, []);
 
+  const markMiniZincExecutionUnknownLocally = useCallback((executionId: string | undefined, message: string) => {
+    const now = new Date().toISOString();
+    setMiniZincStopRequested(false);
+    setSolving(false);
+    setEditorSolving(false);
+    setMiniZincExecution(prev => {
+      if (!prev || (executionId && prev.id !== executionId) || !isActiveMiniZincStatus(prev.status)) {
+        return prev;
+      }
+      return {
+        ...prev,
+        status: 'UNKNOWN',
+        endedAt: prev.endedAt ?? now,
+        errorMessage: message,
+        updatedAt: now,
+      };
+    });
+
+    const sequence = miniZincLastSequenceRef.current + 1;
+    appendMiniZincLog({
+      id: `frontend-${Date.now()}-${sequence}`,
+      executionId: executionId ?? miniZincExecution?.id ?? 'local',
+      sequence,
+      level: 'error',
+      stream: 'frontend',
+      message,
+      executionStatus: 'UNKNOWN',
+      createdAt: now,
+    });
+  }, [appendMiniZincLog, miniZincExecution?.id]);
+
   const mergeMiniZincSolution = useCallback((solution: PlanningSolutionVersion) => {
     setSolutionVersions(prev => {
       const next = [solution, ...prev.filter(item => item.id !== solution.id)];
@@ -3512,11 +3543,17 @@ export const PlanningEditorPage: React.FC = () => {
       }
     } catch (error) {
       if (!controller.signal.aborted) {
+        if (isNetworkError(error)) {
+          const message = 'Backend indisponible: le suivi MiniZinc est passé en état inconnu. Redémarre le backend pour récupérer les solutions déjà sauvegardées.';
+          markMiniZincExecutionUnknownLocally(executionId, message);
+          toast(message, 'error');
+          return;
+        }
         const backendError = getBackendError(error);
         toast(backendError.message || 'Flux MiniZinc interrompu.', 'error');
       }
     }
-  }, [clearMiniZincEventStream, handleMiniZincSseEvent, toast]);
+  }, [clearMiniZincEventStream, handleMiniZincSseEvent, markMiniZincExecutionUnknownLocally, toast]);
 
   const startMiniZincExecution = useCallback(async (planningId: string, source: string) => {
     const response = await api.post<{ data: { executionId: string; status: PlanningExecutionStatus; execution: PlanningExecution } }>(
@@ -3547,11 +3584,17 @@ export const PlanningEditorPage: React.FC = () => {
       await api.post(`/api/plannings/${selectedPlanning.id}/executions/${miniZincExecution.id}/stop`);
       toast('Arrêt demandé à MiniZinc.', 'success');
     } catch (error) {
+      if (isNetworkError(error)) {
+        const message = 'Backend indisponible: impossible d’envoyer l’arrêt. L’exécution locale est marquée UNKNOWN.';
+        markMiniZincExecutionUnknownLocally(miniZincExecution.id, message);
+        toast(message, 'error');
+        return;
+      }
       setMiniZincStopRequested(false);
       const backendError = getBackendError(error);
       toast(backendError.message, 'error');
     }
-  }, [miniZincExecution, selectedPlanning, toast]);
+  }, [markMiniZincExecutionUnknownLocally, miniZincExecution, selectedPlanning, toast]);
 
   const loadMiniZincExecutionSnapshot = useCallback(async (planningId: string) => {
     try {

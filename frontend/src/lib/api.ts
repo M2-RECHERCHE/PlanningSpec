@@ -18,6 +18,15 @@ export const setAuthToken = (token: string | null) => {
   api.defaults.headers.common.Authorization = `Bearer ${token}`;
 };
 
+export const isNetworkError = (error: unknown): boolean => {
+  if (axios.isAxiosError(error)) {
+    return !error.response;
+  }
+
+  return error instanceof TypeError
+    && /fetch|network|failed to fetch|load failed/i.test(error.message);
+};
+
 export interface BackendErrorPayload {
   code: string;
   message: string;

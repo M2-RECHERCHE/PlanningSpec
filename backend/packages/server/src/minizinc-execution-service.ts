@@ -358,6 +358,26 @@ export class MiniZincExecutionService {
         }
 
         if (!hasPlanningSolutionLines(block.rawOutput)) {
+            await this.log(executionId, 'warning', 'decoder', 'Bloc stdout MiniZinc non décodable ignoré comme solution.', running.currentStatus);
+            await this.log(executionId, 'stdout', 'stdout', block.rawOutput, running.currentStatus);
+            return;
+        }
+
+        let decodedSolutionJson: unknown;
+        let reportJson: unknown;
+        try {
+            const rawData = running.planning.data as Record<string, unknown> | undefined;
+            const days: string[] = (rawData?.time as Record<string, unknown> | undefined)?.days as string[] ?? [];
+            const slotsPerDay: number = (rawData?.time as Record<string, unknown> | undefined)?.slotsPerDay as number ?? 0;
+            const activities = parseSolutionOutput(block.rawOutput, days, slotsPerDay);
+            if (activities.length === 0) {
+                throw new Error('Aucune ligne ACTIVITY exploitable dans cette solution.');
+            }
+            decodedSolutionJson = { activities };
+            reportJson = buildPlanningReportFromOutput(running.planning, block.rawOutput, running.warnings);
+        } catch (error) {
+            const decodeError = error instanceof Error ? error.message : 'Décodage impossible.';
+            await this.log(executionId, 'error', 'decoder', `Bloc MiniZinc non décodable ignoré: ${decodeError}`, running.currentStatus);
             await this.log(executionId, 'stdout', 'stdout', block.rawOutput, running.currentStatus);
             return;
         }
@@ -371,24 +391,6 @@ export class MiniZincExecutionService {
             this.emit({ type: 'execution', execution });
         }
 
-        let decodedSolutionJson: unknown = null;
-        let reportJson: unknown = null;
-        let decodeError: string | null = null;
-        try {
-            const rawData = running.planning.data as Record<string, unknown> | undefined;
-            const days: string[] = (rawData?.time as Record<string, unknown> | undefined)?.days as string[] ?? [];
-            const slotsPerDay: number = (rawData?.time as Record<string, unknown> | undefined)?.slotsPerDay as number ?? 0;
-            const activities = parseSolutionOutput(block.rawOutput, days, slotsPerDay);
-            if (activities.length === 0) {
-                throw new Error('Aucune ligne ACTIVITY exploitable dans cette solution.');
-            }
-            decodedSolutionJson = { activities };
-            reportJson = buildPlanningReportFromOutput(running.planning, block.rawOutput, running.warnings);
-        } catch (error) {
-            decodeError = error instanceof Error ? error.message : 'Décodage impossible.';
-            await this.log(executionId, 'error', 'decoder', decodeError, nextStatus);
-        }
-
         const solution = await createPlanningSolutionVersion(running.userId, {
             planningId: running.planning.id,
             executionId,
@@ -400,7 +402,6 @@ export class MiniZincExecutionService {
             objectiveValue: block.objectiveValue,
             decodedSolutionJson,
             reportJson,
-            decodeError,
             solveTimeMs: Date.now() - running.startedAt
         });
 
@@ -519,7 +520,7 @@ export class MiniZincExecutionService {
         if (code !== 0) {
             return 'FAILED';
         }
-        if (running.sawOptimal) {
+        if (running.sawOptimal && running.solutionCount > 0) {
             return 'OPTIMAL';
         }
         if (running.sawUnknown) {
