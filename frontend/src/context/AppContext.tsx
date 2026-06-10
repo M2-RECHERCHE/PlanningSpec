@@ -440,19 +440,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (typeof solverTimeLimitSeconds === 'number' && Number.isFinite(solverTimeLimitSeconds)) {
         body.solverTimeLimitSeconds = Math.max(1, Math.floor(solverTimeLimitSeconds));
       }
-      const response = await api.post<{ data: { planning: Planning; result: { output: string; warnings: string[]; solveTimeMs: number } } }>(
+      const response = await api.post<{ data: { planning?: Planning; result?: { output: string; warnings: string[]; solveTimeMs: number }; executionId?: string; status?: string } }>(
         `/api/plannings/${id}/solve`,
         body
       );
 
       const planning = response.data.data.planning;
-      applyPlanningUpdate(planning);
+      if (planning) {
+        applyPlanningUpdate(planning);
+      }
       await refreshData();
+      const resultPlanning = planning ?? selectedPlanning;
+      if (!resultPlanning) {
+        return null;
+      }
       return {
-        planning,
-        output: response.data.data.result.output,
-        warnings: response.data.data.result.warnings,
-        solveTimeMs: response.data.data.result.solveTimeMs ?? 0,
+        planning: resultPlanning,
+        output: response.data.data.result?.output ?? '',
+        warnings: response.data.data.result?.warnings ?? [],
+        solveTimeMs: response.data.data.result?.solveTimeMs ?? 0,
+        executionId: response.data.data.executionId,
+        status: response.data.data.status as any,
       };
     } catch (error) {
       const backendError = handlePossibleAuthError(error);
@@ -462,7 +470,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return null;
     }
-  }, [applyPlanningUpdate, handlePossibleAuthError, refreshData, toast]);
+  }, [applyPlanningUpdate, handlePossibleAuthError, refreshData, selectedPlanning, toast]);
 
   const listPlanningVersions = useCallback(async (planningId: string) => {
     try {

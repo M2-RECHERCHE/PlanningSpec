@@ -12,7 +12,8 @@
     "clean": "shx rm -rf dist *.tsbuildinfo",
     "build": "tsc -b tsconfig.json",
     "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "vitest": "~3.1.3"
   }
 }

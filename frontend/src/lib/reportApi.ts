@@ -62,11 +62,11 @@ export function setReportVersionSelection(planningId: string, versionId?: string
 
   const key = `${REPORT_VERSION_STORAGE_KEY_PREFIX}${planningId}`;
   if (!versionId) {
-    window.sessionStorage.removeItem(key);
+    window.localStorage.removeItem(key);
     return;
   }
 
-  window.sessionStorage.setItem(key, versionId);
+  window.localStorage.setItem(key, versionId);
 }
 
 export function getReportVersionSelection(planningId: string): string | undefined {
@@ -74,14 +74,16 @@ export function getReportVersionSelection(planningId: string): string | undefine
     return undefined;
   }
 
-  const value = window.sessionStorage.getItem(`${REPORT_VERSION_STORAGE_KEY_PREFIX}${planningId}`) ?? '';
+  const value = window.localStorage.getItem(`${REPORT_VERSION_STORAGE_KEY_PREFIX}${planningId}`) ?? '';
   return value.trim() ? value.trim() : undefined;
 }
 
 // ─── API calls ────────────────────────────────────────────────────────────────
 
 export async function fetchReport(planningId: string, versionId?: string): Promise<PlanningReport> {
-  const path = withVersionQuery(`/api/plannings/${planningId}/report`, versionId);
+  const path = versionId
+    ? `/api/plannings/${planningId}/solutions/${versionId}/report`
+    : `/api/plannings/${planningId}/report`;
   const res = await api.get<{ data: PlanningReport }>(path);
   return res.data.data;
 }

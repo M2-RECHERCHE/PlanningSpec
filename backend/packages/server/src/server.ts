@@ -21,14 +21,20 @@ import {
     deleteTagDefinition,
     getAuthUserByEmail,
     getPlanningById,
+    getLatestPlanningExecution,
+    getPlanningExecutionById,
     getPlanningSolutionVersionById,
     getProjectById,
     getSessionByTokenHash,
     initializeDatabase,
+    listPlanningExecutionLogs,
+    listPlanningExecutions,
     listPlanningSolutionVersions,
+    listPlanningSolutions,
     listPlannings,
     listProjects,
     listTagDefinitions,
+    markOrphanedPlanningExecutionsUnknown,
     pingDatabase,
     updatePlanning,
     updateProject,
@@ -38,6 +44,7 @@ import {
     type PlanStatus,
     type PlanningInput,
     type PlanningRecord,
+    type PlanningSolutionVersionRecord,
     type PlanningUpdateInput,
     type ProjectInput,
     type ProjectStatus,
@@ -48,7 +55,8 @@ import {
 } from './db.js';
 import { createSessionToken, hashPassword, hashSessionToken, normalizeEmail, verifyPassword } from './auth.js';
 import { env } from './env.js';
-import { buildPlanningReport, generateMarkdown, generatePrintHTML } from './report.js';
+import { MiniZincExecutionService, type MiniZincExecutionEvent } from './minizinc-execution-service.js';
+import { buildPlanningReport, buildPlanningReportFromOutput, generateMarkdown, generatePrintHTML, type PlanningReport } from './report.js';
 import { solvePlanningSource, validatePlanningSource } from './solver.js';
 
 // ---------------------------------------------------------------------------
@@ -2238,141 +2246,189 @@ async function finalizeOptaPlannerAsyncSessionIfNeeded(
     }
 }
 
-async function solveAndPersistPlanning(
-    userId: string,
+async function prepareMiniZincExecutionFromRequest(
+    req: AuthenticatedRequest,
     planning: PlanningRecord,
-    sourceOverride?: string,
-    solver: string = env.solver,
-    solverTimeLimitSeconds?: number
-): Promise<{ ok: true; planning: PlanningRecord; output: string; warnings: string[]; solveTimeMs: number } | { ok: false; status: number; error: ApiErrorPayload }> {
-    let source: string;
-    let capacityWarnings: string[] = [];
-    let daysForOutput: string[] = [];
-
-    if (typeof sourceOverride === "string" && sourceOverride.trim().length > 0) {
-        source = sourceOverride;
-        const persistedData = getPersistedPlanningData(planning.data);
-        const persistedTime = isRecord(persistedData.time) ? persistedData.time : {};
-        daysForOutput = Array.isArray(persistedTime.days)
-            ? persistedTime.days.filter((day): day is string => typeof day === 'string' && day.trim().length > 0)
-            : [];
-    } else {
-        const validation = validatePlanningDataForSolve(planning.data);
-        if (!validation.value) {
-            await updatePlanning(planning.id, userId, {
-                status: "error",
-                solutionOutput: null,
-                solutionWarnings: null,
-                solutionSolveTimeMs: null,
-                lastError: {
-                    message: validation.error?.message ?? 'La planification est invalide.',
-                    details: validation.error?.details,
-                    hint: validation.error?.hint
-                }
-            });
-
-            return {
-                ok: false,
-                status: 422,
-                error: {
-                    ...validation.error!,
-                    details: validation.error?.details,
-                    fieldErrors: validation.error?.fieldErrors,
-                    hint: validation.error?.hint
-                }
-            };
-        }
-
-        capacityWarnings = analyzePotentialCapacityRisks(validation.value);
-        daysForOutput = validation.value.time.days;
-        source = serializeSolveModelToDsl(validation.value);
+    userId: string
+): Promise<
+    | { ok: true; planning: PlanningRecord; source: string; solver: string; warnings: string[]; solverTimeLimitSeconds?: number }
+    | { ok: false; status: number; error: ApiErrorPayload }
+> {
+    const requestedSolver = isRecord(req.body) && typeof req.body.solver === 'string'
+        ? req.body.solver
+        : env.solver;
+    if (requestedSolver === OPTAPLANNER_SOLVER_ID) {
+        return {
+            ok: false,
+            status: 400,
+            error: {
+                code: 'BAD_REQUEST',
+                message: 'Utilise les routes OptaPlanner dédiées pour ce solveur.'
+            }
+        };
     }
 
-    const solveResult = solver === OPTAPLANNER_SOLVER_ID
-        ? await solvePlanningSourceWithOptaPlanner(source, daysForOutput, solverTimeLimitSeconds)
-        : await solvePlanningSource(source, solver);
+    const solverSupported = cachedSolvers.some(s => s.id === requestedSolver);
+    if (isRecord(req.body) && typeof req.body.solver === 'string' && !solverSupported) {
+        return {
+            ok: false,
+            status: 400,
+            error: {
+                code: 'BAD_REQUEST',
+                message: `Le solveur demandé "${requestedSolver}" n'est pas disponible.`,
+                details: [`Solveurs disponibles: ${cachedSolvers.map(s => s.id).join(', ')}`]
+            }
+        };
+    }
+    const resolvedSolver = solverSupported ? requestedSolver : env.solver;
+    const solverTimeLimitSeconds = parseSolverTimeLimitSecondsFromBody(req.body);
 
-    if (!solveResult.ok) {
-        const combinedDetails = solveResult.error.code === "UNSATISFIABLE"
-            ? [...solveResult.error.details, ...capacityWarnings]
-            : solveResult.error.details;
+    const persistedData = getPersistedPlanningData(planning.data);
+    const sourceOverride = isRecord(req.body) && typeof req.body.source === 'string' && req.body.source.trim().length > 0
+        ? canonicalizePlanningSource(req.body.source)
+        : undefined;
 
+    const nextData = isRecord(req.body) && isRecord(req.body.data)
+        ? {
+            ...persistedData,
+            ...req.body.data,
+            ...(sourceOverride ? { dslSource: sourceOverride } : {})
+        }
+        : sourceOverride
+            ? {
+                ...persistedData,
+                dslSource: sourceOverride
+            }
+            : undefined;
+
+    const persistedPlanning = nextData
+        ? await updatePlanning(planning.id, userId, {
+            data: nextData,
+            currentStep: planning.currentStep,
+            totalSteps: planning.totalSteps,
+            progress: planning.progress,
+            status: planning.status === 'draft' ? 'active' : planning.status
+        })
+        : planning;
+    const solveTarget = persistedPlanning ?? planning;
+
+    if (typeof sourceOverride === 'string' && sourceOverride.trim().length > 0) {
+        return {
+            ok: true,
+            planning: solveTarget,
+            source: sourceOverride,
+            solver: resolvedSolver,
+            warnings: [],
+            solverTimeLimitSeconds
+        };
+    }
+
+    const validation = validatePlanningDataForSolve(solveTarget.data);
+    if (!validation.value) {
         await updatePlanning(planning.id, userId, {
-            status: "error",
+            status: 'error',
             solutionOutput: null,
             solutionWarnings: null,
             solutionSolveTimeMs: null,
             lastError: {
-                message: solveResult.error.message,
-                details: combinedDetails,
-                hint: solveResult.error.hint
+                message: validation.error?.message ?? 'La planification est invalide.',
+                details: validation.error?.details,
+                hint: validation.error?.hint
             }
         });
 
         return {
             ok: false,
-            status: solveResult.error.status,
+            status: 422,
             error: {
-                code: solveResult.error.code,
-                message: solveResult.error.message,
-                details: combinedDetails,
-                hint: solveResult.error.hint
-            }
-        };
-    }
-
-    const updatedPlanning = await updatePlanning(planning.id, userId, {
-        status: "done",
-        currentStep: planning.totalSteps,
-        progress: 100,
-        solutionOutput: solveResult.result.output,
-        solutionWarnings: solveResult.result.warnings,
-        solutionSolveTimeMs: solveResult.result.solveTimeMs,
-        lastError: null
-    });
-
-    if (!updatedPlanning) {
-        return {
-            ok: false,
-            status: 500,
-            error: {
-                code: "INTERNAL_ERROR",
-                message: "La résolution a réussi, mais la planification n'a pas pu être rechargée."
-            }
-        };
-    }
-
-    try {
-        await createPlanningSolutionVersion(userId, {
-            planningId: planning.id,
-            solver,
-            sourceSnapshot: source,
-            solutionOutput: solveResult.result.output,
-            solutionWarnings: solveResult.result.warnings,
-            solveTimeMs: solveResult.result.solveTimeMs
-        });
-    } catch (error) {
-        return {
-            ok: false,
-            status: 500,
-            error: {
-                code: "DATABASE_ERROR",
-                message: "La solution a été calculée, mais son archivage en version a échoué.",
-                details: [error instanceof Error ? error.message : "Unknown versioning error"]
+                ...validation.error!,
+                details: validation.error?.details,
+                fieldErrors: validation.error?.fieldErrors,
+                hint: validation.error?.hint
             }
         };
     }
 
     return {
         ok: true,
-        planning: updatedPlanning,
-        output: solveResult.result.output,
-        warnings: solveResult.result.warnings,
-        solveTimeMs: solveResult.result.solveTimeMs
+        planning: solveTarget,
+        source: serializeSolveModelToDsl(validation.value),
+        solver: resolvedSolver,
+        warnings: analyzePotentialCapacityRisks(validation.value),
+        solverTimeLimitSeconds
     };
 }
 
+async function startMiniZincExecutionForRequest(req: AuthenticatedRequest, res: express.Response): Promise<express.Response> {
+    const auth = requireAuth(req);
+    const planningId = getSingleParam(req.params.id ?? req.params.planningId);
+    const planning = await getPlanningById(planningId, auth.user.id);
+    if (!planning) {
+        return sendError(res, 404, {
+            code: 'NOT_FOUND',
+            message: 'Planification introuvable.'
+        });
+    }
+
+    const prepared = await prepareMiniZincExecutionFromRequest(req, planning, auth.user.id);
+    if (!prepared.ok) {
+        return sendError(res, prepared.status, prepared.error);
+    }
+
+    const started = await miniZincExecutionService.start({
+        userId: auth.user.id,
+        planning: prepared.planning,
+        source: prepared.source,
+        solver: prepared.solver,
+        requestedTimeLimitSeconds: prepared.solverTimeLimitSeconds,
+        warnings: prepared.warnings
+    });
+
+    if (!started.ok) {
+        return sendError(res, started.status, {
+            code: started.code,
+            message: started.message,
+            details: started.activeExecutionId ? [`executionId=${started.activeExecutionId}`] : undefined
+        });
+    }
+
+    return sendSuccess(res, {
+        executionId: started.execution.id,
+        status: 'RUNNING',
+        message: 'Execution started',
+        execution: started.execution
+    }, 'Execution started', 202);
+}
+
+function writeSseEvent(res: express.Response, event: string, data: unknown, id?: string | number): void {
+    if (id !== undefined) {
+        res.write(`id: ${id}\n`);
+    }
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function writeMiniZincExecutionEvent(res: express.Response, event: MiniZincExecutionEvent): void {
+    if (event.type === 'log') {
+        writeSseEvent(res, 'log', event.log, event.log.sequence);
+        return;
+    }
+    if (event.type === 'solution') {
+        writeSseEvent(res, 'solution', event.solution);
+        return;
+    }
+    if (event.type === 'execution') {
+        writeSseEvent(res, 'execution', event.execution);
+        return;
+    }
+    writeSseEvent(res, 'done', {
+        execution: event.execution,
+        bestSolution: event.bestSolution ?? null
+    });
+}
+
 const app = express();
+const miniZincExecutionService = new MiniZincExecutionService();
 
 app.use(cors({
     origin: (origin, callback) => {
@@ -2668,6 +2724,290 @@ app.get('/api/plannings/:id/versions', authenticateRequest, async (req, res) => 
             code: "DATABASE_ERROR",
             message: "Impossible de charger l'historique des versions.",
             details: [error instanceof Error ? error.message : "Unknown database error"]
+        });
+    }
+});
+
+app.post('/api/plannings/:id/execute', authenticateRequest, async (req, res) => {
+    try {
+        return await startMiniZincExecutionForRequest(req, res);
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'INTERNAL_ERROR',
+            message: 'Impossible de démarrer l’exécution MiniZinc.',
+            details: [error instanceof Error ? error.message : 'Unknown internal error']
+        });
+    }
+});
+
+app.get('/api/plannings/:id/executions', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const planning = await getPlanningById(planningId, auth.user.id);
+        if (!planning) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Planification introuvable.'
+            });
+        }
+
+        const activeOrLatest = req.query.activeOrLatest === '1' || req.query.activeOrLatest === 'true';
+        if (activeOrLatest) {
+            const active = await listPlanningExecutions(planningId, auth.user.id, { activeOnly: true, limit: 1 });
+            const latest = active[0] ? active[0] : await getLatestPlanningExecution(planningId, auth.user.id);
+            return sendSuccess(res, { executions: latest ? [latest] : [] });
+        }
+
+        const executions = await listPlanningExecutions(planningId, auth.user.id);
+        return sendSuccess(res, { executions });
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'DATABASE_ERROR',
+            message: 'Impossible de charger les exécutions.',
+            details: [error instanceof Error ? error.message : 'Unknown database error']
+        });
+    }
+});
+
+app.get('/api/plannings/:id/executions/:executionId', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const executionId = getSingleParam(req.params.executionId);
+        const execution = await getPlanningExecutionById(executionId, auth.user.id);
+        if (!execution || execution.planningId !== planningId) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Exécution introuvable.'
+            });
+        }
+
+        return sendSuccess(res, { execution });
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'DATABASE_ERROR',
+            message: 'Impossible de charger cette exécution.',
+            details: [error instanceof Error ? error.message : 'Unknown database error']
+        });
+    }
+});
+
+app.get('/api/plannings/:id/executions/:executionId/logs', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const executionId = getSingleParam(req.params.executionId);
+        const afterSequence = typeof req.query.afterSequence === 'string'
+            ? Number(req.query.afterSequence)
+            : undefined;
+        const logs = await listPlanningExecutionLogs(planningId, executionId, auth.user.id, {
+            afterSequence: Number.isFinite(afterSequence) ? afterSequence : undefined
+        });
+        return sendSuccess(res, { logs });
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'DATABASE_ERROR',
+            message: 'Impossible de charger les logs.',
+            details: [error instanceof Error ? error.message : 'Unknown database error']
+        });
+    }
+});
+
+app.get('/api/plannings/:id/executions/:executionId/events', authenticateRequest, async (req, res) => {
+    const auth = requireAuth(req);
+    const planningId = getSingleParam(req.params.id);
+    const executionId = getSingleParam(req.params.executionId);
+    const execution = await getPlanningExecutionById(executionId, auth.user.id);
+    if (!execution || execution.planningId !== planningId) {
+        return sendError(res, 404, {
+            code: 'NOT_FOUND',
+            message: 'Exécution introuvable.'
+        });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const lastEventId = typeof req.query.lastEventId === 'string'
+        ? Number(req.query.lastEventId)
+        : typeof req.header('last-event-id') === 'string'
+            ? Number(req.header('last-event-id'))
+            : 0;
+
+    writeSseEvent(res, 'execution', execution);
+    const solutions = await listPlanningSolutions(planningId, auth.user.id, { executionId });
+    solutions.reverse().forEach(solution => writeSseEvent(res, 'solution', solution));
+    const logs = await listPlanningExecutionLogs(planningId, executionId, auth.user.id, {
+        afterSequence: Number.isFinite(lastEventId) ? lastEventId : 0
+    });
+    logs.forEach(log => writeSseEvent(res, 'log', log, log.sequence));
+
+    const unsubscribe = miniZincExecutionService.subscribe(executionId, event => {
+        writeMiniZincExecutionEvent(res, event);
+    });
+    const heartbeat = setInterval(() => {
+        res.write(': heartbeat\n\n');
+    }, 15_000);
+
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+        res.end();
+    });
+    return;
+});
+
+app.post('/api/plannings/:id/executions/:executionId/stop', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const executionId = getSingleParam(req.params.executionId);
+        const execution = await getPlanningExecutionById(executionId, auth.user.id);
+        if (!execution || execution.planningId !== planningId) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Exécution introuvable.'
+            });
+        }
+
+        const stopped = await miniZincExecutionService.stop(executionId, auth.user.id);
+        if (!stopped.ok) {
+            return sendError(res, stopped.status, {
+                code: stopped.code,
+                message: stopped.message
+            });
+        }
+
+        return sendSuccess(res, {
+            execution: stopped.execution
+        }, 'Demande d’arrêt envoyée.');
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'INTERNAL_ERROR',
+            message: 'Impossible de demander l’arrêt MiniZinc.',
+            details: [error instanceof Error ? error.message : 'Unknown internal error']
+        });
+    }
+});
+
+app.get('/api/plannings/:id/solutions', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const planning = await getPlanningById(planningId, auth.user.id);
+        if (!planning) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Planification introuvable.'
+            });
+        }
+
+        const executionId = getOptionalQueryParam(req.query.executionId);
+        const solutions = await listPlanningSolutions(planningId, auth.user.id, { executionId });
+        return sendSuccess(res, { solutions });
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'DATABASE_ERROR',
+            message: 'Impossible de charger les solutions.',
+            details: [error instanceof Error ? error.message : 'Unknown database error']
+        });
+    }
+});
+
+app.get('/api/plannings/:id/solutions/:solutionId', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const solutionId = getSingleParam(req.params.solutionId);
+        const solution = await getPlanningSolutionVersionById(solutionId, planningId, auth.user.id);
+        if (!solution) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Solution introuvable.'
+            });
+        }
+
+        return sendSuccess(res, { solution });
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'DATABASE_ERROR',
+            message: 'Impossible de charger cette solution.',
+            details: [error instanceof Error ? error.message : 'Unknown database error']
+        });
+    }
+});
+
+type PlanningReportResolution =
+    | { ok: true; report: PlanningReport }
+    | { ok: false; status: number; code: string; message: string; details?: string[] };
+
+function resolveReportFromSolutionVersion(
+    planning: PlanningRecord,
+    solution: PlanningSolutionVersionRecord
+): PlanningReportResolution {
+    if (solution.decodeError) {
+        return {
+            ok: false,
+            status: 422,
+            code: 'SOLUTION_NOT_DECODABLE',
+            message: 'Cette solution intermédiaire n’est pas décodable.',
+            details: [solution.decodeError]
+        };
+    }
+
+    const report = solution.reportJson && typeof solution.reportJson === 'object'
+        ? solution.reportJson as PlanningReport
+        : buildPlanningReportFromOutput(planning, solution.solutionOutput, solution.solutionWarnings, solution.solveTimeMs);
+
+    if (!report.activities || report.activities.length === 0) {
+        return {
+            ok: false,
+            status: 422,
+            code: 'SOLUTION_NOT_DECODABLE',
+            message: 'Cette solution ne contient aucune activité exploitable.'
+        };
+    }
+
+    return { ok: true, report };
+}
+
+app.get('/api/plannings/:id/solutions/:solutionId/report', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const planningId = getSingleParam(req.params.id);
+        const solutionId = getSingleParam(req.params.solutionId);
+        const planning = await getPlanningById(planningId, auth.user.id);
+        if (!planning) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Planification introuvable.'
+            });
+        }
+        const solution = await getPlanningSolutionVersionById(solutionId, planningId, auth.user.id);
+        if (!solution) {
+            return sendError(res, 404, {
+                code: 'NOT_FOUND',
+                message: 'Solution introuvable.'
+            });
+        }
+
+        const resolution = resolveReportFromSolutionVersion(planning, solution);
+        if (!resolution.ok) {
+            return sendError(res, resolution.status, {
+                code: resolution.code,
+                message: resolution.message,
+                details: resolution.details
+            });
+        }
+
+        return sendSuccess(res, resolution.report);
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'SERVER_ERROR',
+            message: error instanceof Error ? error.message : 'Erreur serveur.'
         });
     }
 });
@@ -3073,83 +3413,11 @@ app.post('/api/plannings/:id/solve/async/:jobId/stop', authenticateRequest, asyn
 
 app.post('/api/plannings/:id/solve', authenticateRequest, async (req, res) => {
     try {
-        const auth = requireAuth(req);
-        const planningId = getSingleParam(req.params.id);
-        const planning = await getPlanningById(planningId, auth.user.id);
-        if (!planning) {
-            return sendError(res, 404, {
-                code: "NOT_FOUND",
-                message: "Planification introuvable."
-            });
-        }
-
-        const requestedSolver = isRecord(req.body) && typeof req.body.solver === "string"
-            ? req.body.solver
-            : env.solver;
-        const solverSupported = cachedSolvers.some(s => s.id === requestedSolver);
-        if (isRecord(req.body) && typeof req.body.solver === "string" && !solverSupported) {
-            return sendError(res, 400, {
-                code: "BAD_REQUEST",
-                message: `Le solveur demandé "${requestedSolver}" n'est pas disponible.`,
-                details: [`Solveurs disponibles: ${cachedSolvers.map(s => s.id).join(', ')}`],
-                hint: 'Vérifie que le backend OptaPlanner est démarré si tu veux utiliser ce solveur.'
-            });
-        }
-        const resolvedSolver = solverSupported ? requestedSolver : env.solver;
-        const solverTimeLimitSeconds = parseSolverTimeLimitSecondsFromBody(req.body);
-
-        const persistedData = getPersistedPlanningData(planning.data);
-        const sourceOverride = isRecord(req.body) && typeof req.body.source === "string" && req.body.source.trim().length > 0
-            ? canonicalizePlanningSource(req.body.source)
-            : undefined;
-
-        const nextData = isRecord(req.body) && isRecord(req.body.data)
-            ? {
-                ...persistedData,
-                ...req.body.data,
-                ...(sourceOverride ? { dslSource: sourceOverride } : {})
-            }
-            : sourceOverride
-                ? {
-                    ...persistedData,
-                    dslSource: sourceOverride
-                }
-                : undefined;
-
-        const persistedPlanning = nextData
-            ? await updatePlanning(planning.id, auth.user.id, {
-                data: nextData,
-                currentStep: planning.currentStep,
-                totalSteps: planning.totalSteps,
-                progress: planning.progress,
-                status: planning.status === "draft" ? 'active' : planning.status
-            })
-            : planning;
-
-        const solveTarget = persistedPlanning ?? planning;
-        const solveResult = await solveAndPersistPlanning(
-            auth.user.id,
-            solveTarget,
-            sourceOverride,
-            resolvedSolver,
-            solverTimeLimitSeconds
-        );
-        if (!solveResult.ok) {
-            return sendError(res, solveResult.status, solveResult.error);
-        }
-
-        return sendSuccess(res, {
-            planning: solveResult.planning,
-            result: {
-                output: solveResult.output,
-                warnings: solveResult.warnings,
-                solveTimeMs: solveResult.solveTimeMs
-            }
-        }, "Résolution terminée avec succès.");
+        return await startMiniZincExecutionForRequest(req, res);
     } catch (error) {
         return sendError(res, 500, {
             code: "INTERNAL_ERROR",
-            message: "Une erreur inattendue est survenue pendant la résolution.",
+            message: "Une erreur inattendue est survenue pendant le démarrage de la résolution.",
             details: [error instanceof Error ? error.message : "Unknown internal error"]
         });
     }
@@ -3309,6 +3577,47 @@ app.get('/api/solvers', (_req, res) => {
     });
 });
 
+async function resolvePlanningReportForVersion(
+    planning: PlanningRecord,
+    userId: string,
+    versionId?: string
+): Promise<PlanningReportResolution> {
+    if (versionId) {
+        const version = await getPlanningSolutionVersionById(versionId, planning.id, userId);
+        if (!version) {
+            return {
+                ok: false,
+                status: 404,
+                code: 'NOT_FOUND',
+                message: 'Version de solution introuvable.'
+            };
+        }
+
+        return resolveReportFromSolutionVersion(planning, version);
+    }
+
+    const report = buildPlanningReport(planning);
+    if (!report) {
+        return {
+            ok: false,
+            status: 422,
+            code: 'NO_SOLUTION',
+            message: 'Cette planification n\'a pas encore été résolue.'
+        };
+    }
+
+    if (!report.activities || report.activities.length === 0) {
+        return {
+            ok: false,
+            status: 422,
+            code: 'SOLUTION_NOT_DECODABLE',
+            message: 'Cette planification ne contient aucune activité exploitable.'
+        };
+    }
+
+    return { ok: true, report };
+}
+
 // ---------------------------------------------------------------------------
 // Report routes
 // ---------------------------------------------------------------------------
@@ -3321,30 +3630,15 @@ app.get('/api/plannings/:id/report', authenticateRequest, async (req, res) => {
             return sendError(res, 404, { code: 'NOT_FOUND', message: 'Planification introuvable.' });
         }
         const versionId = getOptionalQueryParam(req.query?.versionId);
-        const sourcePlanning = versionId
-            ? await (async () => {
-                const version = await getPlanningSolutionVersionById(versionId, planning.id, auth.user.id);
-                if (!version) {
-                    return null;
-                }
-
-                return {
-                    ...planning,
-                    solutionOutput: version.solutionOutput,
-                    solutionWarnings: version.solutionWarnings,
-                    solutionSolveTimeMs: version.solveTimeMs
-                } satisfies PlanningRecord;
-            })()
-            : planning;
-        if (!sourcePlanning) {
-            return sendError(res, 404, { code: 'NOT_FOUND', message: 'Version de solution introuvable.' });
+        const resolution = await resolvePlanningReportForVersion(planning, auth.user.id, versionId);
+        if (!resolution.ok) {
+            return sendError(res, resolution.status, {
+                code: resolution.code,
+                message: resolution.message,
+                details: resolution.details
+            });
         }
-
-        const report = buildPlanningReport(sourcePlanning);
-        if (!report) {
-            return sendError(res, 422, { code: 'NO_SOLUTION', message: 'Cette planification n\'a pas encore été résolue.' });
-        }
-        return sendSuccess(res, report);
+        return sendSuccess(res, resolution.report);
     } catch (error) {
         return sendError(res, 500, { code: 'SERVER_ERROR', message: error instanceof Error ? error.message : 'Erreur serveur.' });
     }
@@ -3358,30 +3652,15 @@ app.get('/api/plannings/:id/report/markdown', authenticateRequest, async (req, r
             return sendError(res, 404, { code: 'NOT_FOUND', message: 'Planification introuvable.' });
         }
         const versionId = getOptionalQueryParam(req.query?.versionId);
-        const sourcePlanning = versionId
-            ? await (async () => {
-                const version = await getPlanningSolutionVersionById(versionId, planning.id, auth.user.id);
-                if (!version) {
-                    return null;
-                }
-
-                return {
-                    ...planning,
-                    solutionOutput: version.solutionOutput,
-                    solutionWarnings: version.solutionWarnings,
-                    solutionSolveTimeMs: version.solveTimeMs
-                } satisfies PlanningRecord;
-            })()
-            : planning;
-        if (!sourcePlanning) {
-            return sendError(res, 404, { code: 'NOT_FOUND', message: 'Version de solution introuvable.' });
+        const resolution = await resolvePlanningReportForVersion(planning, auth.user.id, versionId);
+        if (!resolution.ok) {
+            return sendError(res, resolution.status, {
+                code: resolution.code,
+                message: resolution.message,
+                details: resolution.details
+            });
         }
-
-        const report = buildPlanningReport(sourcePlanning);
-        if (!report) {
-            return sendError(res, 422, { code: 'NO_SOLUTION', message: 'Cette planification n\'a pas encore été résolue.' });
-        }
-        const md = generateMarkdown(report);
+        const md = generateMarkdown(resolution.report);
         const versionSuffix = versionId ? `-version-${versionId.slice(0, 8)}` : '';
         const filename = `rapport-${planning.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}${versionSuffix}.md`;
         res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
@@ -3400,30 +3679,15 @@ app.get('/api/plannings/:id/report/print', authenticateRequest, async (req, res)
             return sendError(res, 404, { code: 'NOT_FOUND', message: 'Planification introuvable.' });
         }
         const versionId = getOptionalQueryParam(req.query?.versionId);
-        const sourcePlanning = versionId
-            ? await (async () => {
-                const version = await getPlanningSolutionVersionById(versionId, planning.id, auth.user.id);
-                if (!version) {
-                    return null;
-                }
-
-                return {
-                    ...planning,
-                    solutionOutput: version.solutionOutput,
-                    solutionWarnings: version.solutionWarnings,
-                    solutionSolveTimeMs: version.solveTimeMs
-                } satisfies PlanningRecord;
-            })()
-            : planning;
-        if (!sourcePlanning) {
-            return sendError(res, 404, { code: 'NOT_FOUND', message: 'Version de solution introuvable.' });
+        const resolution = await resolvePlanningReportForVersion(planning, auth.user.id, versionId);
+        if (!resolution.ok) {
+            return sendError(res, resolution.status, {
+                code: resolution.code,
+                message: resolution.message,
+                details: resolution.details
+            });
         }
-
-        const report = buildPlanningReport(sourcePlanning);
-        if (!report) {
-            return sendError(res, 422, { code: 'NO_SOLUTION', message: 'Cette planification n\'a pas encore été résolue.' });
-        }
-        const html = generatePrintHTML(report);
+        const html = generatePrintHTML(resolution.report);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.send(html);
     } catch (error) {
@@ -3436,6 +3700,10 @@ app.get('/', (_req, res) => {
 });
 
 await initializeDatabase();
+const orphanedExecutions = await markOrphanedPlanningExecutionsUnknown();
+if (orphanedExecutions > 0) {
+    console.warn(`${orphanedExecutions} exécution(s) MiniZinc active(s) ont été marquées UNKNOWN après redémarrage.`);
+}
 await detectAvailableSolvers();
 await detectOptaPlannerHealthAtStartup();
 

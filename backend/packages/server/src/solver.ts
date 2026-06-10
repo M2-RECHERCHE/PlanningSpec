@@ -7,7 +7,6 @@ import { promisify } from 'node:util';
 import { URI } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import { createPlanningSpecServices } from 'planning-spec-language';
-import { env } from './env.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -70,7 +69,7 @@ function isUnknownOutput(stdout: string, stderrWarnings: string[]): boolean {
     return stderrWarnings.some(line => /timeout|time limit|unknown/i.test(line));
 }
 
-async function analyzePlanningSource(source: string): Promise<{ ok: true; document: unknown; tmpDir: string } | { ok: false; error: SolveFailure; tmpDir: string }> {
+export async function analyzePlanningSource(source: string): Promise<{ ok: true; document: unknown; tmpDir: string } | { ok: false; error: SolveFailure; tmpDir: string }> {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'planning-spec-'));
 
     try {
@@ -122,6 +121,41 @@ async function analyzePlanningSource(source: string): Promise<{ ok: true; docume
                 hint: 'Vérifie les contraintes, les rôles et les affectations, puis soumets à nouveau.'
             },
             tmpDir
+        };
+    }
+}
+
+export async function prepareMiniZincModel(source: string): Promise<{ ok: true; mznPath: string; tmpDir: string } | { ok: false; error: SolveFailure; tmpDir: string }> {
+    const analysis = await analyzePlanningSource(source);
+
+    if (!analysis.ok) {
+        return analysis;
+    }
+
+    try {
+        return {
+            ok: true,
+            mznPath: generator.generateToFile(analysis.document as never, analysis.tmpDir),
+            tmpDir: analysis.tmpDir
+        };
+    } catch (error) {
+        const maybeError = error as Error & { code?: string; stderr?: string; stdout?: string };
+        const details = [
+            maybeError.message,
+            ...(maybeError.stderr ? toWarnings(maybeError.stderr) : []),
+            ...(maybeError.stdout ? toWarnings(maybeError.stdout) : [])
+        ].filter(Boolean);
+
+        return {
+            ok: false,
+            error: {
+                status: 422,
+                code: 'MINIZINC_GENERATION_ERROR',
+                message: 'Le modèle MiniZinc n’a pas pu être généré.',
+                details,
+                hint: 'Vérifie la source .planning puis relance la génération.'
+            },
+            tmpDir: analysis.tmpDir
         };
     }
 }
@@ -180,16 +214,12 @@ export async function solvePlanningSource(source: string, solver: string): Promi
     }
 
     try {
-        // Keep solver runs alive long enough on dense instances.
-        const minimumTimeoutMs = 108_000_000; // 30 hours
-        const timeoutMs = Math.max(env.solverTimeoutMs, minimumTimeoutMs);
-
         const mznPath = generator.generateToFile(analysis.document as never, analysis.tmpDir);
         const t0 = Date.now();
         const { stdout, stderr } = await execFileAsync(
             'minizinc',
-            ['--solver', solver, '--time-limit', String(timeoutMs), mznPath],
-            { maxBuffer: 8 * 1024 * 1024, timeout: timeoutMs + 5_000 }
+            ['--solver', solver, mznPath],
+            { maxBuffer: 8 * 1024 * 1024 }
         );
         const solveTimeMs = Date.now() - t0;
 

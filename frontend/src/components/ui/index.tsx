@@ -118,11 +118,12 @@ const BTN_SIZES: Record<BtnSize, React.CSSProperties> = {
 export const Button: React.FC<{
   children: React.ReactNode; variant?: BtnVariant; size?: BtnSize;
   onClick?: () => void; disabled?: boolean; icon?: React.ReactNode;
-  fullWidth?: boolean; loading?: boolean; style?: React.CSSProperties;
-}> = ({ children, variant = 'secondary', size = 'md', onClick, disabled, icon, fullWidth, loading, style }) => {
+  fullWidth?: boolean; loading?: boolean; style?: React.CSSProperties; title?: string;
+}> = ({ children, variant = 'secondary', size = 'md', onClick, disabled, icon, fullWidth, loading, style, title }) => {
   const [hovered, setHovered] = useState(false);
   return (
     <button
+      title={title}
       onClick={onClick} disabled={disabled || loading}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       style={{

@@ -3,10 +3,11 @@ import MonacoEditor from '@monaco-editor/react';
 import { useApp } from '../context/AppContext';
 import { api, getBackendError } from '../lib/api';
 import { setReportVersionSelection } from '../lib/reportApi';
+import { buildRoute } from '../lib/routing';
 import { AppLayout, Topbar } from '../components/layout/AppLayout';
 import { StatusBadge, ProgressBar, Button, Input, Textarea, NumberInput, Modal, Select, Card } from '../components/ui';
 import { useResponsive } from '../hooks/useResponsive';
-import { Planning, Badge, PlanningSolutionVersion } from '../types';
+import { Planning, Badge, PlanningExecution, PlanningExecutionLog, PlanningExecutionStatus, PlanningSolutionVersion } from '../types';
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
@@ -2631,6 +2632,36 @@ function formatMs(ms: number): string {
   return `${m}m ${s}s`;
 }
 
+const ACTIVE_MINIZINC_STATUSES = new Set<PlanningExecutionStatus>([
+  'PENDING',
+  'RUNNING',
+  'SOLUTION_FOUND',
+  'OPTIMIZING',
+  'STOP_REQUESTED',
+  'STOPPING',
+]);
+
+const isActiveMiniZincStatus = (status?: PlanningExecutionStatus | null) =>
+  Boolean(status && ACTIVE_MINIZINC_STATUSES.has(status));
+
+const authHeaders = (): Record<string, string> => {
+  const auth = api.defaults.headers.common.Authorization as string | undefined;
+  return auth ? { Authorization: auth } : {};
+};
+
+const apiUrl = (path: string) =>
+  `${process.env.REACT_APP_API_BASE_URL ?? 'http://localhost:4000'}${path}`;
+
+const formatExecutionLogLine = (log: PlanningExecutionLog) => {
+  const timestamp = new Date(log.createdAt).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const status = log.executionStatus ? ` ${log.executionStatus}` : '';
+  return `[${timestamp}] [${log.level}${status}] ${log.message.trimEnd()}`;
+};
+
 function buildSolverErrorOutput(planning: Planning | null): string | null {
   if (!planning || planning.status !== 'error' || !planning.lastErrorMessage) {
     return null;
@@ -3027,6 +3058,17 @@ const Step8: React.FC<Step8Props> = ({
               const isExpanded = selectedVersionId === version.id;
               const versionLabel = `V${versions.length - index}`;
               const solveTimeLabel = version.solveTimeMs != null ? formatMs(version.solveTimeMs) : 'n/a';
+              const statusLabel = version.status === 'BEST_CURRENT'
+                ? 'meilleure courante'
+                : version.status === 'OPTIMAL'
+                  ? 'optimale'
+                  : version.status === 'FINAL'
+                    ? 'finale'
+                    : version.status === 'STOPPED'
+                      ? 'avant arrêt'
+                      : version.status === 'DECODE_FAILED'
+                        ? 'non décodable'
+                        : 'intermédiaire';
 
               return (
                 <div key={version.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -3067,17 +3109,31 @@ const Step8: React.FC<Step8Props> = ({
                         fontWeight: 700,
                         flexShrink: 0,
                       }}>
-                        ✓
+                        {version.status === 'DECODE_FAILED' || version.decodeError ? '!' : '✓'}
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 16, color: '#14b8a6' }}>
-                          Planification résolue avec succès
+                          {version.status === 'DECODE_FAILED' || version.decodeError
+                            ? 'Sortie MiniZinc non décodable'
+                            : 'Planification résolue avec succès'}
                         </div>
                         <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 4 }}>
                           {versionLabel} · {new Date(version.createdAt).toLocaleString('fr-FR')} · {version.solver}
                         </div>
-                        <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
-                          Le solveur a trouvé une solution. Temps d&apos;exécution : <span style={{ color: '#38bdf8', fontFamily: 'monospace' }}>{solveTimeLabel}</span>
+                        <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span>Temps: <span style={{ color: '#38bdf8', fontFamily: 'monospace' }}>{solveTimeLabel}</span></span>
+                          <span style={{
+                            color: version.status === 'DECODE_FAILED' ? '#fca5a5' : '#bfdbfe',
+                            border: '1px solid rgba(147,197,253,0.25)',
+                            borderRadius: 999,
+                            padding: '1px 8px',
+                            fontSize: 11
+                          }}>
+                            {statusLabel}
+                          </span>
+                          {version.objectiveValue !== undefined && (
+                            <span>objectif: <span style={{ color: '#fde68a', fontFamily: 'monospace' }}>{version.objectiveValue}</span></span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3085,10 +3141,12 @@ const Step8: React.FC<Step8Props> = ({
                       <Button
                         variant="primary"
                         size="sm"
+                        disabled={version.status === 'DECODE_FAILED' || Boolean(version.decodeError)}
                         onClick={() => {
                           onGenerateReport(version.id);
                         }}
                         style={{ flexShrink: 0 }}
+                        title={version.decodeError ? `Décodage impossible: ${version.decodeError}` : undefined}
                       >
                         📄 Générer le rapport
                       </Button>
@@ -3103,8 +3161,15 @@ const Step8: React.FC<Step8Props> = ({
                         </div>
                         <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                           Temps: <span style={{ fontFamily: 'monospace', color: '#7dd3fc' }}>{solveTimeLabel}</span>
+                          <span style={{ marginLeft: 8, color: version.status === 'DECODE_FAILED' ? '#fca5a5' : '#bfdbfe' }}>{statusLabel}</span>
                         </div>
                       </div>
+
+                      {version.decodeError && (
+                        <div style={{ marginBottom: 10, color: '#fca5a5', fontSize: 12 }}>
+                          Décodage impossible: {version.decodeError}
+                        </div>
+                      )}
 
                       {version.solutionWarnings && version.solutionWarnings.length > 0 && (
                         <div style={{ marginBottom: 10 }}>
@@ -3130,7 +3195,9 @@ const Step8: React.FC<Step8Props> = ({
                         <Button
                           variant="primary"
                           size="sm"
+                          disabled={version.status === 'DECODE_FAILED' || Boolean(version.decodeError)}
                           onClick={() => onGenerateReport(version.id)}
+                          title={version.decodeError ? `Décodage impossible: ${version.decodeError}` : undefined}
                         >
                           📄 Générer le rapport
                         </Button>
@@ -3163,7 +3230,6 @@ export const PlanningEditorPage: React.FC = () => {
     selectedPlanning,
     navigate,
     savePlanningData,
-    solvePlanning,
     listPlanningVersions,
     deletePlanningVersion,
     refreshData,
@@ -3182,6 +3248,9 @@ export const PlanningEditorPage: React.FC = () => {
   const [optaAsyncJobId, setOptaAsyncJobId] = useState<string | null>(null);
   const [optaStopRequested, setOptaStopRequested] = useState(false);
   const [optaBestSolutionCount, setOptaBestSolutionCount] = useState(0);
+  const [miniZincExecution, setMiniZincExecution] = useState<PlanningExecution | null>(null);
+  const [miniZincLogs, setMiniZincLogs] = useState<PlanningExecutionLog[]>([]);
+  const [miniZincStopRequested, setMiniZincStopRequested] = useState(false);
   const [solvers, setSolvers] = useState<AvailableSolver[]>([]);
   const [loadingSolvers, setLoadingSolvers] = useState(true);
   const [solutionVersions, setSolutionVersions] = useState<PlanningSolutionVersion[]>([]);
@@ -3215,6 +3284,8 @@ export const PlanningEditorPage: React.FC = () => {
   const [dslAutoSaving, setDslAutoSaving] = useState(false);
   const [showSolverPicker, setShowSolverPicker] = useState(false);
   const optaPollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const miniZincEventAbortRef = useRef<AbortController | null>(null);
+  const miniZincLastSequenceRef = useRef(0);
   // drag refs
   const dragPanelStartX = useRef(0);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -3299,6 +3370,218 @@ export const PlanningEditorPage: React.FC = () => {
       optaPollTimerRef.current = null;
     }
   }, []);
+
+  const clearMiniZincEventStream = useCallback(() => {
+    if (miniZincEventAbortRef.current) {
+      miniZincEventAbortRef.current.abort();
+      miniZincEventAbortRef.current = null;
+    }
+  }, []);
+
+  const appendMiniZincLog = useCallback((log: PlanningExecutionLog) => {
+    miniZincLastSequenceRef.current = Math.max(miniZincLastSequenceRef.current, log.sequence);
+    setMiniZincLogs(prev => {
+      if (prev.some(item => item.id === log.id || item.sequence === log.sequence)) {
+        return prev;
+      }
+      return [...prev, log].sort((a, b) => a.sequence - b.sequence);
+    });
+  }, []);
+
+  const mergeMiniZincSolution = useCallback((solution: PlanningSolutionVersion) => {
+    setSolutionVersions(prev => {
+      const next = [solution, ...prev.filter(item => item.id !== solution.id)];
+      return next.sort((a, b) => {
+        const aVersion = a.versionNumber ?? 0;
+        const bVersion = b.versionNumber ?? 0;
+        if (aVersion !== bVersion) return bVersion - aVersion;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    });
+  }, []);
+
+  const handleMiniZincSseEvent = useCallback((eventName: string, payload: any) => {
+    if (eventName === 'execution') {
+      const execution = payload as PlanningExecution;
+      setMiniZincExecution(execution);
+      setMiniZincStopRequested(execution.status === 'STOP_REQUESTED' || execution.status === 'STOPPING');
+      const active = isActiveMiniZincStatus(execution.status);
+      setSolving(active);
+      setEditorSolving(active);
+      return;
+    }
+
+    if (eventName === 'log') {
+      appendMiniZincLog(payload as PlanningExecutionLog);
+      setConsoleTab('output');
+      setShowConsole(true);
+      return;
+    }
+
+    if (eventName === 'solution') {
+      const solution = payload as PlanningSolutionVersion;
+      mergeMiniZincSolution(solution);
+      setSolverTimeMs(solution.solveTimeMs ?? null);
+      setConsoleTab('output');
+      setShowConsole(true);
+      return;
+    }
+
+    if (eventName === 'done') {
+      const execution = payload.execution as PlanningExecution;
+      setMiniZincExecution(execution);
+      setMiniZincStopRequested(false);
+      setSolving(false);
+      setEditorSolving(false);
+      void refreshData();
+      if (selectedPlanning?.id) {
+        void loadPlanningVersions(selectedPlanning.id);
+      }
+      toast(
+        execution.status === 'STOPPED'
+          ? 'Exécution MiniZinc arrêtée. Les solutions trouvées restent disponibles.'
+          : execution.status === 'OPTIMAL'
+            ? 'Exécution MiniZinc terminée avec optimalité prouvée.'
+            : execution.status === 'COMPLETED'
+              ? 'Exécution MiniZinc terminée.'
+              : `Exécution MiniZinc terminée: ${execution.status}.`,
+        execution.status === 'FAILED' || execution.status === 'UNSATISFIABLE' || execution.status === 'UNKNOWN' ? 'error' : 'success'
+      );
+    }
+  }, [appendMiniZincLog, loadPlanningVersions, mergeMiniZincSolution, refreshData, selectedPlanning?.id, toast]);
+
+  const connectMiniZincEvents = useCallback(async (planningId: string, executionId: string, afterSequence = 0) => {
+    clearMiniZincEventStream();
+    const controller = new AbortController();
+    miniZincEventAbortRef.current = controller;
+
+    try {
+      const res = await fetch(apiUrl(`/api/plannings/${planningId}/executions/${executionId}/events?lastEventId=${afterSequence}`), {
+        headers: authHeaders(),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const processBlock = (block: string) => {
+        const lines = block.split(/\r?\n/);
+        let eventName = 'message';
+        const dataLines: string[] = [];
+        for (const line of lines) {
+          if (line.startsWith(':')) continue;
+          if (line.startsWith('id:')) {
+            const id = Number(line.slice(3).trim());
+            if (Number.isFinite(id)) {
+              miniZincLastSequenceRef.current = Math.max(miniZincLastSequenceRef.current, id);
+            }
+            continue;
+          }
+          if (line.startsWith('event:')) {
+            eventName = line.slice(6).trim();
+            continue;
+          }
+          if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).trimStart());
+          }
+        }
+        if (dataLines.length === 0) return;
+        try {
+          handleMiniZincSseEvent(eventName, JSON.parse(dataLines.join('\n')));
+        } catch {
+          // Ignore malformed SSE payloads; persisted logs can be reloaded.
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        buffer = buffer.replace(/\r\n/g, '\n');
+        let separatorIndex = buffer.indexOf('\n\n');
+        while (separatorIndex >= 0) {
+          const block = buffer.slice(0, separatorIndex);
+          buffer = buffer.slice(separatorIndex + 2);
+          processBlock(block);
+          separatorIndex = buffer.indexOf('\n\n');
+        }
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        const backendError = getBackendError(error);
+        toast(backendError.message || 'Flux MiniZinc interrompu.', 'error');
+      }
+    }
+  }, [clearMiniZincEventStream, handleMiniZincSseEvent, toast]);
+
+  const startMiniZincExecution = useCallback(async (planningId: string, source: string) => {
+    const response = await api.post<{ data: { executionId: string; status: PlanningExecutionStatus; execution: PlanningExecution } }>(
+      `/api/plannings/${planningId}/execute`,
+      {
+        solver: selectedSolver || undefined,
+        source,
+      }
+    );
+    const execution = response.data.data.execution;
+    miniZincLastSequenceRef.current = 0;
+    setMiniZincLogs([]);
+    setMiniZincExecution(execution);
+    setMiniZincStopRequested(false);
+    setSolving(true);
+    setEditorSolving(true);
+    setConsoleTab('output');
+    setShowConsole(true);
+    void connectMiniZincEvents(planningId, response.data.data.executionId, 0);
+  }, [connectMiniZincEvents, selectedSolver]);
+
+  const handleStopMiniZincSolve = useCallback(async () => {
+    if (!selectedPlanning || !miniZincExecution) {
+      return;
+    }
+    try {
+      setMiniZincStopRequested(true);
+      await api.post(`/api/plannings/${selectedPlanning.id}/executions/${miniZincExecution.id}/stop`);
+      toast('Arrêt demandé à MiniZinc.', 'success');
+    } catch (error) {
+      setMiniZincStopRequested(false);
+      const backendError = getBackendError(error);
+      toast(backendError.message, 'error');
+    }
+  }, [miniZincExecution, selectedPlanning, toast]);
+
+  const loadMiniZincExecutionSnapshot = useCallback(async (planningId: string) => {
+    try {
+      const response = await api.get<{ data: { executions: PlanningExecution[] } }>(`/api/plannings/${planningId}/executions?activeOrLatest=1`);
+      const execution = response.data.data.executions[0];
+      if (!execution) {
+        setMiniZincExecution(null);
+        setMiniZincLogs([]);
+        miniZincLastSequenceRef.current = 0;
+        clearMiniZincEventStream();
+        return;
+      }
+
+      setMiniZincExecution(execution);
+      const logsResponse = await api.get<{ data: { logs: PlanningExecutionLog[] } }>(`/api/plannings/${planningId}/executions/${execution.id}/logs`);
+      const logs = logsResponse.data.data.logs ?? [];
+      setMiniZincLogs(logs);
+      miniZincLastSequenceRef.current = logs.reduce((max, log) => Math.max(max, log.sequence), 0);
+      const solutionsResponse = await api.get<{ data: { solutions: PlanningSolutionVersion[] } }>(`/api/plannings/${planningId}/solutions?executionId=${execution.id}`);
+      (solutionsResponse.data.data.solutions ?? []).forEach(mergeMiniZincSolution);
+
+      if (isActiveMiniZincStatus(execution.status)) {
+        setSolving(true);
+        setEditorSolving(true);
+        void connectMiniZincEvents(planningId, execution.id, miniZincLastSequenceRef.current);
+      }
+    } catch {
+      // Snapshot recovery is best-effort; normal planning loading still works.
+    }
+  }, [clearMiniZincEventStream, connectMiniZincEvents, mergeMiniZincSolution]);
 
   const pollOptaPlannerAsyncStatus = useCallback(async (planningId: string, jobId: string) => {
     try {
@@ -3453,8 +3736,16 @@ export const PlanningEditorPage: React.FC = () => {
   useEffect(() => {
     return () => {
       clearOptaPollTimer();
+      clearMiniZincEventStream();
     };
-  }, [clearOptaPollTimer]);
+  }, [clearMiniZincEventStream, clearOptaPollTimer]);
+
+  useEffect(() => {
+    if (miniZincLogs.length === 0) {
+      return;
+    }
+    setSolverOutput(miniZincLogs.map(formatExecutionLogLine).join('\n'));
+  }, [miniZincLogs]);
 
   const syncDslIntoPlatform = useCallback(async (
     rawSource: string,
@@ -3509,9 +3800,13 @@ export const PlanningEditorPage: React.FC = () => {
   useEffect(() => {
     if (!selectedPlanning) {
       clearOptaPollTimer();
+      clearMiniZincEventStream();
       setOptaAsyncJobId(null);
       setOptaStopRequested(false);
       setOptaBestSolutionCount(0);
+      setMiniZincExecution(null);
+      setMiniZincLogs([]);
+      setMiniZincStopRequested(false);
       setSolving(false);
       setEditorSolving(false);
       return;
@@ -3533,15 +3828,19 @@ export const PlanningEditorPage: React.FC = () => {
     setEditorError(null);
     setSaveTime(null);
     clearOptaPollTimer();
+    clearMiniZincEventStream();
     setOptaAsyncJobId(null);
     setOptaStopRequested(false);
     setOptaBestSolutionCount(0);
+    setMiniZincExecution(null);
+    setMiniZincLogs([]);
+    setMiniZincStopRequested(false);
     setSolving(false);
     setEditorSolving(false);
     planningHydratedRef.current = selectedPlanning.id;
     lastSyncedDslRef.current = getStoredDslSource(selectedPlanning, nextFormData);
     lastPersistedDslRef.current = getStoredDslSource(selectedPlanning, nextFormData);
-  }, [clearOptaPollTimer, selectedPlanning, updateJsonValidationMarkers, updateSemanticValidationMarkers]);
+  }, [clearMiniZincEventStream, clearOptaPollTimer, selectedPlanning, updateJsonValidationMarkers, updateSemanticValidationMarkers]);
 
   useEffect(() => {
     if (!selectedPlanning) {
@@ -3564,7 +3863,8 @@ export const PlanningEditorPage: React.FC = () => {
     }
 
     void loadPlanningVersions(planningId);
-  }, [loadPlanningVersions, selectedPlanning?.id]);
+    void loadMiniZincExecutionSnapshot(planningId);
+  }, [loadMiniZincExecutionSnapshot, loadPlanningVersions, selectedPlanning?.id]);
 
   useEffect(() => {
     setFormData(prev => {
@@ -3942,30 +4242,37 @@ export const PlanningEditorPage: React.FC = () => {
       return;
     }
 
-    const result = await solvePlanning(
-      selectedPlanning.id,
-      undefined,
-      source,
-      selectedSolver || undefined,
-      undefined
-    );
-    setSolverTimeMs(result?.solveTimeMs ?? null);
-    setEditorSolving(false);
-    setSolving(false);
-
-    if (result) {
-      await loadPlanningVersions(selectedPlanning.id);
-      toast('Résolution terminée avec succès.', 'success');
+    try {
+      await startMiniZincExecution(selectedPlanning.id, source);
+    } catch (error) {
+      setEditorSolving(false);
+      setSolving(false);
+      const backendError = getBackendError(error);
+      toast(backendError.message, 'error');
     }
   };
 
   const handleGenerateReport = (versionId?: string) => {
-    const fallbackLatestVersionId = solutionVersions.length > 0 ? solutionVersions[0].id : undefined;
+    const fallbackLatestVersionId = solutionVersions.find(version => version.status !== 'DECODE_FAILED' && !version.decodeError)?.id;
     const effectiveVersionId = versionId ?? fallbackLatestVersionId;
+    const selectedVersion = effectiveVersionId
+      ? solutionVersions.find(version => version.id === effectiveVersionId)
+      : undefined;
+
+    if (selectedVersion?.status === 'DECODE_FAILED' || selectedVersion?.decodeError) {
+      toast(selectedVersion.decodeError ?? 'Cette version de solution n’est pas décodable.', 'error');
+      return;
+    }
+
     setReportVersionSelection(selectedPlanning.id, effectiveVersionId);
     setReportLoading(true);
     setTimeout(() => {
-      navigate('report', { planning: selectedPlanning });
+      if (effectiveVersionId && typeof window !== 'undefined') {
+        const route = buildRoute('report', { planningId: selectedPlanning.id });
+        window.open(`${window.location.origin}${window.location.pathname}#${route}`, '_blank');
+      } else {
+        navigate('report', { planning: selectedPlanning });
+      }
       setReportLoading(false);
     }, 700);
   };
@@ -4016,24 +4323,14 @@ export const PlanningEditorPage: React.FC = () => {
       return;
     }
 
-    const result = await solvePlanning(
-      selectedPlanning.id,
-      undefined,
-      sourceToSolve,
-      selectedSolver || undefined,
-      undefined
-    );
-    setEditorSolving(false);
-    setSolving(false);
-    if (result) {
-      setSolverOutput(result.output);
-      setSolverWarnings(result.warnings ?? []);
-      setSolverTimeMs(result.solveTimeMs ?? null);
-      await loadPlanningVersions(selectedPlanning.id);
+    try {
+      await startMiniZincExecution(selectedPlanning.id, sourceToSolve);
+    } catch (error) {
+      setEditorSolving(false);
+      setSolving(false);
       setConsoleTab('output');
-      toast('Résolution terminée avec succès.', 'success');
-    } else {
-      setConsoleTab('output');
+      const backendError = getBackendError(error);
+      toast(backendError.message, 'error');
     }
   };
 
@@ -4087,10 +4384,16 @@ export const PlanningEditorPage: React.FC = () => {
       isSolving={solving}
       solveElapsedMs={solveElapsedMs}
       solverTimeMs={solverTimeMs}
-      canStopSolve={solving && selectedSolver === 'OptaPlanner' && Boolean(optaAsyncJobId) && !optaStopRequested}
-      stopRequested={optaStopRequested}
-      bestSolutionCount={optaBestSolutionCount}
-      onStopSolve={handleStopOptaPlannerSolve}
+      canStopSolve={
+        solving && (
+          selectedSolver === 'OptaPlanner'
+            ? Boolean(optaAsyncJobId) && !optaStopRequested
+            : Boolean(miniZincExecution && isActiveMiniZincStatus(miniZincExecution.status)) && !miniZincStopRequested
+        )
+      }
+      stopRequested={selectedSolver === 'OptaPlanner' ? optaStopRequested : miniZincStopRequested}
+      bestSolutionCount={selectedSolver === 'OptaPlanner' ? optaBestSolutionCount : solutionVersions.filter(version => version.executionId === miniZincExecution?.id).length}
+      onStopSolve={selectedSolver === 'OptaPlanner' ? handleStopOptaPlannerSolve : handleStopMiniZincSolve}
     />,
   ];
 
@@ -4553,15 +4856,15 @@ export const PlanningEditorPage: React.FC = () => {
                           <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#7dd3fc', minWidth: 52 }}>{formatMs(solveElapsedMs)}</span>
                         </div>
                       )}
-                      {solverOutput && !editorSolving && (
+                      {solverOutput && (
                         <>
-                          {!isErrorOutput && solverTimeMs !== null && (
+                          {!editorSolving && !isErrorOutput && solverTimeMs !== null && (
                             <div style={{ marginBottom: 6, fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
                               <span style={{ color: '#34d399' }}>✓</span>
                               Résolu en <span style={{ fontFamily: 'monospace', color: '#7dd3fc' }}>{formatMs(solverTimeMs)}</span>
                             </div>
                           )}
-                          {isErrorOutput && (
+                          {!editorSolving && isErrorOutput && (
                             <div style={{ marginBottom: 6, fontSize: 11, color: '#fca5a5', display: 'flex', alignItems: 'center', gap: 6 }}>
                               <span style={{ color: '#f87171' }}>✕</span>
                               Échec de résolution
@@ -4704,6 +5007,13 @@ export const PlanningEditorPage: React.FC = () => {
                 </div>
               )}
 
+              {selectedSolver !== 'OptaPlanner' && miniZincExecution && (
+                <div style={{ fontSize: 10, color: '#93c5fd' }}>
+                  MiniZinc: {miniZincExecution.status}
+                  {miniZincExecution.bestSolutionId ? ` · meilleure solution ${miniZincExecution.bestSolutionId.slice(0, 8)}` : ''}
+                </div>
+              )}
+
               {/* Success banner */}
               {selectedPlanning.status === 'done' && selectedPlanning.solutionOutput && !editorSolving && (
                 <div style={{ fontSize: 12, color: '#10b981', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 7, padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -4738,7 +5048,11 @@ export const PlanningEditorPage: React.FC = () => {
                 {editorSolving ? (
                   <>
                     <span style={{ width: 14, height: 14, border: '2px solid rgba(56,189,248,0.3)', borderTopColor: '#38bdf8', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
-                    {selectedSolver === 'OptaPlanner' && optaStopRequested ? 'Arrêt demandé…' : 'Résolution en cours…'}
+                    {selectedSolver === 'OptaPlanner' && optaStopRequested
+                      ? 'Arrêt demandé…'
+                      : selectedSolver !== 'OptaPlanner' && miniZincStopRequested
+                        ? 'Arrêt MiniZinc demandé…'
+                        : 'Résolution en cours…'}
                   </>
                 ) : dslErrorCount > 0
                   ? '⊘ Corrigez les erreurs avant de lancer'
@@ -4763,6 +5077,27 @@ export const PlanningEditorPage: React.FC = () => {
                   }}
                 >
                   {optaStopRequested ? 'Arrêt demandé… finalisation' : '■ Stop OptaPlanner'}
+                </button>
+              )}
+
+              {selectedSolver !== 'OptaPlanner' && solving && miniZincExecution && isActiveMiniZincStatus(miniZincExecution.status) && (
+                <button
+                  onClick={() => { void handleStopMiniZincSolve(); }}
+                  disabled={miniZincStopRequested}
+                  style={{
+                    width: '100%',
+                    background: miniZincStopRequested ? 'rgba(248,113,113,0.18)' : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    border: 'none',
+                    color: miniZincStopRequested ? '#fca5a5' : '#fee2e2',
+                    borderRadius: 7,
+                    padding: '8px 0',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: miniZincStopRequested ? 'not-allowed' : 'pointer',
+                    opacity: 0.95
+                  }}
+                >
+                  {miniZincStopRequested ? 'Arrêt demandé… finalisation' : '■ Arrêter MiniZinc'}
                 </button>
               )}
             </div>

@@ -105,14 +105,17 @@ export function parseSolutionOutput(
 
 // ─── Report builder ───────────────────────────────────────────────────────────
 
-export function buildPlanningReport(planning: PlanningRecord): PlanningReport | null {
-    if (!planning.solutionOutput) return null;
-
+export function buildPlanningReportFromOutput(
+    planning: PlanningRecord,
+    solutionOutput: string,
+    warnings: string[] = [],
+    solveTimeMs?: number
+): PlanningReport {
     const rawData = planning.data as Record<string, unknown> | undefined;
     const days: string[] = (rawData?.time as Record<string, unknown> | undefined)?.days as string[] ?? [];
     const slotsPerDay: number = (rawData?.time as Record<string, unknown> | undefined)?.slotsPerDay as number ?? 0;
 
-    const activities = parseSolutionOutput(planning.solutionOutput, days, slotsPerDay);
+    const activities = parseSolutionOutput(solutionOutput, days, slotsPerDay);
 
     const activityTypes = Array.from(new Set(activities.map(a => a.baseName)));
     const assignedResources = Array.from(new Set([
@@ -129,9 +132,20 @@ export function buildPlanningReport(planning: PlanningRecord): PlanningReport | 
         slotsPerDay,
         activities,
         stats: { totalInstances: activities.length, activityTypes, totalDays, assignedResources },
-        solveTimeMs: planning.solutionSolveTimeMs,
-        warnings: planning.solutionWarnings ?? [],
+        solveTimeMs,
+        warnings,
     };
+}
+
+export function buildPlanningReport(planning: PlanningRecord): PlanningReport | null {
+    if (!planning.solutionOutput) return null;
+
+    return buildPlanningReportFromOutput(
+        planning,
+        planning.solutionOutput,
+        planning.solutionWarnings ?? [],
+        planning.solutionSolveTimeMs
+    );
 }
 
 // ─── Markdown generator ───────────────────────────────────────────────────────

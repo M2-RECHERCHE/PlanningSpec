@@ -10,6 +10,6 @@
     "dev:server": "pnpm --filter planning-spec-server dev",
     "start:server": "pnpm --filter planning-spec-server start",
     "langium:generate": "pnpm --filter planning-spec-language langium:generate",
-    "test": "pnpm --filter planning-spec-language test"
+    "test": "pnpm --filter planning-spec-language test && pnpm --filter planning-spec-server test"
   }
 }

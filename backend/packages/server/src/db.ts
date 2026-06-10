@@ -1,11 +1,27 @@
 import { randomUUID } from 'node:crypto';
 
-import mysql, { type Pool, type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
+import mysql, { type Pool, type PoolConnection, type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
 
 import { env } from './env.js';
 
 export type ProjectStatus = 'active' | 'archived' | 'completed';
 export type PlanStatus = 'draft' | 'active' | 'paused' | 'done' | 'error';
+export type PlanningExecutionStatus =
+    | 'PENDING'
+    | 'RUNNING'
+    | 'SOLUTION_FOUND'
+    | 'OPTIMIZING'
+    | 'COMPLETED'
+    | 'OPTIMAL'
+    | 'UNSATISFIABLE'
+    | 'FAILED'
+    | 'STOP_REQUESTED'
+    | 'STOPPING'
+    | 'STOPPED'
+    | 'UNKNOWN';
+export type PlanningExecutionLogLevel = 'info' | 'stdout' | 'stderr' | 'warning' | 'error' | 'solution';
+export type PlanningSolutionStatus = 'INTERMEDIATE' | 'BEST_CURRENT' | 'FINAL' | 'OPTIMAL' | 'STOPPED' | 'DECODE_FAILED';
+export type PlanningSolutionKind = 'intermediate' | 'best_current' | 'final' | 'optimal' | 'stopped';
 
 export interface Badge {
     id: string;
@@ -84,11 +100,50 @@ export interface PlanningSolutionVersionRecord {
     id: string;
     planningId: string;
     userId: string;
+    executionId?: string;
+    versionNumber?: number;
+    solutionKind?: PlanningSolutionKind;
+    status?: PlanningSolutionStatus;
+    objectiveValue?: number;
     solver: string;
     sourceSnapshot?: string;
     solutionOutput: string;
     solutionWarnings: string[];
+    rawOutput?: string;
+    decodedSolutionJson?: unknown;
+    reportJson?: unknown;
+    decodeError?: string;
     solveTimeMs?: number;
+    createdAt: string;
+}
+
+export interface PlanningExecutionRecord {
+    id: string;
+    planningId: string;
+    userId: string;
+    status: PlanningExecutionStatus;
+    solver: string;
+    sourceSnapshot?: string;
+    startedAt?: string;
+    endedAt?: string;
+    stoppedAt?: string;
+    stopRequestedAt?: string;
+    exitCode?: number;
+    errorMessage?: string;
+    bestSolutionId?: string;
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface PlanningExecutionLogRecord {
+    id: string;
+    executionId: string;
+    sequence: number;
+    level: PlanningExecutionLogLevel;
+    stream?: string;
+    message: string;
+    executionStatus?: PlanningExecutionStatus;
     createdAt: string;
 }
 
@@ -157,11 +212,50 @@ interface PlanningSolutionVersionRow extends RowDataPacket {
     id: string;
     planning_id: string;
     user_id: string;
+    execution_id: string | null;
+    version_number: number | null;
+    solution_kind: PlanningSolutionKind | null;
+    status: PlanningSolutionStatus | null;
+    objective_value: number | string | null;
     solver: string;
     source_snapshot: string | null;
     solution_output: string;
     solution_warnings: unknown;
+    raw_output: string | null;
+    decoded_solution_json: unknown;
+    report_json: unknown;
+    decode_error: string | null;
     solve_time_ms: number | null;
+    created_at: string | Date;
+}
+
+interface PlanningExecutionRow extends RowDataPacket {
+    id: string;
+    planning_id: string;
+    user_id: string;
+    status: PlanningExecutionStatus;
+    solver: string;
+    source_snapshot: string | null;
+    started_at: string | Date | null;
+    ended_at: string | Date | null;
+    stopped_at: string | Date | null;
+    stop_requested_at: string | Date | null;
+    exit_code: number | null;
+    error_message: string | null;
+    best_solution_id: string | null;
+    created_by: string;
+    created_at: string | Date;
+    updated_at: string | Date;
+}
+
+interface PlanningExecutionLogRow extends RowDataPacket {
+    id: string;
+    execution_id: string;
+    sequence: number;
+    level: PlanningExecutionLogLevel;
+    stream: string | null;
+    message: string;
+    execution_status: PlanningExecutionStatus | null;
     created_at: string | Date;
 }
 
@@ -231,11 +325,46 @@ export interface PlanningUpdateInput {
 
 export interface PlanningSolutionVersionInput {
     planningId: string;
+    executionId?: string | null;
+    versionNumber?: number | null;
+    solutionKind?: PlanningSolutionKind | null;
+    status?: PlanningSolutionStatus | null;
+    objectiveValue?: number | null;
     solver: string;
     sourceSnapshot?: string | null;
     solutionOutput: string;
     solutionWarnings?: string[] | null;
+    rawOutput?: string | null;
+    decodedSolutionJson?: unknown;
+    reportJson?: unknown;
+    decodeError?: string | null;
     solveTimeMs?: number | null;
+}
+
+export interface PlanningExecutionInput {
+    planningId: string;
+    solver: string;
+    sourceSnapshot?: string | null;
+    createdBy: string;
+}
+
+export interface PlanningExecutionUpdateInput {
+    status?: PlanningExecutionStatus;
+    startedAt?: Date | null;
+    endedAt?: Date | null;
+    stoppedAt?: Date | null;
+    stopRequestedAt?: Date | null;
+    exitCode?: number | null;
+    errorMessage?: string | null;
+    bestSolutionId?: string | null;
+}
+
+export interface PlanningExecutionLogInput {
+    executionId: string;
+    level: PlanningExecutionLogLevel;
+    stream?: string | null;
+    message: string;
+    executionStatus?: PlanningExecutionStatus | null;
 }
 
 let pool: Pool | null = null;
@@ -359,11 +488,54 @@ function mapPlanningSolutionVersionRow(row: PlanningSolutionVersionRow): Plannin
         id: row.id,
         planningId: row.planning_id,
         userId: row.user_id,
+        executionId: row.execution_id ?? undefined,
+        versionNumber: row.version_number ?? undefined,
+        solutionKind: row.solution_kind ?? undefined,
+        status: row.status ?? undefined,
+        objectiveValue: row.objective_value === null || row.objective_value === undefined ? undefined : Number(row.objective_value),
         solver: row.solver,
         sourceSnapshot: row.source_snapshot ?? undefined,
         solutionOutput: row.solution_output,
         solutionWarnings: parseJson<string[]>(row.solution_warnings, []),
+        rawOutput: row.raw_output ?? undefined,
+        decodedSolutionJson: parseJson<unknown | undefined>(row.decoded_solution_json, undefined),
+        reportJson: parseJson<unknown | undefined>(row.report_json, undefined),
+        decodeError: row.decode_error ?? undefined,
         solveTimeMs: row.solve_time_ms ?? undefined,
+        createdAt: toIsoDate(row.created_at)
+    };
+}
+
+function mapPlanningExecutionRow(row: PlanningExecutionRow): PlanningExecutionRecord {
+    return {
+        id: row.id,
+        planningId: row.planning_id,
+        userId: row.user_id,
+        status: row.status,
+        solver: row.solver,
+        sourceSnapshot: row.source_snapshot ?? undefined,
+        startedAt: row.started_at ? toIsoDate(row.started_at) : undefined,
+        endedAt: row.ended_at ? toIsoDate(row.ended_at) : undefined,
+        stoppedAt: row.stopped_at ? toIsoDate(row.stopped_at) : undefined,
+        stopRequestedAt: row.stop_requested_at ? toIsoDate(row.stop_requested_at) : undefined,
+        exitCode: row.exit_code ?? undefined,
+        errorMessage: row.error_message ?? undefined,
+        bestSolutionId: row.best_solution_id ?? undefined,
+        createdBy: row.created_by,
+        createdAt: toIsoDate(row.created_at),
+        updatedAt: toIsoDate(row.updated_at)
+    };
+}
+
+function mapPlanningExecutionLogRow(row: PlanningExecutionLogRow): PlanningExecutionLogRecord {
+    return {
+        id: row.id,
+        executionId: row.execution_id,
+        sequence: Number(row.sequence),
+        level: row.level,
+        stream: row.stream ?? undefined,
+        message: row.message,
+        executionStatus: row.execution_status ?? undefined,
         createdAt: toIsoDate(row.created_at)
     };
 }
@@ -525,21 +697,76 @@ async function ensureSchema(): Promise<void> {
     `);
 
     await database.query(`
+        CREATE TABLE IF NOT EXISTS planning_executions (
+            id VARCHAR(36) PRIMARY KEY,
+            planning_id VARCHAR(36) NOT NULL,
+            user_id VARCHAR(36) NOT NULL,
+            status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+            solver VARCHAR(191) NOT NULL,
+            source_snapshot LONGTEXT NULL,
+            started_at DATETIME NULL,
+            ended_at DATETIME NULL,
+            stopped_at DATETIME NULL,
+            stop_requested_at DATETIME NULL,
+            exit_code INT NULL,
+            error_message TEXT NULL,
+            best_solution_id VARCHAR(36) NULL,
+            created_by VARCHAR(36) NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            CONSTRAINT fk_planning_executions_planning FOREIGN KEY (planning_id) REFERENCES plannings(id) ON DELETE CASCADE,
+            CONSTRAINT fk_planning_executions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_planning_executions_planning_status (planning_id, status),
+            INDEX idx_planning_executions_user_started (user_id, started_at),
+            INDEX idx_planning_executions_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await database.query(`
         CREATE TABLE IF NOT EXISTS planning_solution_versions (
             id VARCHAR(36) PRIMARY KEY,
             planning_id VARCHAR(36) NOT NULL,
             user_id VARCHAR(36) NOT NULL,
+            execution_id VARCHAR(36) NULL,
+            version_number INT NULL,
+            solution_kind VARCHAR(32) NULL,
+            status VARCHAR(32) NULL,
+            objective_value DOUBLE NULL,
             solver VARCHAR(191) NOT NULL,
             source_snapshot LONGTEXT NULL,
             solution_output LONGTEXT NOT NULL,
             solution_warnings JSON NULL,
+            raw_output LONGTEXT NULL,
+            decoded_solution_json JSON NULL,
+            report_json JSON NULL,
+            decode_error TEXT NULL,
             solve_time_ms INT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             CONSTRAINT fk_solution_versions_planning FOREIGN KEY (planning_id) REFERENCES plannings(id) ON DELETE CASCADE,
             CONSTRAINT fk_solution_versions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            CONSTRAINT fk_solution_versions_execution FOREIGN KEY (execution_id) REFERENCES planning_executions(id) ON DELETE SET NULL,
             INDEX idx_solution_versions_planning_id (planning_id),
             INDEX idx_solution_versions_user_id (user_id),
-            INDEX idx_solution_versions_created_at (created_at)
+            INDEX idx_solution_versions_created_at (created_at),
+            INDEX idx_solution_versions_execution_version (execution_id, version_number),
+            INDEX idx_solution_versions_execution_status (execution_id, status),
+            INDEX idx_solution_versions_planning_execution (planning_id, execution_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await database.query(`
+        CREATE TABLE IF NOT EXISTS planning_execution_logs (
+            id VARCHAR(36) PRIMARY KEY,
+            execution_id VARCHAR(36) NOT NULL,
+            sequence INT NOT NULL,
+            level VARCHAR(32) NOT NULL,
+            stream VARCHAR(32) NULL,
+            message LONGTEXT NOT NULL,
+            execution_status VARCHAR(32) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_execution_logs_execution FOREIGN KEY (execution_id) REFERENCES planning_executions(id) ON DELETE CASCADE,
+            INDEX idx_execution_logs_execution_sequence (execution_id, sequence),
+            INDEX idx_execution_logs_created_at (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
@@ -602,6 +829,53 @@ async function ensureSchema(): Promise<void> {
     }
     if (!(await columnExists('plannings', 'badges'))) {
         await database.query('ALTER TABLE plannings ADD COLUMN badges JSON NULL AFTER wizard_data');
+    }
+
+    // --- Migrations for execution tracking tables ---
+    if (!(await columnExists('planning_solution_versions', 'execution_id'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD COLUMN execution_id VARCHAR(36) NULL AFTER user_id');
+    }
+    if (!(await columnExists('planning_solution_versions', 'version_number'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD COLUMN version_number INT NULL AFTER execution_id');
+    }
+    if (!(await columnExists('planning_solution_versions', 'solution_kind'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD COLUMN solution_kind VARCHAR(32) NULL AFTER version_number');
+    }
+    if (!(await columnExists('planning_solution_versions', 'status'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD COLUMN status VARCHAR(32) NULL AFTER solution_kind');
+    }
+    if (!(await columnExists('planning_solution_versions', 'objective_value'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD COLUMN objective_value DOUBLE NULL AFTER status');
+    }
+    if (!(await columnExists('planning_solution_versions', 'raw_output'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD COLUMN raw_output LONGTEXT NULL AFTER solution_warnings');
+    }
+    if (!(await columnExists('planning_solution_versions', 'decoded_solution_json'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD COLUMN decoded_solution_json JSON NULL AFTER raw_output');
+    }
+    if (!(await columnExists('planning_solution_versions', 'report_json'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD COLUMN report_json JSON NULL AFTER decoded_solution_json');
+    }
+    if (!(await columnExists('planning_solution_versions', 'decode_error'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD COLUMN decode_error TEXT NULL AFTER report_json');
+    }
+    if (!(await indexExists('planning_executions', 'idx_planning_executions_planning_status'))) {
+        await database.query('ALTER TABLE planning_executions ADD INDEX idx_planning_executions_planning_status (planning_id, status)');
+    }
+    if (!(await indexExists('planning_executions', 'idx_planning_executions_user_started'))) {
+        await database.query('ALTER TABLE planning_executions ADD INDEX idx_planning_executions_user_started (user_id, started_at)');
+    }
+    if (!(await indexExists('planning_execution_logs', 'idx_execution_logs_execution_sequence'))) {
+        await database.query('ALTER TABLE planning_execution_logs ADD INDEX idx_execution_logs_execution_sequence (execution_id, sequence)');
+    }
+    if (!(await indexExists('planning_solution_versions', 'idx_solution_versions_execution_version'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD INDEX idx_solution_versions_execution_version (execution_id, version_number)');
+    }
+    if (!(await indexExists('planning_solution_versions', 'idx_solution_versions_execution_status'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD INDEX idx_solution_versions_execution_status (execution_id, status)');
+    }
+    if (!(await indexExists('planning_solution_versions', 'idx_solution_versions_planning_execution'))) {
+        await database.query('ALTER TABLE planning_solution_versions ADD INDEX idx_solution_versions_planning_execution (planning_id, execution_id)');
     }
 }
 
@@ -935,6 +1209,57 @@ const PLANNING_SELECT = `
     plannings.last_error
 `;
 
+const EXECUTION_ACTIVE_STATUSES: PlanningExecutionStatus[] = [
+    'PENDING',
+    'RUNNING',
+    'SOLUTION_FOUND',
+    'OPTIMIZING',
+    'STOP_REQUESTED',
+    'STOPPING'
+];
+
+const EXECUTION_SELECT = `
+    id,
+    planning_id,
+    user_id,
+    status,
+    solver,
+    source_snapshot,
+    started_at,
+    ended_at,
+    stopped_at,
+    stop_requested_at,
+    exit_code,
+    error_message,
+    best_solution_id,
+    created_by,
+    created_at,
+    updated_at
+`;
+
+const SOLUTION_VERSION_SELECT = `
+    id,
+    planning_id,
+    user_id,
+    execution_id,
+    version_number,
+    solution_kind,
+    status,
+    objective_value,
+    solver,
+    source_snapshot,
+    solution_output,
+    solution_warnings,
+    raw_output,
+    decoded_solution_json,
+    report_json,
+    decode_error,
+    solve_time_ms,
+    created_at
+`;
+
+type DatabaseExecutor = Pool | PoolConnection;
+
 export async function listPlannings(userId: string): Promise<PlanningRecord[]> {
     const database = getPool();
     const [rows] = await database.execute<PlanningRow[]>(`
@@ -1081,58 +1406,483 @@ export async function deletePlanning(id: string, userId: string): Promise<boolea
     return result.affectedRows > 0;
 }
 
-export async function createPlanningSolutionVersion(
-    userId: string,
-    input: PlanningSolutionVersionInput
-): Promise<PlanningSolutionVersionRecord> {
-    const database = getPool();
-    const id = randomUUID();
+async function getPlanningExecutionByIdUsing(
+    database: DatabaseExecutor,
+    id: string,
+    userId: string
+): Promise<PlanningExecutionRecord | null> {
+    const [rows] = await database.execute<PlanningExecutionRow[]>(`
+        SELECT ${EXECUTION_SELECT}
+        FROM planning_executions
+        WHERE id = ?
+          AND user_id = ?
+        LIMIT 1
+    `, [id, userId]);
 
-    await database.execute<ResultSetHeader>(`
-        INSERT INTO planning_solution_versions (
-            id,
-            planning_id,
-            user_id,
-            solver,
-            source_snapshot,
-            solution_output,
-            solution_warnings,
-            solve_time_ms
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-        id,
-        input.planningId,
-        userId,
-        input.solver,
-        input.sourceSnapshot ?? null,
-        input.solutionOutput,
-        input.solutionWarnings ? JSON.stringify(input.solutionWarnings) : null,
-        input.solveTimeMs ?? null
-    ]);
+    return rows[0] ? mapPlanningExecutionRow(rows[0]) : null;
+}
 
+async function getPlanningSolutionVersionByIdUsing(
+    database: DatabaseExecutor,
+    id: string,
+    userId: string
+): Promise<PlanningSolutionVersionRecord | null> {
     const [rows] = await database.execute<PlanningSolutionVersionRow[]>(`
-        SELECT
-            id,
-            planning_id,
-            user_id,
-            solver,
-            source_snapshot,
-            solution_output,
-            solution_warnings,
-            solve_time_ms,
-            created_at
+        SELECT ${SOLUTION_VERSION_SELECT}
         FROM planning_solution_versions
         WHERE id = ?
           AND user_id = ?
         LIMIT 1
     `, [id, userId]);
 
-    if (!rows[0]) {
-        throw new Error('The planning solution version was created but could not be reloaded.');
+    return rows[0] ? mapPlanningSolutionVersionRow(rows[0]) : null;
+}
+
+export async function createPlanningExecutionLocked(
+    userId: string,
+    input: PlanningExecutionInput
+): Promise<
+    | { ok: true; execution: PlanningExecutionRecord }
+    | { ok: false; reason: 'NOT_FOUND' | 'ACTIVE_EXISTS'; activeExecutionId?: string }
+> {
+    const database = getPool();
+    const connection = await database.getConnection();
+    const id = randomUUID();
+
+    try {
+        await connection.beginTransaction();
+
+        const [planningRows] = await connection.execute<RowDataPacket[]>(`
+            SELECT id
+            FROM plannings
+            WHERE id = ?
+              AND user_id = ?
+            LIMIT 1
+            FOR UPDATE
+        `, [input.planningId, userId]);
+
+        if (!planningRows[0]) {
+            await connection.rollback();
+            return { ok: false, reason: 'NOT_FOUND' };
+        }
+
+        const activePlaceholders = EXECUTION_ACTIVE_STATUSES.map(() => '?').join(', ');
+        const [activeRows] = await connection.execute<RowDataPacket[]>(`
+            SELECT id
+            FROM planning_executions
+            WHERE planning_id = ?
+              AND user_id = ?
+              AND status IN (${activePlaceholders})
+            ORDER BY created_at DESC
+            LIMIT 1
+            FOR UPDATE
+        `, [input.planningId, userId, ...EXECUTION_ACTIVE_STATUSES]);
+
+        if (activeRows[0]) {
+            await connection.rollback();
+            return {
+                ok: false,
+                reason: 'ACTIVE_EXISTS',
+                activeExecutionId: String(activeRows[0].id)
+            };
+        }
+
+        await connection.execute<ResultSetHeader>(`
+            INSERT INTO planning_executions (
+                id,
+                planning_id,
+                user_id,
+                status,
+                solver,
+                source_snapshot,
+                created_by
+            )
+            VALUES (?, ?, ?, 'PENDING', ?, ?, ?)
+        `, [
+            id,
+            input.planningId,
+            userId,
+            input.solver,
+            input.sourceSnapshot ?? null,
+            input.createdBy
+        ]);
+
+        const execution = await getPlanningExecutionByIdUsing(connection, id, userId);
+        if (!execution) {
+            throw new Error('The execution was created but could not be reloaded.');
+        }
+
+        await connection.commit();
+        return { ok: true, execution };
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+export async function updatePlanningExecution(
+    id: string,
+    userId: string,
+    input: PlanningExecutionUpdateInput
+): Promise<PlanningExecutionRecord | null> {
+    const fields: string[] = [];
+    const params: Array<string | number | Date | null> = [];
+
+    if (input.status !== undefined) {
+        fields.push('status = ?');
+        params.push(input.status);
+    }
+    if (input.startedAt !== undefined) {
+        fields.push('started_at = ?');
+        params.push(input.startedAt);
+    }
+    if (input.endedAt !== undefined) {
+        fields.push('ended_at = ?');
+        params.push(input.endedAt);
+    }
+    if (input.stoppedAt !== undefined) {
+        fields.push('stopped_at = ?');
+        params.push(input.stoppedAt);
+    }
+    if (input.stopRequestedAt !== undefined) {
+        fields.push('stop_requested_at = ?');
+        params.push(input.stopRequestedAt);
+    }
+    if (input.exitCode !== undefined) {
+        fields.push('exit_code = ?');
+        params.push(input.exitCode);
+    }
+    if (input.errorMessage !== undefined) {
+        fields.push('error_message = ?');
+        params.push(input.errorMessage);
+    }
+    if (input.bestSolutionId !== undefined) {
+        fields.push('best_solution_id = ?');
+        params.push(input.bestSolutionId);
     }
 
-    return mapPlanningSolutionVersionRow(rows[0]);
+    if (fields.length === 0) {
+        return getPlanningExecutionById(id, userId);
+    }
+
+    const database = getPool();
+    params.push(id, userId);
+    const [result] = await database.execute<ResultSetHeader>(`
+        UPDATE planning_executions
+        SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND user_id = ?
+    `, params);
+
+    if (result.affectedRows === 0) {
+        return null;
+    }
+
+    return getPlanningExecutionById(id, userId);
+}
+
+export async function getPlanningExecutionById(
+    id: string,
+    userId: string
+): Promise<PlanningExecutionRecord | null> {
+    return getPlanningExecutionByIdUsing(getPool(), id, userId);
+}
+
+export async function listPlanningExecutions(
+    planningId: string,
+    userId: string,
+    options?: { activeOnly?: boolean; limit?: number }
+): Promise<PlanningExecutionRecord[]> {
+    const database = getPool();
+    const params: Array<string | number> = [planningId, userId];
+    const activeClause = options?.activeOnly
+        ? `AND status IN (${EXECUTION_ACTIVE_STATUSES.map(() => '?').join(', ')})`
+        : '';
+    if (options?.activeOnly) {
+        params.push(...EXECUTION_ACTIVE_STATUSES);
+    }
+    const limit = Math.max(1, Math.min(100, Math.floor(options?.limit ?? 25)));
+
+    const [rows] = await database.execute<PlanningExecutionRow[]>(`
+        SELECT ${EXECUTION_SELECT}
+        FROM planning_executions
+        WHERE planning_id = ?
+          AND user_id = ?
+          ${activeClause}
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+    `, params);
+
+    return rows.map(mapPlanningExecutionRow);
+}
+
+export async function getLatestPlanningExecution(
+    planningId: string,
+    userId: string
+): Promise<PlanningExecutionRecord | null> {
+    const executions = await listPlanningExecutions(planningId, userId, { limit: 1 });
+    return executions[0] ?? null;
+}
+
+export async function appendPlanningExecutionLog(input: PlanningExecutionLogInput): Promise<PlanningExecutionLogRecord> {
+    const database = getPool();
+    const connection = await database.getConnection();
+    const id = randomUUID();
+
+    try {
+        await connection.beginTransaction();
+        await connection.execute<RowDataPacket[]>(`
+            SELECT id
+            FROM planning_executions
+            WHERE id = ?
+            LIMIT 1
+            FOR UPDATE
+        `, [input.executionId]);
+
+        const [sequenceRows] = await connection.execute<ExistsRow[]>(`
+            SELECT COALESCE(MAX(sequence), 0) + 1 AS count
+            FROM planning_execution_logs
+            WHERE execution_id = ?
+        `, [input.executionId]);
+        const sequence = Number(sequenceRows[0]?.count ?? 1);
+
+        await connection.execute<ResultSetHeader>(`
+            INSERT INTO planning_execution_logs (
+                id,
+                execution_id,
+                sequence,
+                level,
+                stream,
+                message,
+                execution_status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+            id,
+            input.executionId,
+            sequence,
+            input.level,
+            input.stream ?? null,
+            input.message,
+            input.executionStatus ?? null
+        ]);
+
+        const [rows] = await connection.execute<PlanningExecutionLogRow[]>(`
+            SELECT id, execution_id, sequence, level, stream, message, execution_status, created_at
+            FROM planning_execution_logs
+            WHERE id = ?
+            LIMIT 1
+        `, [id]);
+
+        if (!rows[0]) {
+            throw new Error('The execution log was created but could not be reloaded.');
+        }
+
+        await connection.commit();
+        return mapPlanningExecutionLogRow(rows[0]);
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+export async function listPlanningExecutionLogs(
+    planningId: string,
+    executionId: string,
+    userId: string,
+    options?: { afterSequence?: number; limit?: number }
+): Promise<PlanningExecutionLogRecord[]> {
+    const database = getPool();
+    const params: Array<string | number> = [executionId, planningId, userId];
+    const afterClause = typeof options?.afterSequence === 'number' && Number.isFinite(options.afterSequence)
+        ? 'AND planning_execution_logs.sequence > ?'
+        : '';
+    if (afterClause) {
+        params.push(Math.max(0, Math.floor(options!.afterSequence!)));
+    }
+    const limit = Math.max(1, Math.min(5_000, Math.floor(options?.limit ?? 1_000)));
+
+    const [rows] = await database.execute<PlanningExecutionLogRow[]>(`
+        SELECT
+            planning_execution_logs.id,
+            planning_execution_logs.execution_id,
+            planning_execution_logs.sequence,
+            planning_execution_logs.level,
+            planning_execution_logs.stream,
+            planning_execution_logs.message,
+            planning_execution_logs.execution_status,
+            planning_execution_logs.created_at
+        FROM planning_execution_logs
+        INNER JOIN planning_executions ON planning_executions.id = planning_execution_logs.execution_id
+        WHERE planning_execution_logs.execution_id = ?
+          AND planning_executions.planning_id = ?
+          AND planning_executions.user_id = ?
+          ${afterClause}
+        ORDER BY planning_execution_logs.sequence ASC
+        LIMIT ${limit}
+    `, params);
+
+    return rows.map(mapPlanningExecutionLogRow);
+}
+
+export async function markOrphanedPlanningExecutionsUnknown(): Promise<number> {
+    const database = getPool();
+    const placeholders = EXECUTION_ACTIVE_STATUSES.map(() => '?').join(', ');
+    const [result] = await database.execute<ResultSetHeader>(`
+        UPDATE planning_executions
+        SET status = 'UNKNOWN',
+            ended_at = COALESCE(ended_at, CURRENT_TIMESTAMP),
+            error_message = COALESCE(error_message, 'Le serveur a redémarré pendant cette exécution. Le processus MiniZinc n’est plus attaché.')
+        WHERE status IN (${placeholders})
+    `, EXECUTION_ACTIVE_STATUSES);
+    return result.affectedRows;
+}
+
+export async function createPlanningSolutionVersion(
+    userId: string,
+    input: PlanningSolutionVersionInput
+): Promise<PlanningSolutionVersionRecord> {
+    const database = getPool();
+    const connection = input.executionId ? await database.getConnection() : null;
+    const executor = connection ?? database;
+    const id = randomUUID();
+
+    try {
+        if (connection) {
+            await connection.beginTransaction();
+        }
+
+        let versionNumber = input.versionNumber ?? null;
+        if (!versionNumber && input.executionId) {
+            const [versionRows] = await executor.execute<ExistsRow[]>(`
+                SELECT COALESCE(MAX(version_number), 0) + 1 AS count
+                FROM planning_solution_versions
+                WHERE execution_id = ?
+            `, [input.executionId]);
+            versionNumber = Number(versionRows[0]?.count ?? 1);
+        }
+
+        const initialStatus = input.status
+            ?? (input.decodeError ? 'DECODE_FAILED' : 'INTERMEDIATE');
+        const initialKind = input.solutionKind
+            ?? (initialStatus === 'DECODE_FAILED' ? 'intermediate' : 'intermediate');
+
+        await executor.execute<ResultSetHeader>(`
+            INSERT INTO planning_solution_versions (
+                id,
+                planning_id,
+                user_id,
+                execution_id,
+                version_number,
+                solution_kind,
+                status,
+                objective_value,
+                solver,
+                source_snapshot,
+                solution_output,
+                solution_warnings,
+                raw_output,
+                decoded_solution_json,
+                report_json,
+                decode_error,
+                solve_time_ms
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            id,
+            input.planningId,
+            userId,
+            input.executionId ?? null,
+            versionNumber,
+            initialKind,
+            initialStatus,
+            input.objectiveValue ?? null,
+            input.solver,
+            input.sourceSnapshot ?? null,
+            input.solutionOutput,
+            input.solutionWarnings ? JSON.stringify(input.solutionWarnings) : null,
+            input.rawOutput ?? input.solutionOutput,
+            input.decodedSolutionJson === undefined ? null : JSON.stringify(input.decodedSolutionJson),
+            input.reportJson === undefined ? null : JSON.stringify(input.reportJson),
+            input.decodeError ?? null,
+            input.solveTimeMs ?? null
+        ]);
+
+        if (input.executionId && !input.decodeError) {
+            const [executionRows] = await executor.execute<PlanningExecutionRow[]>(`
+                SELECT ${EXECUTION_SELECT}
+                FROM planning_executions
+                WHERE id = ?
+                  AND user_id = ?
+                LIMIT 1
+                FOR UPDATE
+            `, [input.executionId, userId]);
+            const execution = executionRows[0];
+            let shouldPromote = !execution?.best_solution_id;
+
+            if (execution?.best_solution_id) {
+                const currentBest = await getPlanningSolutionVersionByIdUsing(executor, execution.best_solution_id, userId);
+                const currentObjective = currentBest?.objectiveValue;
+                const nextObjective = input.objectiveValue ?? null;
+                if (nextObjective !== null && currentObjective !== undefined) {
+                    shouldPromote = nextObjective < currentObjective;
+                } else if (nextObjective !== null && currentObjective === undefined) {
+                    shouldPromote = true;
+                } else if (nextObjective === null && currentObjective === undefined) {
+                    shouldPromote = true;
+                }
+            }
+
+            if (shouldPromote) {
+                if (execution?.best_solution_id) {
+                    await executor.execute<ResultSetHeader>(`
+                        UPDATE planning_solution_versions
+                        SET status = 'INTERMEDIATE',
+                            solution_kind = 'intermediate'
+                        WHERE id = ?
+                          AND status = 'BEST_CURRENT'
+                    `, [execution.best_solution_id]);
+                }
+
+                await executor.execute<ResultSetHeader>(`
+                    UPDATE planning_solution_versions
+                    SET status = 'BEST_CURRENT',
+                        solution_kind = 'best_current'
+                    WHERE id = ?
+                `, [id]);
+
+                await executor.execute<ResultSetHeader>(`
+                    UPDATE planning_executions
+                    SET best_solution_id = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                      AND user_id = ?
+                `, [id, input.executionId, userId]);
+            }
+        }
+
+        const solution = await getPlanningSolutionVersionByIdUsing(executor, id, userId);
+        if (!solution) {
+            throw new Error('The planning solution version was created but could not be reloaded.');
+        }
+
+        if (connection) {
+            await connection.commit();
+        }
+
+        return solution;
+    } catch (error) {
+        if (connection) {
+            await connection.rollback();
+        }
+        throw error;
+    } finally {
+        connection?.release();
+    }
 }
 
 export async function listPlanningSolutionVersions(
@@ -1141,21 +1891,34 @@ export async function listPlanningSolutionVersions(
 ): Promise<PlanningSolutionVersionRecord[]> {
     const database = getPool();
     const [rows] = await database.execute<PlanningSolutionVersionRow[]>(`
-        SELECT
-            id,
-            planning_id,
-            user_id,
-            solver,
-            source_snapshot,
-            solution_output,
-            solution_warnings,
-            solve_time_ms,
-            created_at
+        SELECT ${SOLUTION_VERSION_SELECT}
         FROM planning_solution_versions
         WHERE planning_id = ?
           AND user_id = ?
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, COALESCE(version_number, 0) DESC
     `, [planningId, userId]);
+
+    return rows.map(mapPlanningSolutionVersionRow);
+}
+
+export async function listPlanningSolutions(
+    planningId: string,
+    userId: string,
+    options?: { executionId?: string }
+): Promise<PlanningSolutionVersionRecord[]> {
+    const database = getPool();
+    const params = options?.executionId
+        ? [planningId, userId, options.executionId]
+        : [planningId, userId];
+    const executionClause = options?.executionId ? 'AND execution_id = ?' : '';
+    const [rows] = await database.execute<PlanningSolutionVersionRow[]>(`
+        SELECT ${SOLUTION_VERSION_SELECT}
+        FROM planning_solution_versions
+        WHERE planning_id = ?
+          AND user_id = ?
+          ${executionClause}
+        ORDER BY COALESCE(version_number, 0) DESC, created_at DESC
+    `, params);
 
     return rows.map(mapPlanningSolutionVersionRow);
 }
@@ -1167,16 +1930,7 @@ export async function getPlanningSolutionVersionById(
 ): Promise<PlanningSolutionVersionRecord | null> {
     const database = getPool();
     const [rows] = await database.execute<PlanningSolutionVersionRow[]>(`
-        SELECT
-            id,
-            planning_id,
-            user_id,
-            solver,
-            source_snapshot,
-            solution_output,
-            solution_warnings,
-            solve_time_ms,
-            created_at
+        SELECT ${SOLUTION_VERSION_SELECT}
         FROM planning_solution_versions
         WHERE id = ?
           AND planning_id = ?
@@ -1185,6 +1939,62 @@ export async function getPlanningSolutionVersionById(
     `, [id, planningId, userId]);
 
     return rows[0] ? mapPlanningSolutionVersionRow(rows[0]) : null;
+}
+
+export async function finalizePlanningExecutionSolutions(
+    userId: string,
+    executionId: string,
+    finalStatus: PlanningExecutionStatus
+): Promise<PlanningSolutionVersionRecord | null> {
+    const database = getPool();
+    const connection = await database.getConnection();
+
+    try {
+        await connection.beginTransaction();
+        const [executionRows] = await connection.execute<PlanningExecutionRow[]>(`
+            SELECT ${EXECUTION_SELECT}
+            FROM planning_executions
+            WHERE id = ?
+              AND user_id = ?
+            LIMIT 1
+            FOR UPDATE
+        `, [executionId, userId]);
+        const execution = executionRows[0];
+        if (!execution?.best_solution_id) {
+            await connection.commit();
+            return null;
+        }
+
+        const finalSolutionStatus: PlanningSolutionStatus =
+            finalStatus === 'OPTIMAL'
+                ? 'OPTIMAL'
+                : finalStatus === 'STOPPED'
+                    ? 'STOPPED'
+                    : 'FINAL';
+        const finalSolutionKind: PlanningSolutionKind =
+            finalStatus === 'OPTIMAL'
+                ? 'optimal'
+                : finalStatus === 'STOPPED'
+                    ? 'stopped'
+                    : 'final';
+
+        await connection.execute<ResultSetHeader>(`
+            UPDATE planning_solution_versions
+            SET status = ?,
+                solution_kind = ?
+            WHERE id = ?
+              AND user_id = ?
+        `, [finalSolutionStatus, finalSolutionKind, execution.best_solution_id, userId]);
+
+        const best = await getPlanningSolutionVersionByIdUsing(connection, execution.best_solution_id, userId);
+        await connection.commit();
+        return best;
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
 }
 
 export async function deletePlanningSolutionVersion(

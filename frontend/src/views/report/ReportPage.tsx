@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { AppLayout, Topbar } from '../../components/layout/AppLayout';
 import { Button } from '../../components/ui';
 import { useResponsive } from '../../hooks/useResponsive';
+import { api } from '../../lib/api';
 import {
   fetchReport,
   getReportVersionSelection,
@@ -11,6 +12,8 @@ import {
   downloadMarkdown,
   type PlanningReport,
 } from '../../lib/reportApi';
+import { readCurrentRoute } from '../../lib/routing';
+import type { Planning } from '../../types';
 import { buildColorMap } from './palette';
 import { ReportCalendarView } from './ReportCalendarView';
 import { ReportTableView } from './ReportTableView';
@@ -37,9 +40,13 @@ function formatMs(ms: number): string {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export const ReportPage: React.FC = () => {
-  const { selectedPlanning, navigate } = useApp();
+  const { selectedPlanning, navigate, setSelectedPlanning } = useApp();
   const { isMobile, isCompact } = useResponsive();
+  const routePlanningId = readCurrentRoute().planningId;
 
+  const [routePlanning, setRoutePlanning] = useState<Planning | null>(null);
+  const [planningLoading, setPlanningLoading] = useState(false);
+  const [planningLoadError, setPlanningLoadError] = useState<string | null>(null);
   const [report, setReport] = useState<PlanningReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,15 +54,58 @@ export const ReportPage: React.FC = () => {
   const [customColors, setCustomColors] = useState<Record<string, string>>({});
   const [exporting, setExporting] = useState<'print' | 'markdown' | null>(null);
   const [reportVersionId, setReportVersionId] = useState<string | undefined>(undefined);
+  const activePlanning = routePlanningId
+    ? (selectedPlanning?.id === routePlanningId ? selectedPlanning : routePlanning)
+    : selectedPlanning;
+  const activePlanningId = activePlanning?.id ?? routePlanningId;
+
+  useEffect(() => {
+    if (!routePlanningId) {
+      setRoutePlanning(null);
+      setPlanningLoadError(null);
+      return;
+    }
+
+    if (selectedPlanning?.id === routePlanningId) {
+      setRoutePlanning(null);
+      setPlanningLoadError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setPlanningLoading(true);
+    setPlanningLoadError(null);
+
+    api.get<{ data: { planning: Planning } }>(`/api/plannings/${routePlanningId}`)
+      .then(response => {
+        if (cancelled) return;
+        const planning = response.data.data.planning;
+        setRoutePlanning(planning);
+        setSelectedPlanning(planning);
+      })
+      .catch((e: any) => {
+        if (cancelled) return;
+        setPlanningLoadError(e?.response?.data?.error?.message ?? e?.message ?? 'Planification introuvable');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPlanningLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routePlanningId, selectedPlanning?.id, setSelectedPlanning]);
 
   // Fetch report from backend on mount / planning change
   useEffect(() => {
-    if (!selectedPlanning?.id) return;
-    const versionId = getReportVersionSelection(selectedPlanning.id);
+    if (!activePlanningId) return;
+    const versionId = getReportVersionSelection(activePlanningId);
     setReportVersionId(versionId);
     setLoading(true);
     setError(null);
-    fetchReport(selectedPlanning.id, versionId)
+    fetchReport(activePlanningId, versionId)
       .then(r => { setReport(r); setCustomColors({}); })
       .catch(async (e: any) => {
         const status = e?.response?.status;
@@ -65,12 +115,12 @@ export const ReportPage: React.FC = () => {
             status === 404 ||
             backendCode === 'NOT_FOUND' ||
             backendCode === 'NO_SOLUTION'
-          );
+        );
         if (shouldFallbackToCurrent) {
           try {
-            setReportVersionSelection(selectedPlanning.id, undefined);
+            setReportVersionSelection(activePlanningId, undefined);
             setReportVersionId(undefined);
-            const fallback = await fetchReport(selectedPlanning.id, undefined);
+            const fallback = await fetchReport(activePlanningId, undefined);
             setReport(fallback);
             setCustomColors({});
             return;
@@ -86,7 +136,7 @@ export const ReportPage: React.FC = () => {
         setError(e?.response?.data?.error?.message ?? e?.message ?? 'Erreur de chargement');
       })
       .finally(() => setLoading(false));
-  }, [selectedPlanning?.id]);
+  }, [activePlanningId]);
 
   const baseNames = useMemo(
     () => report?.stats.activityTypes ?? [],
@@ -99,33 +149,33 @@ export const ReportPage: React.FC = () => {
   );
 
   const handlePrint = useCallback(async () => {
-    if (!selectedPlanning?.id) return;
+    if (!activePlanningId) return;
     setExporting('print');
     try {
-      await openPrintView(selectedPlanning.id, reportVersionId);
+      await openPrintView(activePlanningId, reportVersionId);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Impossible d\'ouvrir l\'aperçu';
       alert(msg);
     } finally {
       setExporting(null);
     }
-  }, [reportVersionId, selectedPlanning?.id]);
+  }, [activePlanningId, reportVersionId]);
 
   const handleMarkdown = useCallback(async () => {
-    if (!selectedPlanning?.id || !report) return;
+    if (!activePlanningId || !report) return;
     setExporting('markdown');
     try {
-      await downloadMarkdown(selectedPlanning.id, report.title, reportVersionId);
+      await downloadMarkdown(activePlanningId, report.title, reportVersionId);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Erreur de téléchargement';
       alert(msg);
     } finally {
       setExporting(null);
     }
-  }, [reportVersionId, selectedPlanning?.id, report]);
+  }, [activePlanningId, reportVersionId, report]);
 
   // ── No planning selected ──
-  if (!selectedPlanning) {
+  if (!activePlanningId) {
     return (
       <AppLayout>
         <Topbar
@@ -148,10 +198,37 @@ export const ReportPage: React.FC = () => {
     );
   }
 
+  if (!activePlanning) {
+    return (
+      <AppLayout>
+        <Topbar
+          title="Rapport de planification"
+          subtitle={planningLoading ? 'Chargement de la planification...' : 'Planification introuvable'}
+          actions={
+            <Button variant="secondary" size="sm" onClick={() => navigate('plannings')}>
+              ← Retour
+            </Button>
+          }
+        />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>{planningLoadError ? '⚠' : '📄'}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              {planningLoadError ?? 'Chargement de la planification...'}
+            </div>
+            {planningLoadError && (
+              <Button variant="primary" onClick={() => navigate('plannings')}>Retour à mes planifications</Button>
+            )}
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
   // ── Export actions in topbar ──
   const exportActions = (
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-      <Button variant="secondary" size="sm" onClick={() => navigate('editor', { planning: selectedPlanning })}>
+      <Button variant="secondary" size="sm" onClick={() => navigate('editor', { planning: activePlanning })}>
         ← Retour
       </Button>
       <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', margin: '0 4px' }} />
@@ -178,10 +255,8 @@ export const ReportPage: React.FC = () => {
         size="sm"
         disabled={!report}
         onClick={() => {
-          if (selectedPlanning?.id) {
-            setReportVersionSelection(selectedPlanning.id, reportVersionId);
-          }
-          navigate('reportDesigner', { planning: selectedPlanning });
+          setReportVersionSelection(activePlanning.id, reportVersionId);
+          navigate('reportDesigner', { planning: activePlanning });
         }}
       >
         📐 Designer PDF
@@ -193,7 +268,7 @@ export const ReportPage: React.FC = () => {
     <AppLayout>
       <Topbar
         title="Rapport de planification"
-        subtitle={selectedPlanning.title}
+        subtitle={activePlanning.title}
         actions={exportActions}
       />
 
@@ -335,9 +410,8 @@ export const ReportPage: React.FC = () => {
               <div style={{ fontSize: 36 }}>⚠</div>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{error}</div>
               <Button variant="secondary" size="sm" onClick={() => {
-                if (!selectedPlanning?.id) return;
                 setLoading(true); setError(null);
-                fetchReport(selectedPlanning.id, reportVersionId)
+                fetchReport(activePlanning.id, reportVersionId)
                   .then(r => setReport(r))
                   .catch(e => setError(e?.message ?? 'Erreur'))
                   .finally(() => setLoading(false));
@@ -449,7 +523,7 @@ export const ReportPage: React.FC = () => {
               <div style={{ fontSize: 40 }}>📄</div>
               <div style={{ fontSize: 15, fontWeight: 600 }}>Aucun résultat disponible</div>
               <div style={{ fontSize: 13 }}>Cette planification n'a pas encore été résolue.</div>
-              <Button variant="primary" onClick={() => navigate('editor', { planning: selectedPlanning })}>
+              <Button variant="primary" onClick={() => navigate('editor', { planning: activePlanning })}>
                 Aller à l'éditeur
               </Button>
             </div>

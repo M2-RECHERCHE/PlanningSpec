@@ -553,6 +553,7 @@ export class PlanningSpecMiniZincGenerator {
     // Chaque ligne suit un préfixe : ACTIVITY | ASSIGNMENT | ROLE
     // ------------------------------------------------
     code += `output\n`;
+    code += `  [ "OBJECTIVE: penalty=" ++ show(penalty) ++ "\\n" ] ++\n`;
     code += `  [ "ACTIVITY: " ++ show(i) ++ " slot=" ++ show(start_time[i]) ++ " day=" ++ show(dayOf(start_time[i])) ++ "\\n" | i in ACT_INST ] ++\n`;
     code += `  [ if fix(assignment[i, r]) then "ASSIGNMENT: " ++ show(i) ++ " resource=" ++ show(r) ++ "\\n" else "" endif\n`;
     code += `    | i in ACT_INST, r in RESOURCE ] ++\n`;
