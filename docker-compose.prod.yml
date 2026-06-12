@@ -1,0 +1,66 @@
+services:
+  mysql:
+    restart: always
+    command:
+      - --default-time-zone=+00:00
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    deploy:
+      resources:
+        limits:
+          cpus: "${MYSQL_CPU_LIMIT:-2}"
+          memory: ${MYSQL_MEMORY_LIMIT:-4g}
+        reservations:
+          memory: ${MYSQL_MEMORY_RESERVATION:-1g}
+
+  backend:
+    environment:
+      NODE_ENV: production
+      APP_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:-https://example.com}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://example.com}
+      MINIZINC_ENABLE_TIMEOUT: "false"
+    restart: always
+    read_only: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          cpus: "${BACKEND_CPU_LIMIT:-4}"
+          memory: ${BACKEND_MEMORY_LIMIT:-6g}
+        reservations:
+          memory: ${BACKEND_MEMORY_RESERVATION:-1g}
+
+  planning-solver:
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          cpus: "${OPTAPLANNER_CPU_LIMIT:-4}"
+          memory: ${OPTAPLANNER_MEMORY_LIMIT:-6g}
+        reservations:
+          memory: ${OPTAPLANNER_MEMORY_RESERVATION:-1g}
+
+  frontend:
+    ports:
+      - "${FRONTEND_PORT_PUBLIC:-80}:8080"
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          cpus: "${FRONTEND_CPU_LIMIT:-1}"
+          memory: ${FRONTEND_MEMORY_LIMIT:-512m}

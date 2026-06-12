@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { URI } from 'langium';
 import { NodeFileSystem } from 'langium/node';
 import { createPlanningSpecServices } from 'planning-spec-language';
+import { env } from './env.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -70,7 +71,9 @@ function isUnknownOutput(stdout: string, stderrWarnings: string[]): boolean {
 }
 
 export async function analyzePlanningSource(source: string): Promise<{ ok: true; document: unknown; tmpDir: string } | { ok: false; error: SolveFailure; tmpDir: string }> {
-    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'planning-spec-'));
+    const workdir = env.minizinc.workdir || os.tmpdir();
+    mkdirSync(workdir, { recursive: true });
+    const tmpDir = mkdtempSync(path.join(workdir, 'planning-spec-'));
 
     try {
         const srcPath = path.join(tmpDir, 'model.planning');
@@ -217,7 +220,7 @@ export async function solvePlanningSource(source: string, solver: string): Promi
         const mznPath = generator.generateToFile(analysis.document as never, analysis.tmpDir);
         const t0 = Date.now();
         const { stdout, stderr } = await execFileAsync(
-            'minizinc',
+            env.minizinc.path,
             ['--solver', solver, mznPath],
             { maxBuffer: 8 * 1024 * 1024 }
         );

@@ -18,6 +18,7 @@ import {
 } from './db.js';
 import { buildPlanningReportFromOutput, parseSolutionOutput } from './report.js';
 import { prepareMiniZincModel } from './solver.js';
+import { env } from './env.js';
 import {
     buildMiniZincArgs,
     hasPlanningSolutionLines,
@@ -248,9 +249,9 @@ export class MiniZincExecutionService {
                 mznPath: prepared.mznPath,
                 timeLimitSeconds: requestedTimeLimitSeconds
             });
-            await this.log(executionId, 'info', 'system', `Commande: minizinc ${args.join(' ')}`, 'RUNNING');
+            await this.log(executionId, 'info', 'system', `Commande: ${env.minizinc.path} ${args.join(' ')}`, 'RUNNING');
 
-            const child = spawn('minizinc', args, {
+            const child = spawn(env.minizinc.path, args, {
                 stdio: ['ignore', 'pipe', 'pipe']
             });
             running.process = child;

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import mysql, { type Pool, type PoolConnection, type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
+import mysql, { type Connection, type Pool, type PoolConnection, type ResultSetHeader, type RowDataPacket } from 'mysql2/promise';
 
 import { env } from './env.js';
 
@@ -607,17 +607,27 @@ async function tableExists(tableName: string): Promise<boolean> {
 }
 
 async function ensureSchema(): Promise<void> {
-    const adminConnection = await mysql.createConnection({
-        host: env.mysql.host,
-        port: env.mysql.port,
-        user: env.mysql.user,
-        password: env.mysql.password
-    });
+    let adminConnection: Connection | null = null;
+    try {
+        adminConnection = await mysql.createConnection({
+            host: env.mysql.host,
+            port: env.mysql.port,
+            user: env.mysql.user,
+            password: env.mysql.password
+        });
 
-    await adminConnection.query(
-        `CREATE DATABASE IF NOT EXISTS ${mysql.escapeId(env.mysql.database)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
-    );
-    await adminConnection.end();
+        await adminConnection.query(
+            `CREATE DATABASE IF NOT EXISTS ${mysql.escapeId(env.mysql.database)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+        );
+    } catch (error) {
+        console.warn(
+            `Impossible de créer automatiquement la base "${env.mysql.database}". ` +
+            'La base doit déjà exister si l’utilisateur MySQL n’a pas le droit CREATE.',
+            error instanceof Error ? error.message : error
+        );
+    } finally {
+        await adminConnection?.end();
+    }
 
     pool = mysql.createPool({
         host: env.mysql.host,
@@ -1013,6 +1023,16 @@ export async function getSessionByTokenHash(tokenHash: string): Promise<AuthSess
 export async function deleteSessionByTokenHash(tokenHash: string): Promise<boolean> {
     const database = getPool();
     const [result] = await database.execute<ResultSetHeader>('DELETE FROM sessions WHERE token_hash = ?', [tokenHash]);
+    return result.affectedRows > 0;
+}
+
+export async function refreshSessionExpiryByTokenHash(tokenHash: string, expiresAt: Date): Promise<boolean> {
+    const database = getPool();
+    const [result] = await database.execute<ResultSetHeader>(`
+        UPDATE sessions
+        SET expires_at = ?
+        WHERE token_hash = ?
+    `, [expiresAt, tokenHash]);
     return result.affectedRows > 0;
 }
 

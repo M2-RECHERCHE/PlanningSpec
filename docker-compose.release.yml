@@ -1,0 +1,77 @@
+services:
+  mysql:
+    restart: unless-stopped
+
+  backend:
+    environment:
+      NODE_ENV: production
+      APP_ENV: release
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+    restart: unless-stopped
+    read_only: true
+    deploy:
+      resources:
+        limits:
+          cpus: "${BACKEND_CPU_LIMIT:-4}"
+          memory: ${BACKEND_MEMORY_LIMIT:-4g}
+        reservations:
+          memory: ${BACKEND_MEMORY_RESERVATION:-512m}
+
+  planning-solver:
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "${OPTAPLANNER_CPU_LIMIT:-4}"
+          memory: ${OPTAPLANNER_MEMORY_LIMIT:-4g}
+        reservations:
+          memory: ${OPTAPLANNER_MEMORY_RESERVATION:-512m}
+
+  frontend:
+    ports:
+      - "${FRONTEND_PORT_PUBLIC:-8080}:8080"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "${FRONTEND_CPU_LIMIT:-1}"
+          memory: ${FRONTEND_MEMORY_LIMIT:-512m}
+
+  phpmyadmin:
+    image: phpmyadmin:5.2-apache
+    profiles:
+      - db-admin
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: ${PHPMYADMIN_UPLOAD_LIMIT:-256M}
+    ports:
+      - "${PHPMYADMIN_BIND:-127.0.0.1}:${PHPMYADMIN_PORT_PUBLIC:-8082}:80"
+    networks:
+      - internal
+      - public
+    restart: unless-stopped
+
+  vault:
+    image: hashicorp/vault:1.17
+    profiles:
+      - vault
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN_ID:-release-root-token-change-me}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    command: ["server", "-dev"]
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped

@@ -43,11 +43,28 @@ function readInt(value: string | undefined, fallback: number): number {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function readBool(value: string | undefined, fallback: boolean): boolean {
+    if (value === undefined) {
+        return fallback;
+    }
+
+    return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
 loadEnvFile();
 
 export const env = {
+    nodeEnv: process.env.NODE_ENV ?? 'development',
+    appEnv: process.env.APP_ENV ?? process.env.NODE_ENV ?? 'development',
     port: readInt(process.env.PORT, 4000),
-    solver: process.env.MINIZINC_SOLVER ?? 'Highs',
+    solver: process.env.MINIZINC_DEFAULT_SOLVER ?? process.env.MINIZINC_SOLVER ?? 'chuffed',
+    minizinc: {
+        path: process.env.MINIZINC_PATH ?? 'minizinc',
+        workdir: process.env.MINIZINC_WORKDIR ?? '/tmp',
+        enableTimeout: readBool(process.env.MINIZINC_ENABLE_TIMEOUT, false),
+        defaultTimeLimitSeconds: readInt(process.env.MINIZINC_DEFAULT_TIME_LIMIT, 0)
+    },
+    sseHeartbeatIntervalMs: readInt(process.env.SSE_HEARTBEAT_INTERVAL, 15_000),
     optaPlannerUrl: process.env.OPTAPLANNER_URL ?? 'http://localhost:8084',
     optaPlannerTimeoutMs: readInt(process.env.OPTAPLANNER_TIMEOUT_MS, 108_000_000),
     allowedOrigins: (process.env.ALLOWED_ORIGINS ?? 'http://localhost:3000')
@@ -63,7 +80,7 @@ export const env = {
         connectionLimit: readInt(process.env.MYSQL_CONNECTION_LIMIT, 10)
     },
     auth: {
-        sessionTtlDays: readInt(process.env.AUTH_SESSION_TTL_DAYS, 30),
+        sessionTtlDays: readInt(process.env.AUTH_SESSION_TTL_DAYS, 90),
         tokenBytes: readInt(process.env.AUTH_TOKEN_BYTES, 32)
     }
 } as const;

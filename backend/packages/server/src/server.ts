@@ -36,6 +36,7 @@ import {
     listTagDefinitions,
     markOrphanedPlanningExecutionsUnknown,
     pingDatabase,
+    refreshSessionExpiryByTokenHash,
     updatePlanning,
     updateProject,
     updateUser,
@@ -68,28 +69,107 @@ const OPTAPLANNER_SOLVER_ID = 'OptaPlanner';
 const OPTAPLANNER_SOLVER_LABEL = 'OptaPlanner';
 
 export interface AvailableSolver {
-    id: string;       // identifiant technique MiniZinc (ex: "Highs")
-    label: string;    // nom lisible (ex: "Highs (défaut)")
+    id: string;       // identifiant technique exact MiniZinc (ex: "HiGHS" ou "Chuffed")
+    label: string;    // nom lisible (ex: "HiGHS (défaut)")
     isDefault: boolean;
+    key?: string;     // identifiant normalisé côté API (ex: "highs")
+    aliases?: string[];
 }
 
-// Solveurs connus adaptés à la planification, avec leurs labels lisibles.
-// La clé est un pattern (substring) matchant l'id ou le name MiniZinc.
-const KNOWN_SOLVERS: Array<{ pattern: string; label: string; id: string }> = [
-    { pattern: "highs",   label: "HiGHS",    id: "Highs"    },
-    { pattern: "gecode",  label: "Gecode",   id: "Gecode"   },
-    { pattern: "chuffed", label: "Chuffed",  id: "Chuffed"  },
-    { pattern: "or tools", label: "OR-Tools", id: "OR-Tools" },
-    { pattern: "ortools",  label: "OR-Tools", id: "OR-Tools" },
-    { pattern: "cp-sat",   label: "OR-Tools", id: "OR-Tools" },
-    { pattern: "coinbc",   label: "COIN-BC",  id: "COIN-BC"  },
-    { pattern: "cplex",    label: "CPLEX",    id: "CPLEX"    },
-    { pattern: "sat4j",    label: "SAT4J",    id: "SAT4J"    },
+interface KnownMiniZincSolver {
+    key: string;
+    label: string;
+    preferredId: string;
+    patterns: string[];
+    aliases: string[];
+}
+
+// Solveurs connus adaptés à la planification. Les ids réels peuvent varier
+// selon MiniZinc; le backend garde l'id exact détecté puis accepte ces alias.
+const KNOWN_MINIZINC_SOLVERS: KnownMiniZincSolver[] = [
+    { key: "highs", label: "HiGHS", preferredId: "HiGHS", patterns: ["highs", "high"], aliases: ["highs", "high", "HiGHS", "Highs"] },
+    { key: "gecode", label: "Gecode", preferredId: "Gecode", patterns: ["gecode"], aliases: ["gecode", "Gecode"] },
+    { key: "chuffed", label: "Chuffed", preferredId: "Chuffed", patterns: ["chuffed"], aliases: ["chuffed", "Chuffed"] },
+    { key: "cplex", label: "CPLEX", preferredId: "CPLEX", patterns: ["cplex"], aliases: ["cplex", "CPLEX"] },
+    { key: "ortools", label: "OR-Tools", preferredId: "OR-Tools", patterns: ["or tools", "ortools", "cp-sat", "cpsat"], aliases: ["or-tools", "ortools", "cp-sat", "cpsat", "OR-Tools"] },
+    { key: "coinbc", label: "COIN-BC", preferredId: "COIN-BC", patterns: ["coinbc", "coin-bc", "cbc"], aliases: ["coinbc", "coin-bc", "cbc", "COIN-BC"] },
+    { key: "sat4j", label: "SAT4J", preferredId: "SAT4J", patterns: ["sat4j"], aliases: ["sat4j", "SAT4J"] }
 ];
 
 let cachedSolvers: AvailableSolver[] = [
-    { id: env.solver, label: `${env.solver} (défaut)`, isDefault: true }
+    { id: env.solver, label: `${env.solver} (défaut)`, isDefault: true, key: normalizeSolverKey(env.solver), aliases: [env.solver] }
 ];
+
+function compactSolverToken(value: string): string {
+    return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function findKnownMiniZincSolver(value: string): KnownMiniZincSolver | null {
+    const lower = value.trim().toLowerCase();
+    const compact = compactSolverToken(value);
+
+    return KNOWN_MINIZINC_SOLVERS.find(solver =>
+        solver.aliases.some(alias => compactSolverToken(alias) === compact)
+        || solver.patterns.some(pattern =>
+            lower.includes(pattern)
+            || compact.includes(compactSolverToken(pattern))
+        )
+    ) ?? null;
+}
+
+function normalizeSolverKey(value: string): string {
+    const known = findKnownMiniZincSolver(value);
+    return known?.key ?? compactSolverToken(value);
+}
+
+function isOptaPlannerSolverRequest(value: string): boolean {
+    return compactSolverToken(value) === compactSolverToken(OPTAPLANNER_SOLVER_ID)
+        || compactSolverToken(value) === 'opta'
+        || compactSolverToken(value) === 'optaplanner';
+}
+
+function miniZincSolverOptions(): AvailableSolver[] {
+    return cachedSolvers.filter(solver => !isOptaPlannerSolverRequest(solver.id));
+}
+
+function resolveMiniZincSolverOption(requested?: string): AvailableSolver | null {
+    const raw = (requested && requested.trim().length > 0) ? requested.trim() : env.solver;
+    const requestedCompact = compactSolverToken(raw);
+    const requestedKey = normalizeSolverKey(raw);
+
+    return miniZincSolverOptions().find(solver =>
+        compactSolverToken(solver.id) === requestedCompact
+        || normalizeSolverKey(solver.id) === requestedKey
+        || (solver.key ? solver.key === requestedKey : false)
+        || (solver.aliases ?? []).some(alias => compactSolverToken(alias) === requestedCompact || normalizeSolverKey(alias) === requestedKey)
+    ) ?? null;
+}
+
+function resolveAnySolverOption(requested?: string): AvailableSolver | null {
+    const raw = requested?.trim();
+    if (raw && isOptaPlannerSolverRequest(raw)) {
+        return cachedSolvers.find(solver => solver.id === OPTAPLANNER_SOLVER_ID) ?? null;
+    }
+
+    return resolveMiniZincSolverOption(raw);
+}
+
+function availableMiniZincSolverDetails(): Array<{ id: string; key: string; label: string; isDefault: boolean; aliases: string[] }> {
+    return miniZincSolverOptions().map(solver => ({
+        id: solver.id,
+        key: solver.key ?? normalizeSolverKey(solver.id),
+        label: solver.label.replace(/\s+\(défaut\)$/u, ''),
+        isDefault: solver.isDefault,
+        aliases: solver.aliases ?? [solver.id]
+    }));
+}
+
+function unavailableSolverDetails(): string[] {
+    return [
+        `Solveurs MiniZinc disponibles: ${miniZincSolverOptions().map(s => `${s.id}${s.key ? ` (${s.key})` : ''}`).join(', ') || 'aucun'}`,
+        `Solveurs applicatifs disponibles: ${cachedSolvers.map(s => s.id).join(', ') || 'aucun'}`
+    ];
+}
 
 interface OptaPlannerHealthState {
     isUp: boolean;
@@ -190,7 +270,9 @@ function ensureOptaPlannerSolverOption(): void {
         cachedSolvers.push({
             id: OPTAPLANNER_SOLVER_ID,
             label: OPTAPLANNER_SOLVER_LABEL,
-            isDefault: false
+            isDefault: false,
+            key: 'optaplanner',
+            aliases: ['opta', 'optaplanner', OPTAPLANNER_SOLVER_ID]
         });
     }
     if (!optaPlannerHealth.isUp && alreadyPresent) {
@@ -246,36 +328,68 @@ function requestHttpJson(
 
 async function detectAvailableSolvers(): Promise<void> {
     try {
-        const { stdout } = await execFileAsync('minizinc', ["--solvers-json"], { timeout: 10_000 });
+        const { stdout } = await execFileAsync(env.minizinc.path, ["--solvers-json"], { timeout: 10_000 });
         const raw: Array<{ id?: string; name?: string; version?: string }> = JSON.parse(stdout);
 
-        const found: AvailableSolver[] = [];
+        const detected: AvailableSolver[] = [];
+        const defaultKey = normalizeSolverKey(env.solver);
+        const defaultCompact = compactSolverToken(env.solver);
+
         for (const entry of raw) {
-            const searchStr = `${(entry.id ?? '').toLowerCase()} ${(entry.name ?? '').toLowerCase()}`;
-            for (const known of KNOWN_SOLVERS) {
-                if (searchStr.includes(known.pattern)) {
-                    const isDefault = known.id.toLowerCase() === env.solver.toLowerCase()
-                        || (entry.id ?? '').toLowerCase().includes(known.pattern);
-                    const alreadyAdded = found.some(s => s.id === known.id);
-                    if (!alreadyAdded) {
-                        found.push({
-                            id: known.id,
-                            label: isDefault ? `${known.label} (défaut)` : known.label,
-                            isDefault
-                        });
-                    }
-                    break;
-                }
+            const exactId = (entry.id ?? entry.name ?? '').trim();
+            if (!exactId) {
+                continue;
             }
+
+            const searchStr = `${entry.id ?? ''} ${entry.name ?? ''}`;
+            const known = findKnownMiniZincSolver(searchStr);
+            const key = known?.key ?? normalizeSolverKey(exactId);
+            const label = known?.label ?? entry.name ?? exactId;
+            const aliases = known
+                ? Array.from(new Set([known.preferredId, ...known.aliases, exactId, entry.name ?? exactId]))
+                : Array.from(new Set([exactId, entry.name ?? exactId, key]));
+
+            const alreadyAdded = detected.some(solver =>
+                solver.key === key
+                || compactSolverToken(solver.id) === compactSolverToken(exactId)
+            );
+            if (alreadyAdded) {
+                continue;
+            }
+
+            detected.push({
+                id: exactId,
+                key,
+                aliases,
+                label,
+                isDefault: false
+            });
         }
 
-        if (found.length > 0) {
-            // S'assurer que le solveur par défaut est toujours présent
-            const hasDefault = found.some(s => s.isDefault);
-            if (!hasDefault) {
-                found.unshift({ id: env.solver, label: `${env.solver} (défaut)`, isDefault: true });
+        if (detected.length > 0) {
+            let defaultFound = false;
+            cachedSolvers = detected.map(solver => {
+                const isDefault = !defaultFound && (
+                    solver.key === defaultKey
+                    || compactSolverToken(solver.id) === defaultCompact
+                    || (solver.aliases ?? []).some(alias =>
+                        normalizeSolverKey(alias) === defaultKey
+                        || compactSolverToken(alias) === defaultCompact
+                    )
+                );
+                if (isDefault) {
+                    defaultFound = true;
+                }
+                return {
+                    ...solver,
+                    isDefault,
+                    label: isDefault ? `${solver.label} (défaut)` : solver.label
+                };
+            });
+
+            if (!defaultFound) {
+                console.warn(`Le solveur MiniZinc par défaut "${env.solver}" n'a pas été détecté.`);
             }
-            cachedSolvers = found;
         }
 
         console.log(`Solveurs détectés : ${cachedSolvers.map(s => s.label).join(', ')}`);
@@ -1755,6 +1869,14 @@ async function createUserSession(user: UserRecord): Promise<SessionPayload> {
     };
 }
 
+async function refreshUserSession(session: AuthSessionRecord): Promise<{ expiresAt: string }> {
+    const expiresAt = new Date(Date.now() + env.auth.sessionTtlDays * 24 * 60 * 60 * 1000);
+    await refreshSessionExpiryByTokenHash(session.session.tokenHash, expiresAt);
+    return {
+        expiresAt: expiresAt.toISOString()
+    };
+}
+
 function convertOptaAssignmentsToOutput(assignments: SpringSolveAssignment[], days: string[]): string {
     const dayToIndex = new Map<string, number>();
     days.forEach((day, index) => dayToIndex.set(day, index + 1));
@@ -2256,8 +2378,8 @@ async function prepareMiniZincExecutionFromRequest(
 > {
     const requestedSolver = isRecord(req.body) && typeof req.body.solver === 'string'
         ? req.body.solver
-        : env.solver;
-    if (requestedSolver === OPTAPLANNER_SOLVER_ID) {
+        : undefined;
+    if (requestedSolver && isOptaPlannerSolverRequest(requestedSolver)) {
         return {
             ok: false,
             status: 400,
@@ -2268,19 +2390,19 @@ async function prepareMiniZincExecutionFromRequest(
         };
     }
 
-    const solverSupported = cachedSolvers.some(s => s.id === requestedSolver);
-    if (isRecord(req.body) && typeof req.body.solver === 'string' && !solverSupported) {
+    const resolvedSolver = resolveMiniZincSolverOption(requestedSolver);
+    if (!resolvedSolver) {
         return {
             ok: false,
             status: 400,
             error: {
                 code: 'BAD_REQUEST',
-                message: `Le solveur demandé "${requestedSolver}" n'est pas disponible.`,
-                details: [`Solveurs disponibles: ${cachedSolvers.map(s => s.id).join(', ')}`]
+                message: `Le solveur demandé "${requestedSolver ?? env.solver}" n'est pas disponible.`,
+                details: unavailableSolverDetails(),
+                hint: 'Vérifie `docker compose exec backend minizinc --solvers` ou `/api/solvers/minizinc`.'
             }
         };
     }
-    const resolvedSolver = solverSupported ? requestedSolver : env.solver;
     const solverTimeLimitSeconds = parseSolverTimeLimitSecondsFromBody(req.body);
 
     const persistedData = getPersistedPlanningData(planning.data);
@@ -2317,7 +2439,7 @@ async function prepareMiniZincExecutionFromRequest(
             ok: true,
             planning: solveTarget,
             source: sourceOverride,
-            solver: resolvedSolver,
+            solver: resolvedSolver.id,
             warnings: [],
             solverTimeLimitSeconds
         };
@@ -2353,7 +2475,7 @@ async function prepareMiniZincExecutionFromRequest(
         ok: true,
         planning: solveTarget,
         source: serializeSolveModelToDsl(validation.value),
-        solver: resolvedSolver,
+        solver: resolvedSolver.id,
         warnings: analyzePotentialCapacityRisks(validation.value),
         solverTimeLimitSeconds
     };
@@ -2528,6 +2650,20 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/me', authenticateRequest, async (req, res) => {
     const auth = requireAuth(req);
     return sendSuccess(res, { user: auth.user });
+});
+
+app.post('/api/auth/refresh', authenticateRequest, async (req, res) => {
+    try {
+        const auth = requireAuth(req);
+        const session = await refreshUserSession(auth);
+        return sendSuccess(res, { session }, 'Session renouvelée.');
+    } catch (error) {
+        return sendError(res, 500, {
+            code: 'DATABASE_ERROR',
+            message: 'Impossible de renouveler la session.',
+            details: [error instanceof Error ? error.message : 'Unknown database error']
+        });
+    }
 });
 
 app.patch('/api/auth/me', authenticateRequest, async (req, res) => {
@@ -2850,7 +2986,7 @@ app.get('/api/plannings/:id/executions/:executionId/events', authenticateRequest
     });
     const heartbeat = setInterval(() => {
         res.write(': heartbeat\n\n');
-    }, 15_000);
+    }, env.sseHeartbeatIntervalMs);
 
     req.on('close', () => {
         clearInterval(heartbeat);
@@ -3143,21 +3279,21 @@ app.post('/api/plannings/:id/solve/async/start', authenticateRequest, async (req
 
         const requestedSolver = isRecord(req.body) && typeof req.body.solver === 'string'
             ? req.body.solver
-            : env.solver;
-        const solverSupported = cachedSolvers.some(s => s.id === requestedSolver);
-        if (isRecord(req.body) && typeof req.body.solver === 'string' && !solverSupported) {
-            return sendError(res, 400, {
-                code: 'BAD_REQUEST',
-                message: `Le solveur demandé "${requestedSolver}" n'est pas disponible.`,
-                details: [`Solveurs disponibles: ${cachedSolvers.map(s => s.id).join(', ')}`],
-                hint: 'Vérifie que le backend OptaPlanner est démarré si tu veux utiliser ce solveur.'
-            });
-        }
-        const resolvedSolver = solverSupported ? requestedSolver : env.solver;
-        if (resolvedSolver !== OPTAPLANNER_SOLVER_ID) {
+            : OPTAPLANNER_SOLVER_ID;
+        if (!isOptaPlannerSolverRequest(requestedSolver)) {
             return sendError(res, 400, {
                 code: 'BAD_REQUEST',
                 message: 'La résolution asynchrone est disponible uniquement pour le solveur OptaPlanner.'
+            });
+        }
+
+        const resolvedSolver = cachedSolvers.find(s => s.id === OPTAPLANNER_SOLVER_ID);
+        if (!resolvedSolver) {
+            return sendError(res, 400, {
+                code: 'BAD_REQUEST',
+                message: 'Le backend OptaPlanner n’est pas disponible.',
+                details: [`URL configurée: ${env.optaPlannerUrl}`],
+                hint: 'Démarre OptaPlanner avec `./project.sh start optaplanner` ou `./planify-docker.sh dev opta-up`.'
             });
         }
 
@@ -3244,7 +3380,7 @@ app.post('/api/plannings/:id/solve/async/start', authenticateRequest, async (req
             jobId: startResult.jobId,
             planningId: planning.id,
             userId: auth.user.id,
-            solver: resolvedSolver,
+            solver: resolvedSolver.id,
             source,
             daysForOutput,
             capacityWarnings,
@@ -3464,17 +3600,16 @@ app.post('/api/solve', authenticateRequest, async (req, res) => {
 
     const requestedSolver = isRecord(req.body) && typeof req.body.solver === "string"
         ? req.body.solver
-        : env.solver;
-    const solverSupported = cachedSolvers.some(s => s.id === requestedSolver);
-    if (isRecord(req.body) && typeof req.body.solver === "string" && !solverSupported) {
+        : undefined;
+    const resolvedSolver = resolveAnySolverOption(requestedSolver);
+    if (!resolvedSolver) {
         return sendError(res, 400, {
             code: "BAD_REQUEST",
-            message: `Le solveur demandé "${requestedSolver}" n'est pas disponible.`,
-            details: [`Solveurs disponibles: ${cachedSolvers.map(s => s.id).join(', ')}`],
-            hint: 'Vérifie que le backend OptaPlanner est démarré si tu veux utiliser ce solveur.'
+            message: `Le solveur demandé "${requestedSolver ?? env.solver}" n'est pas disponible.`,
+            details: unavailableSolverDetails(),
+            hint: 'Vérifie `docker compose exec backend minizinc --solvers`; pour OptaPlanner, démarre le service avec le profile optaplanner.'
         });
     }
-    const resolvedSolver = solverSupported ? requestedSolver : env.solver;
     const solverTimeLimitSeconds = parseSolverTimeLimitSecondsFromBody(req.body);
 
     let daysForOutput: string[] = [];
@@ -3487,9 +3622,9 @@ app.post('/api/solve', authenticateRequest, async (req, res) => {
         // Source may not be raw JSON. Days mapping stays empty.
     }
 
-    const solveResult = resolvedSolver === OPTAPLANNER_SOLVER_ID
+    const solveResult = resolvedSolver.id === OPTAPLANNER_SOLVER_ID
         ? await solvePlanningSourceWithOptaPlanner(source, daysForOutput, solverTimeLimitSeconds)
-        : await solvePlanningSource(source, resolvedSolver);
+        : await solvePlanningSource(source, resolvedSolver.id);
     if (!solveResult.ok) {
         return sendError(res, solveResult.error.status, {
             code: solveResult.error.code,
@@ -3570,10 +3705,27 @@ app.delete('/api/tags/:id', authenticateRequest, async (req, res) => {
     }
 });
 
+app.get('/api/solvers/minizinc', (_req, res) => {
+    const solvers = availableMiniZincSolverDetails();
+    const defaultSolver = resolveMiniZincSolverOption();
+
+    return sendSuccess(res, {
+        availableSolvers: solvers.map(solver => solver.key),
+        solvers,
+        defaultSolver: defaultSolver?.key ?? normalizeSolverKey(env.solver),
+        defaultSolverId: defaultSolver?.id ?? env.solver,
+        minizincPath: env.minizinc.path
+    });
+});
+
 app.get('/api/solvers', (_req, res) => {
     return sendSuccess(res, {
         solvers: cachedSolvers,
-        optaPlanner: optaPlannerHealth
+        optaPlanner: optaPlannerHealth,
+        minizinc: {
+            availableSolvers: availableMiniZincSolverDetails().map(solver => solver.key),
+            defaultSolver: resolveMiniZincSolverOption()?.key ?? normalizeSolverKey(env.solver)
+        }
     });
 });
 

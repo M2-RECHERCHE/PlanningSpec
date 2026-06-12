@@ -214,6 +214,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const nextUser = response.data.data.user;
         setUser(nextUser);
+        void api.post('/api/auth/refresh').catch(() => undefined);
         if (!hasExplicitHashRoute()) {
           updateLocation('dashboard', undefined, true);
         }
@@ -236,6 +237,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cancelled = true;
     };
   }, [handlePossibleAuthError, loadAppData, syncRouteFromLocation, updateLocation]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void api.post('/api/auth/refresh').catch(() => undefined);
+    }, 24 * 60 * 60 * 1000);
+
+    return () => window.clearInterval(interval);
+  }, [user]);
 
   useEffect(() => {
     if (!user || isBootstrapping) {
