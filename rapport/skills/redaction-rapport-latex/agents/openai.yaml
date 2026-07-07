@@ -1,4 +1,0 @@
-interface:
-  display_name: "Rédaction Rapport LaTeX"
-  short_description: "Rédiger des sections et rapports Master en LaTeX"
-  default_prompt: "Produire un document LaTeX académique en français, structuré en sections/sous-sections, argumenté, nuancé, compilable, avec tableaux/formules/sources officielles selon la demande."

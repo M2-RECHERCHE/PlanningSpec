@@ -1,0 +1,2245 @@
+{
+  "time": {
+    "days": [
+      "Samedi",
+      "Dimanche"
+    ],
+    "slotsPerDay": 7
+  },
+  "activities": {
+    "Soutenance_IN": {
+      "count": 56,
+      "duration": 1
+    },
+    "Soutenance_MA": {
+      "count": 23,
+      "duration": 1
+    }
+  },
+  "resources": {
+    "Teacher": [
+      "AZANGUEZET_BENOIT",
+      "BOMGNI_ALAIN",
+      "DJIMELI_ALAIN",
+      "DJIOFACK_FRANCIS",
+      "DJOUFACK_ZACHARIE_ISIDORE",
+      "FOKOU_GERAUD",
+      "FOKO_MIGUEL",
+      "FOTSING_ERIC",
+      "JAGHO_BREL",
+      "KENFACK_MAURICE",
+      "KENGNE_VIANNEY",
+      "KENMOGNE_EDITH",
+      "KOGUEP_BLAISE",
+      "KONAN_RODRIGUE",
+      "LELE_CELESTIN",
+      "LIENOU_JEAN_PIERRE",
+      "NGUELEMO_ABEL",
+      "NKENLIFACK_MARCELLIN",
+      "NOULAMO_THIERRY",
+      "PATENOU_JEAN_BAPTISTE",
+      "SOH_MATHURIN",
+      "TALLA_NARCISSE",
+      "TCHEKA_CALVIN",
+      "TCHOUALAG_LAURENT",
+      "TCHOUPE_MAURICE",
+      "TSANOU_BERGE",
+      "YANKAM_YANNICK",
+      "ZEKENG_MAXIME"
+    ],
+    "Room_IN": [
+      "S1_IN",
+      "S2_IN",
+      "S3_IN",
+      "S4_IN",
+      "S5_IN"
+    ],
+    "Room_MA": [
+      "S1_MA",
+      "S2_MA"
+    ],
+    "Student": [
+      "CHUEM_TCHUENTE_ACHE_RAISSA",
+      "DJIALEU_TCHAKOUNTE_IDRISS_MARCEL",
+      "DNJOMOU_YONMBA_WILFRIED_LOIC",
+      "DONGMO_ARNOLD_JOSPIN",
+      "DONGMO_FEUDJIO_DIVIN_VIRLENCE",
+      "EVANDJE_EWANE_CATHY_ANGELLA",
+      "FOSSO_TIOFOUET_JOSPIN_CABREL",
+      "GADAMBI_KOMEIZOU_VICTORIEN",
+      "GUEMBOU_CHEPIG_MARIE_BERTHE",
+      "KAMGA_DZUKAM_LOIC_STEAVE",
+      "KEMADJEU_NGOUNOU_BERNARD_CARLOS",
+      "KEMMOGNE_KAMDEM_ANGE_PRISCA",
+      "KENFACK_FONGANG_VICTOR_CYNTICHE",
+      "KENFACK_LEONEL",
+      "LEKANE_KENFACK_VERGEZ",
+      "LOMOFOUET_NDONGMO_HANDREY_JAURESS",
+      "MAGNI_DORINE_LORE",
+      "MBOUMEU_YOUMBI_AXEL_AUBIN",
+      "MEGNA_MOUMIE_GERMAIN_STEPHANE",
+      "MOUNCHIKPOU_MEFIRE_HAMED_KAMAL",
+      "NANGO_IDRISS_ROCHENEL",
+      "NGONG_KOUT_YURI_ROOSEVELT",
+      "NGUIMDO_KENFACK_JELF",
+      "NJIH_ASONYU_SENGE",
+      "NZOGNING_MBONDA_SOCRATE",
+      "SAGUEU_WAKAM_DILANE",
+      "TANKEU_KUEBOVE_JUSTINE_ALIDA",
+      "TCHIGUIA_FRANCELLE_SYNTIA",
+      "TCHINDA_FOMEKONG_JORDAN_PEGGY",
+      "TEUFACK_DOURY_CANTOR",
+      "TIEMNIE_TATCHUM_DOMINIQUE_JAURES",
+      "TSAFACK_NTEUDEM_ERICK",
+      "ZAMKEU_DONGMO_JUNIOR_ALEX_TRIDE",
+      "ANON_KOYANE_MOISE",
+      "DJOUYAGUENG_SADE_CEDRIC",
+      "DONGMO_NOUBOUDEM_REYNOLD_GUIVIS",
+      "DONGMO_RUSSEL_BRANDON",
+      "DOUMTSOP_MOMO_MURIELLE_VANINA",
+      "DOUNTIO_TCHIOFO_DAVID_DUCLAIR",
+      "FOCH_SALAOUDINE_BEN_ADAMOU",
+      "FOMO_KAMGANG_VIDAL_VALDIMY",
+      "FOUELEFACK_KELIE_SYNTIA",
+      "KAFACK_WAMBA_KEROL",
+      "KALZIBE_DOMINIQUE",
+      "KANE_DJOUFACK_FLORIANE_JOSEPHINE",
+      "NECDEM_TSAFEACK_WILFRIED_CABREL",
+      "NGO_KANDA_SABINE_FRANCINE_ALEXANDRIE",
+      "NINLA_NGOUMELA_LOIC_DELOR",
+      "NJIKAM_KOUPIT_SAMIRA_FALLONE",
+      "PEUHTAO_GNEBE_TCHINCHACKE",
+      "SALI_YAYA_FARAINI",
+      "SOULEYMAN_BECHIR_NAHAR",
+      "SOULEYMANOU_MANSOUROU",
+      "TAJEUMI_BOGNI_RUDY_WARENE",
+      "TOUKEM_KUETE_MAURICE_CARELL",
+      "YUMKAM_SIMO_ELVIRA_AUDREY",
+      "ALLAHTESSEM_DINGAMGOTO_CHANCELIN",
+      "CHENDJOU_PARFAIT",
+      "DEMGNE_FONKOUA_AFRODITE_AURORE",
+      "DJOUFACK_NGUESSONG_LETICIA_FLORA",
+      "DONGMO_NGUEMEWE_MANUELLA_KANOLA",
+      "FOKOU_KENGNI_IVAN_LOIE",
+      "LEUMEGNI_NDJOUOMO_RUSSEL_LOICK",
+      "MEGUETSOP_FLAVIANE",
+      "METIEUTE_RIVALDO_BORDAS",
+      "MOUAFFO_TASSIKIM_YVE_DOBEL",
+      "NANWOUO_TCHIMOU_ANGE_KELLY",
+      "NJIGANG_BIATCHO_ARMSTRONG",
+      "POUOMOGNE_CHATCHUENG_JOSEPH",
+      "TAMWA_TCHIENDJOU_JOEL_WHILSON",
+      "TAZEFACK_JULIEN_IDRISS_AURELIEN",
+      "TAZONG_WILFRID_WILLY",
+      "TCHIFFO_KENNE_MARTHEL",
+      "TEDONFO_TSOPONANG_JEAN_BRICE",
+      "TIENTCHEU_ARMAND_SOREL",
+      "TINDO_TCHOBEUA_WILFRIED_DOCHINEL",
+      "TSAGUE_TAZANGMO_RONALDO",
+      "WANDJI_NGOMGUEN_GHISLAIN",
+      "ZAPA_TANING_ANELKA"
+    ]
+  },
+  "roles": {
+    "Soutenance_IN": {
+      "President": "Teacher",
+      "Rapporteur": "Teacher",
+      "Examinateur": "Teacher",
+      "Salle": "Room_IN",
+      "Candidat": "Student"
+    },
+    "Soutenance_MA": {
+      "President": "Teacher",
+      "Rapporteur": "Teacher",
+      "Examinateur": "Teacher",
+      "Salle": "Room_MA",
+      "Candidat": "Student"
+    }
+  },
+  "constraints": [
+    {
+      "type": "mandatory_roles",
+      "activity": "Soutenance_IN"
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "President",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "Rapporteur",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "Examinateur",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "Salle",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "Candidat",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "mandatory_roles",
+      "activity": "Soutenance_MA"
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "President",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "Rapporteur",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "Examinateur",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "Salle",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "Candidat",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Teacher",
+      "activity": "Soutenance_IN",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Teacher",
+      "activity": "Soutenance_MA",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Student",
+      "activity": "Soutenance_IN",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Student",
+      "activity": "Soutenance_MA",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Room_IN",
+      "activity": "Soutenance_IN",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Room_MA",
+      "activity": "Soutenance_MA",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_1",
+      "role": "President",
+      "resource": "DJIMELI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_1",
+      "role": "Rapporteur",
+      "resource": "FOKO_MIGUEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_1",
+      "role": "Examinateur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_1",
+      "role": "Candidat",
+      "resource": "CHUEM_TCHUENTE_ACHE_RAISSA"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_2",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_2",
+      "role": "Rapporteur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_2",
+      "role": "Examinateur",
+      "resource": "KONAN_RODRIGUE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_2",
+      "role": "Candidat",
+      "resource": "DJIALEU_TCHAKOUNTE_IDRISS_MARCEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_3",
+      "role": "President",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_3",
+      "role": "Rapporteur",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_3",
+      "role": "Examinateur",
+      "resource": "KENFACK_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_3",
+      "role": "Candidat",
+      "resource": "DNJOMOU_YONMBA_WILFRIED_LOIC"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_4",
+      "role": "President",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_4",
+      "role": "Rapporteur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_4",
+      "role": "Examinateur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_4",
+      "role": "Candidat",
+      "resource": "DONGMO_ARNOLD_JOSPIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_5",
+      "role": "President",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_5",
+      "role": "Rapporteur",
+      "resource": "YANKAM_YANNICK"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_5",
+      "role": "Examinateur",
+      "resource": "FOTSING_ERIC"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_5",
+      "role": "Candidat",
+      "resource": "DONGMO_FEUDJIO_DIVIN_VIRLENCE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_6",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_6",
+      "role": "Rapporteur",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_6",
+      "role": "Examinateur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_6",
+      "role": "Candidat",
+      "resource": "EVANDJE_EWANE_CATHY_ANGELLA"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_7",
+      "role": "President",
+      "resource": "NKENLIFACK_MARCELLIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_7",
+      "role": "Rapporteur",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_7",
+      "role": "Examinateur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_7",
+      "role": "Candidat",
+      "resource": "FOSSO_TIOFOUET_JOSPIN_CABREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_8",
+      "role": "President",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_8",
+      "role": "Rapporteur",
+      "resource": "FOTSING_ERIC"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_8",
+      "role": "Examinateur",
+      "resource": "KENFACK_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_8",
+      "role": "Candidat",
+      "resource": "GADAMBI_KOMEIZOU_VICTORIEN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_9",
+      "role": "President",
+      "resource": "LIENOU_JEAN_PIERRE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_9",
+      "role": "Rapporteur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_9",
+      "role": "Examinateur",
+      "resource": "JAGHO_BREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_9",
+      "role": "Candidat",
+      "resource": "GUEMBOU_CHEPIG_MARIE_BERTHE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_10",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_10",
+      "role": "Rapporteur",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_10",
+      "role": "Examinateur",
+      "resource": "KONAN_RODRIGUE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_10",
+      "role": "Candidat",
+      "resource": "KAMGA_DZUKAM_LOIC_STEAVE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_11",
+      "role": "President",
+      "resource": "NOULAMO_THIERRY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_11",
+      "role": "Rapporteur",
+      "resource": "TALLA_NARCISSE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_11",
+      "role": "Examinateur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_11",
+      "role": "Candidat",
+      "resource": "KEMADJEU_NGOUNOU_BERNARD_CARLOS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_12",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_12",
+      "role": "Rapporteur",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_12",
+      "role": "Examinateur",
+      "resource": "KONAN_RODRIGUE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_12",
+      "role": "Candidat",
+      "resource": "KEMMOGNE_KAMDEM_ANGE_PRISCA"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_13",
+      "role": "President",
+      "resource": "NKENLIFACK_MARCELLIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_13",
+      "role": "Rapporteur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_13",
+      "role": "Examinateur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_13",
+      "role": "Candidat",
+      "resource": "KENFACK_FONGANG_VICTOR_CYNTICHE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_14",
+      "role": "President",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_14",
+      "role": "Rapporteur",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_14",
+      "role": "Examinateur",
+      "resource": "KENFACK_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_14",
+      "role": "Candidat",
+      "resource": "KENFACK_LEONEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_15",
+      "role": "President",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_15",
+      "role": "Rapporteur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_15",
+      "role": "Examinateur",
+      "resource": "FOTSING_ERIC"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_15",
+      "role": "Candidat",
+      "resource": "LEKANE_KENFACK_VERGEZ"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_16",
+      "role": "President",
+      "resource": "NOULAMO_THIERRY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_16",
+      "role": "Rapporteur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_16",
+      "role": "Examinateur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_16",
+      "role": "Candidat",
+      "resource": "LOMOFOUET_NDONGMO_HANDREY_JAURESS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_17",
+      "role": "President",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_17",
+      "role": "Rapporteur",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_17",
+      "role": "Examinateur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_17",
+      "role": "Candidat",
+      "resource": "MAGNI_DORINE_LORE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_18",
+      "role": "President",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_18",
+      "role": "Rapporteur",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_18",
+      "role": "Examinateur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_18",
+      "role": "Candidat",
+      "resource": "MBOUMEU_YOUMBI_AXEL_AUBIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_19",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_19",
+      "role": "Rapporteur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_19",
+      "role": "Examinateur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_19",
+      "role": "Candidat",
+      "resource": "MEGNA_MOUMIE_GERMAIN_STEPHANE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_20",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_20",
+      "role": "Rapporteur",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_20",
+      "role": "Examinateur",
+      "resource": "KONAN_RODRIGUE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_20",
+      "role": "Candidat",
+      "resource": "MOUNCHIKPOU_MEFIRE_HAMED_KAMAL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_21",
+      "role": "President",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_21",
+      "role": "Rapporteur",
+      "resource": "NKENLIFACK_MARCELLIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_21",
+      "role": "Examinateur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_21",
+      "role": "Candidat",
+      "resource": "NANGO_IDRISS_ROCHENEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_22",
+      "role": "President",
+      "resource": "NOULAMO_THIERRY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_22",
+      "role": "Rapporteur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_22",
+      "role": "Examinateur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_22",
+      "role": "Candidat",
+      "resource": "NGONG_KOUT_YURI_ROOSEVELT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_23",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_23",
+      "role": "Rapporteur",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_23",
+      "role": "Examinateur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_23",
+      "role": "Candidat",
+      "resource": "NGUIMDO_KENFACK_JELF"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_24",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_24",
+      "role": "Rapporteur",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_24",
+      "role": "Examinateur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_24",
+      "role": "Candidat",
+      "resource": "NJIH_ASONYU_SENGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_25",
+      "role": "President",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_25",
+      "role": "Rapporteur",
+      "resource": "JAGHO_BREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_25",
+      "role": "Examinateur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_25",
+      "role": "Candidat",
+      "resource": "NZOGNING_MBONDA_SOCRATE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_26",
+      "role": "President",
+      "resource": "DJIMELI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_26",
+      "role": "Rapporteur",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_26",
+      "role": "Examinateur",
+      "resource": "KONAN_RODRIGUE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_26",
+      "role": "Candidat",
+      "resource": "SAGUEU_WAKAM_DILANE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_27",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_27",
+      "role": "Rapporteur",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_27",
+      "role": "Examinateur",
+      "resource": "KONAN_RODRIGUE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_27",
+      "role": "Candidat",
+      "resource": "TANKEU_KUEBOVE_JUSTINE_ALIDA"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_28",
+      "role": "President",
+      "resource": "NOULAMO_THIERRY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_28",
+      "role": "Rapporteur",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_28",
+      "role": "Examinateur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_28",
+      "role": "Candidat",
+      "resource": "TCHIGUIA_FRANCELLE_SYNTIA"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_29",
+      "role": "President",
+      "resource": "DJIMELI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_29",
+      "role": "Rapporteur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_29",
+      "role": "Examinateur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_29",
+      "role": "Candidat",
+      "resource": "TCHINDA_FOMEKONG_JORDAN_PEGGY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_30",
+      "role": "President",
+      "resource": "NKENLIFACK_MARCELLIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_30",
+      "role": "Rapporteur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_30",
+      "role": "Examinateur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_30",
+      "role": "Candidat",
+      "resource": "TEUFACK_DOURY_CANTOR"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_31",
+      "role": "President",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_31",
+      "role": "Rapporteur",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_31",
+      "role": "Examinateur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_31",
+      "role": "Candidat",
+      "resource": "TIEMNIE_TATCHUM_DOMINIQUE_JAURES"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_32",
+      "role": "President",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_32",
+      "role": "Rapporteur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_32",
+      "role": "Examinateur",
+      "resource": "KENFACK_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_32",
+      "role": "Candidat",
+      "resource": "TSAFACK_NTEUDEM_ERICK"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_33",
+      "role": "President",
+      "resource": "DJIMELI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_33",
+      "role": "Rapporteur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_33",
+      "role": "Examinateur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_33",
+      "role": "Candidat",
+      "resource": "ZAMKEU_DONGMO_JUNIOR_ALEX_TRIDE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_34",
+      "role": "President",
+      "resource": "NOULAMO_THIERRY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_34",
+      "role": "Rapporteur",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_34",
+      "role": "Examinateur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_34",
+      "role": "Candidat",
+      "resource": "ANON_KOYANE_MOISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_35",
+      "role": "President",
+      "resource": "DJIMELI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_35",
+      "role": "Rapporteur",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_35",
+      "role": "Examinateur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_35",
+      "role": "Candidat",
+      "resource": "DJOUYAGUENG_SADE_CEDRIC"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_36",
+      "role": "President",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_36",
+      "role": "Rapporteur",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_36",
+      "role": "Examinateur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_36",
+      "role": "Candidat",
+      "resource": "DONGMO_NOUBOUDEM_REYNOLD_GUIVIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_37",
+      "role": "President",
+      "resource": "LIENOU_JEAN_PIERRE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_37",
+      "role": "Rapporteur",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_37",
+      "role": "Examinateur",
+      "resource": "JAGHO_BREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_37",
+      "role": "Candidat",
+      "resource": "DONGMO_RUSSEL_BRANDON"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_38",
+      "role": "President",
+      "resource": "DJIMELI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_38",
+      "role": "Rapporteur",
+      "resource": "DJOUFACK_ZACHARIE_ISIDORE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_38",
+      "role": "Examinateur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_38",
+      "role": "Candidat",
+      "resource": "DOUMTSOP_MOMO_MURIELLE_VANINA"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_39",
+      "role": "President",
+      "resource": "LIENOU_JEAN_PIERRE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_39",
+      "role": "Rapporteur",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_39",
+      "role": "Examinateur",
+      "resource": "JAGHO_BREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_39",
+      "role": "Candidat",
+      "resource": "DOUNTIO_TCHIOFO_DAVID_DUCLAIR"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_40",
+      "role": "President",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_40",
+      "role": "Rapporteur",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_40",
+      "role": "Examinateur",
+      "resource": "KENFACK_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_40",
+      "role": "Candidat",
+      "resource": "FOCH_SALAOUDINE_BEN_ADAMOU"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_41",
+      "role": "President",
+      "resource": "LIENOU_JEAN_PIERRE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_41",
+      "role": "Rapporteur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_41",
+      "role": "Examinateur",
+      "resource": "JAGHO_BREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_41",
+      "role": "Candidat",
+      "resource": "FOMO_KAMGANG_VIDAL_VALDIMY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_42",
+      "role": "President",
+      "resource": "NOULAMO_THIERRY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_42",
+      "role": "Rapporteur",
+      "resource": "FOKO_MIGUEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_42",
+      "role": "Examinateur",
+      "resource": "KENMOGNE_EDITH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_42",
+      "role": "Candidat",
+      "resource": "FOUELEFACK_KELIE_SYNTIA"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_43",
+      "role": "President",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_43",
+      "role": "Rapporteur",
+      "resource": "YANKAM_YANNICK"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_43",
+      "role": "Examinateur",
+      "resource": "FOTSING_ERIC"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_43",
+      "role": "Candidat",
+      "resource": "KAFACK_WAMBA_KEROL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_44",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_44",
+      "role": "Rapporteur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_44",
+      "role": "Examinateur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_44",
+      "role": "Candidat",
+      "resource": "KALZIBE_DOMINIQUE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_45",
+      "role": "President",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_45",
+      "role": "Rapporteur",
+      "resource": "JAGHO_BREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_45",
+      "role": "Examinateur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_45",
+      "role": "Candidat",
+      "resource": "KANE_DJOUFACK_FLORIANE_JOSEPHINE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_46",
+      "role": "President",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_46",
+      "role": "Rapporteur",
+      "resource": "YANKAM_YANNICK"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_46",
+      "role": "Examinateur",
+      "resource": "FOTSING_ERIC"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_46",
+      "role": "Candidat",
+      "resource": "NECDEM_TSAFEACK_WILFRIED_CABREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_47",
+      "role": "President",
+      "resource": "LIENOU_JEAN_PIERRE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_47",
+      "role": "Rapporteur",
+      "resource": "FOKO_MIGUEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_47",
+      "role": "Examinateur",
+      "resource": "JAGHO_BREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_47",
+      "role": "Candidat",
+      "resource": "NGO_KANDA_SABINE_FRANCINE_ALEXANDRIE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_48",
+      "role": "President",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_48",
+      "role": "Rapporteur",
+      "resource": "NKENLIFACK_MARCELLIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_48",
+      "role": "Examinateur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_48",
+      "role": "Candidat",
+      "resource": "NINLA_NGOUMELA_LOIC_DELOR"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_49",
+      "role": "President",
+      "resource": "SOH_MATHURIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_49",
+      "role": "Rapporteur",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_49",
+      "role": "Examinateur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_49",
+      "role": "Candidat",
+      "resource": "NJIKAM_KOUPIT_SAMIRA_FALLONE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_50",
+      "role": "President",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_50",
+      "role": "Rapporteur",
+      "resource": "FOKO_MIGUEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_50",
+      "role": "Examinateur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_50",
+      "role": "Candidat",
+      "resource": "PEUHTAO_GNEBE_TCHINCHACKE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_51",
+      "role": "President",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_51",
+      "role": "Rapporteur",
+      "resource": "JAGHO_BREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_51",
+      "role": "Examinateur",
+      "resource": "YANKAM_YANNICK"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_51",
+      "role": "Candidat",
+      "resource": "SALI_YAYA_FARAINI"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_52",
+      "role": "President",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_52",
+      "role": "Rapporteur",
+      "resource": "ZEKENG_MAXIME"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_52",
+      "role": "Examinateur",
+      "resource": "YANKAM_YANNICK"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_52",
+      "role": "Candidat",
+      "resource": "SOULEYMAN_BECHIR_NAHAR"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_53",
+      "role": "President",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_53",
+      "role": "Rapporteur",
+      "resource": "NKENLIFACK_MARCELLIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_53",
+      "role": "Examinateur",
+      "resource": "FOKOU_GERAUD"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_53",
+      "role": "Candidat",
+      "resource": "SOULEYMANOU_MANSOUROU"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_54",
+      "role": "President",
+      "resource": "TCHOUPE_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_54",
+      "role": "Rapporteur",
+      "resource": "KENGNE_VIANNEY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_54",
+      "role": "Examinateur",
+      "resource": "FOTSING_ERIC"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_54",
+      "role": "Candidat",
+      "resource": "TAJEUMI_BOGNI_RUDY_WARENE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_55",
+      "role": "President",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_55",
+      "role": "Rapporteur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_55",
+      "role": "Examinateur",
+      "resource": "YANKAM_YANNICK"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_55",
+      "role": "Candidat",
+      "resource": "TOUKEM_KUETE_MAURICE_CARELL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_56",
+      "role": "President",
+      "resource": "BOMGNI_ALAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_56",
+      "role": "Rapporteur",
+      "resource": "LIENOU_JEAN_PIERRE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_56",
+      "role": "Examinateur",
+      "resource": "AZANGUEZET_BENOIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_56",
+      "role": "Candidat",
+      "resource": "YUMKAM_SIMO_ELVIRA_AUDREY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_1",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_1",
+      "role": "Rapporteur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_1",
+      "role": "Examinateur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_1",
+      "role": "Candidat",
+      "resource": "ALLAHTESSEM_DINGAMGOTO_CHANCELIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_2",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_2",
+      "role": "Rapporteur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_2",
+      "role": "Examinateur",
+      "resource": "KENFACK_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_2",
+      "role": "Candidat",
+      "resource": "CHENDJOU_PARFAIT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_3",
+      "role": "President",
+      "resource": "LELE_CELESTIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_3",
+      "role": "Rapporteur",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_3",
+      "role": "Examinateur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_3",
+      "role": "Candidat",
+      "resource": "DEMGNE_FONKOUA_AFRODITE_AURORE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_4",
+      "role": "President",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_4",
+      "role": "Rapporteur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_4",
+      "role": "Examinateur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_4",
+      "role": "Candidat",
+      "resource": "DJOUFACK_NGUESSONG_LETICIA_FLORA"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_5",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_5",
+      "role": "Rapporteur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_5",
+      "role": "Examinateur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_5",
+      "role": "Candidat",
+      "resource": "DONGMO_NGUEMEWE_MANUELLA_KANOLA"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_6",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_6",
+      "role": "Rapporteur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_6",
+      "role": "Examinateur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_6",
+      "role": "Candidat",
+      "resource": "FOKOU_KENGNI_IVAN_LOIE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_7",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_7",
+      "role": "Rapporteur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_7",
+      "role": "Examinateur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_7",
+      "role": "Candidat",
+      "resource": "LEUMEGNI_NDJOUOMO_RUSSEL_LOICK"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_8",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_8",
+      "role": "Rapporteur",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_8",
+      "role": "Examinateur",
+      "resource": "KENFACK_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_8",
+      "role": "Candidat",
+      "resource": "MEGUETSOP_FLAVIANE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_9",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_9",
+      "role": "Rapporteur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_9",
+      "role": "Examinateur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_9",
+      "role": "Candidat",
+      "resource": "METIEUTE_RIVALDO_BORDAS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_10",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_10",
+      "role": "Rapporteur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_10",
+      "role": "Examinateur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_10",
+      "role": "Candidat",
+      "resource": "MOUAFFO_TASSIKIM_YVE_DOBEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_11",
+      "role": "President",
+      "resource": "LELE_CELESTIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_11",
+      "role": "Rapporteur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_11",
+      "role": "Examinateur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_11",
+      "role": "Candidat",
+      "resource": "NANWOUO_TCHIMOU_ANGE_KELLY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_12",
+      "role": "President",
+      "resource": "LELE_CELESTIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_12",
+      "role": "Rapporteur",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_12",
+      "role": "Examinateur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_12",
+      "role": "Candidat",
+      "resource": "NJIGANG_BIATCHO_ARMSTRONG"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_13",
+      "role": "President",
+      "resource": "LELE_CELESTIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_13",
+      "role": "Rapporteur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_13",
+      "role": "Examinateur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_13",
+      "role": "Candidat",
+      "resource": "POUOMOGNE_CHATCHUENG_JOSEPH"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_14",
+      "role": "President",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_14",
+      "role": "Rapporteur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_14",
+      "role": "Examinateur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_14",
+      "role": "Candidat",
+      "resource": "TAMWA_TCHIENDJOU_JOEL_WHILSON"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_15",
+      "role": "President",
+      "resource": "LELE_CELESTIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_15",
+      "role": "Rapporteur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_15",
+      "role": "Examinateur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_15",
+      "role": "Candidat",
+      "resource": "TAZEFACK_JULIEN_IDRISS_AURELIEN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_16",
+      "role": "President",
+      "resource": "LELE_CELESTIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_16",
+      "role": "Rapporteur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_16",
+      "role": "Examinateur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_16",
+      "role": "Candidat",
+      "resource": "TAZONG_WILFRID_WILLY"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_17",
+      "role": "President",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_17",
+      "role": "Rapporteur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_17",
+      "role": "Examinateur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_17",
+      "role": "Candidat",
+      "resource": "TCHIFFO_KENNE_MARTHEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_18",
+      "role": "President",
+      "resource": "KOGUEP_BLAISE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_18",
+      "role": "Rapporteur",
+      "resource": "DJIOFACK_FRANCIS"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_18",
+      "role": "Examinateur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_18",
+      "role": "Candidat",
+      "resource": "TEDONFO_TSOPONANG_JEAN_BRICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_19",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_19",
+      "role": "Rapporteur",
+      "resource": "TCHOUALAG_LAURENT"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_19",
+      "role": "Examinateur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_19",
+      "role": "Candidat",
+      "resource": "TIENTCHEU_ARMAND_SOREL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_20",
+      "role": "President",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_20",
+      "role": "Rapporteur",
+      "resource": "LELE_CELESTIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_20",
+      "role": "Examinateur",
+      "resource": "KENFACK_MAURICE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_20",
+      "role": "Candidat",
+      "resource": "TINDO_TCHOBEUA_WILFRIED_DOCHINEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_21",
+      "role": "President",
+      "resource": "TCHEKA_CALVIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_21",
+      "role": "Rapporteur",
+      "resource": "PATENOU_JEAN_BAPTISTE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_21",
+      "role": "Examinateur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_21",
+      "role": "Candidat",
+      "resource": "TSAGUE_TAZANGMO_RONALDO"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_22",
+      "role": "President",
+      "resource": "LELE_CELESTIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_22",
+      "role": "Rapporteur",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_22",
+      "role": "Examinateur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_22",
+      "role": "Candidat",
+      "resource": "WANDJI_NGOMGUEN_GHISLAIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_23",
+      "role": "President",
+      "resource": "LELE_CELESTIN"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_23",
+      "role": "Rapporteur",
+      "resource": "TSANOU_BERGE"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_23",
+      "role": "Examinateur",
+      "resource": "NGUELEMO_ABEL"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_23",
+      "role": "Candidat",
+      "resource": "ZAPA_TANING_ANELKA"
+    },
+    {
+      "type": "resource_required_day",
+      "resource": "LIENOU_JEAN_PIERRE",
+      "date": "Samedi"
+    },
+    {
+      "type": "resource_required_day",
+      "resource": "NOULAMO_THIERRY",
+      "date": "Dimanche"
+    },
+    {
+      "type": "resource_required_day",
+      "resource": "DJIMELI_ALAIN",
+      "date": "Dimanche"
+    },
+    {
+      "type": "resource_single_day",
+      "resource": "KONAN_RODRIGUE"
+    },
+    {
+      "type": "resource_single_day",
+      "resource": "YANKAM_YANNICK"
+    },
+    {
+      "type": "resource_single_day",
+      "resource": "FOTSING_ERIC"
+    },
+    {
+      "type": "resource_single_day",
+      "resource": "NKENLIFACK_MARCELLIN"
+    }
+  ],
+  "preferences": [
+    {
+      "type": "prefer_resource_single_day",
+      "resource": "JAGHO_BREL",
+      "weight": 20
+    },
+    {
+      "type": "room_stability_for_role",
+      "activity": "Soutenance_IN",
+      "role": "President",
+      "roomResourceType": "Room_IN",
+      "scope": "day",
+      "weight": 6
+    },
+    {
+      "type": "room_stability_for_role",
+      "activity": "Soutenance_MA",
+      "role": "President",
+      "roomResourceType": "Room_MA",
+      "scope": "day",
+      "weight": 6
+    },
+    {
+      "type": "compact_schedule_for_role",
+      "activity": "Soutenance_IN",
+      "role": "President",
+      "scope": "day",
+      "weight": 8
+    },
+    {
+      "type": "compact_schedule_for_role",
+      "activity": "Soutenance_MA",
+      "role": "President",
+      "scope": "day",
+      "weight": 8
+    }
+  ]
+}

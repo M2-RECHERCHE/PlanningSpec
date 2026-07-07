@@ -36,13 +36,16 @@ __pycache__/
 .pytest_cache/
 
 # Python benchmarking outputs
-python/benchmarking/.venv/
-python/benchmarking/generated_mzn/
-python/benchmarking/benchmark_results.csv
-python/benchmarking/result/
+src/python/benchmarking/.venv/
+src/python/benchmarking/generated_mzn/
+src/python/benchmarking/benchmark_results.csv
+src/python/benchmarking/result/
 
 # Environment files
 .env
+.env.*
+!.env.example
+!.env.*.example
 .env.local
 .env.development
 .env.production

@@ -1,0 +1,119 @@
+{
+  "time": {
+    "days": [
+      "Mardi",
+      "Lundi"
+    ],
+    "slotsPerDay": 8
+  },
+  "activities": {
+    "Reunion": {
+      "count": 3,
+      "duration": 2
+    },
+    "Soutenance": {
+      "count": 30,
+      "duration": 1
+    }
+  },
+  "resources": {
+    "Teacher": [
+      "Teacher_1",
+      "Teacher_2",
+      "Teacher_3",
+      "Teacher_4",
+      "Teacher_5",
+      "Teacher_6",
+      "Teacher_7",
+      "Teacher_8",
+      "Teacher_9",
+      "Teacher_10",
+      "Teacher_11",
+      "Teacher_12",
+      "Teacher_13",
+      "Teacher_14",
+      "Teacher_15"
+    ],
+    "Etudiant": [
+      "Etudiant_1",
+      "Etudiant_2",
+      "Etudiant_3",
+      "Etudiant_4",
+      "Etudiant_5",
+      "Etudiant_6",
+      "Etudiant_7",
+      "Etudiant_8",
+      "Etudiant_9",
+      "Etudiant_10",
+      "Etudiant_11",
+      "Etudiant_12",
+      "Etudiant_13",
+      "Etudiant_14",
+      "Etudiant_15",
+      "Etudiant_16",
+      "Etudiant_17",
+      "Etudiant_18",
+      "Etudiant_19",
+      "Etudiant_20",
+      "Etudiant_21",
+      "Etudiant_22",
+      "Etudiant_23",
+      "Etudiant_24",
+      "Etudiant_25",
+      "Etudiant_26",
+      "Etudiant_27",
+      "Etudiant_28",
+      "Etudiant_29",
+      "Etudiant_30"
+    ]
+  },
+  "roles": {
+    "Reunion": {
+      "President": "Teacher"
+    },
+    "Soutenance": {
+      "Encadreur": "Teacher",
+      "president": "Teacher",
+      "reporteur": "Teacher"
+    }
+  },
+  "constraints": [
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance",
+      "target": "slot",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Reunion",
+      "role": "President",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance",
+      "role": "president",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance",
+      "role": "president",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "mandatory_roles",
+      "activity": "Reunion"
+    },
+    {
+      "type": "mandatory_roles",
+      "activity": "Soutenance"
+    }
+  ],
+  "preferences": []
+}

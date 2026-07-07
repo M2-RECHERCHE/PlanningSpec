@@ -1,0 +1,11 @@
+{
+  "time": {
+    "days": [],
+    "slotsPerDay": 4
+  },
+  "activities": {},
+  "resources": {},
+  "roles": {},
+  "constraints": [],
+  "preferences": []
+}

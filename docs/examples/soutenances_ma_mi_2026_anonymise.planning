@@ -1,0 +1,2245 @@
+{
+  "time": {
+    "days": [
+      "Samedi",
+      "Dimanche"
+    ],
+    "slotsPerDay": 7
+  },
+  "activities": {
+    "Soutenance_IN": {
+      "count": 56,
+      "duration": 1
+    },
+    "Soutenance_MA": {
+      "count": 23,
+      "duration": 1
+    }
+  },
+  "resources": {
+    "Teacher": [
+      "Teacher_01",
+      "Teacher_02",
+      "Teacher_03",
+      "Teacher_04",
+      "Teacher_05",
+      "Teacher_06",
+      "Teacher_07",
+      "Teacher_08",
+      "Teacher_09",
+      "Teacher_10",
+      "Teacher_11",
+      "Teacher_12",
+      "Teacher_13",
+      "Teacher_14",
+      "Teacher_15",
+      "Teacher_16",
+      "Teacher_17",
+      "Teacher_18",
+      "Teacher_19",
+      "Teacher_20",
+      "Teacher_21",
+      "Teacher_22",
+      "Teacher_23",
+      "Teacher_24",
+      "Teacher_25",
+      "Teacher_26",
+      "Teacher_27",
+      "Teacher_28"
+    ],
+    "Room_IN": [
+      "Room_IN_01",
+      "Room_IN_02",
+      "Room_IN_03",
+      "Room_IN_04",
+      "Room_IN_05"
+    ],
+    "Room_MA": [
+      "Room_MA_01",
+      "Room_MA_02"
+    ],
+    "Student": [
+      "Student_01",
+      "Student_02",
+      "Student_03",
+      "Student_04",
+      "Student_05",
+      "Student_06",
+      "Student_07",
+      "Student_08",
+      "Student_09",
+      "Student_10",
+      "Student_11",
+      "Student_12",
+      "Student_13",
+      "Student_14",
+      "Student_15",
+      "Student_16",
+      "Student_17",
+      "Student_18",
+      "Student_19",
+      "Student_20",
+      "Student_21",
+      "Student_22",
+      "Student_23",
+      "Student_24",
+      "Student_25",
+      "Student_26",
+      "Student_27",
+      "Student_28",
+      "Student_29",
+      "Student_30",
+      "Student_31",
+      "Student_32",
+      "Student_33",
+      "Student_34",
+      "Student_35",
+      "Student_36",
+      "Student_37",
+      "Student_38",
+      "Student_39",
+      "Student_40",
+      "Student_41",
+      "Student_42",
+      "Student_43",
+      "Student_44",
+      "Student_45",
+      "Student_46",
+      "Student_47",
+      "Student_48",
+      "Student_49",
+      "Student_50",
+      "Student_51",
+      "Student_52",
+      "Student_53",
+      "Student_54",
+      "Student_55",
+      "Student_56",
+      "Student_57",
+      "Student_58",
+      "Student_59",
+      "Student_60",
+      "Student_61",
+      "Student_62",
+      "Student_63",
+      "Student_64",
+      "Student_65",
+      "Student_66",
+      "Student_67",
+      "Student_68",
+      "Student_69",
+      "Student_70",
+      "Student_71",
+      "Student_72",
+      "Student_73",
+      "Student_74",
+      "Student_75",
+      "Student_76",
+      "Student_77",
+      "Student_78",
+      "Student_79"
+    ]
+  },
+  "roles": {
+    "Soutenance_IN": {
+      "President": "Teacher",
+      "Rapporteur": "Teacher",
+      "Examinateur": "Teacher",
+      "Salle": "Room_IN",
+      "Candidat": "Student"
+    },
+    "Soutenance_MA": {
+      "President": "Teacher",
+      "Rapporteur": "Teacher",
+      "Examinateur": "Teacher",
+      "Salle": "Room_MA",
+      "Candidat": "Student"
+    }
+  },
+  "constraints": [
+    {
+      "type": "mandatory_roles",
+      "activity": "Soutenance_IN"
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "President",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "Rapporteur",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "Examinateur",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "Salle",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_IN",
+      "role": "Candidat",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "mandatory_roles",
+      "activity": "Soutenance_MA"
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "President",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "Rapporteur",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "Examinateur",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "Salle",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "Soutenance_MA",
+      "role": "Candidat",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Teacher",
+      "activity": "Soutenance_IN",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Teacher",
+      "activity": "Soutenance_MA",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Student",
+      "activity": "Soutenance_IN",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Student",
+      "activity": "Soutenance_MA",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Room_IN",
+      "activity": "Soutenance_IN",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Room_MA",
+      "activity": "Soutenance_MA",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_1",
+      "role": "President",
+      "resource": "Teacher_03"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_1",
+      "role": "Rapporteur",
+      "resource": "Teacher_07"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_1",
+      "role": "Examinateur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_1",
+      "role": "Candidat",
+      "resource": "Student_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_2",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_2",
+      "role": "Rapporteur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_2",
+      "role": "Examinateur",
+      "resource": "Teacher_14"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_2",
+      "role": "Candidat",
+      "resource": "Student_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_3",
+      "role": "President",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_3",
+      "role": "Rapporteur",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_3",
+      "role": "Examinateur",
+      "resource": "Teacher_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_3",
+      "role": "Candidat",
+      "resource": "Student_03"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_4",
+      "role": "President",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_4",
+      "role": "Rapporteur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_4",
+      "role": "Examinateur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_4",
+      "role": "Candidat",
+      "resource": "Student_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_5",
+      "role": "President",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_5",
+      "role": "Rapporteur",
+      "resource": "Teacher_27"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_5",
+      "role": "Examinateur",
+      "resource": "Teacher_08"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_5",
+      "role": "Candidat",
+      "resource": "Student_05"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_6",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_6",
+      "role": "Rapporteur",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_6",
+      "role": "Examinateur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_6",
+      "role": "Candidat",
+      "resource": "Student_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_7",
+      "role": "President",
+      "resource": "Teacher_18"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_7",
+      "role": "Rapporteur",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_7",
+      "role": "Examinateur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_7",
+      "role": "Candidat",
+      "resource": "Student_07"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_8",
+      "role": "President",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_8",
+      "role": "Rapporteur",
+      "resource": "Teacher_08"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_8",
+      "role": "Examinateur",
+      "resource": "Teacher_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_8",
+      "role": "Candidat",
+      "resource": "Student_08"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_9",
+      "role": "President",
+      "resource": "Teacher_16"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_9",
+      "role": "Rapporteur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_9",
+      "role": "Examinateur",
+      "resource": "Teacher_09"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_9",
+      "role": "Candidat",
+      "resource": "Student_09"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_10",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_10",
+      "role": "Rapporteur",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_10",
+      "role": "Examinateur",
+      "resource": "Teacher_14"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_10",
+      "role": "Candidat",
+      "resource": "Student_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_11",
+      "role": "President",
+      "resource": "Teacher_19"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_11",
+      "role": "Rapporteur",
+      "resource": "Teacher_22"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_11",
+      "role": "Examinateur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_11",
+      "role": "Candidat",
+      "resource": "Student_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_12",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_12",
+      "role": "Rapporteur",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_12",
+      "role": "Examinateur",
+      "resource": "Teacher_14"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_12",
+      "role": "Candidat",
+      "resource": "Student_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_13",
+      "role": "President",
+      "resource": "Teacher_18"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_13",
+      "role": "Rapporteur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_13",
+      "role": "Examinateur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_13",
+      "role": "Candidat",
+      "resource": "Student_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_14",
+      "role": "President",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_14",
+      "role": "Rapporteur",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_14",
+      "role": "Examinateur",
+      "resource": "Teacher_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_14",
+      "role": "Candidat",
+      "resource": "Student_14"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_15",
+      "role": "President",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_15",
+      "role": "Rapporteur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_15",
+      "role": "Examinateur",
+      "resource": "Teacher_08"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_15",
+      "role": "Candidat",
+      "resource": "Student_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_16",
+      "role": "President",
+      "resource": "Teacher_19"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_16",
+      "role": "Rapporteur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_16",
+      "role": "Examinateur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_16",
+      "role": "Candidat",
+      "resource": "Student_16"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_17",
+      "role": "President",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_17",
+      "role": "Rapporteur",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_17",
+      "role": "Examinateur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_17",
+      "role": "Candidat",
+      "resource": "Student_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_18",
+      "role": "President",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_18",
+      "role": "Rapporteur",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_18",
+      "role": "Examinateur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_18",
+      "role": "Candidat",
+      "resource": "Student_18"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_19",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_19",
+      "role": "Rapporteur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_19",
+      "role": "Examinateur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_19",
+      "role": "Candidat",
+      "resource": "Student_19"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_20",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_20",
+      "role": "Rapporteur",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_20",
+      "role": "Examinateur",
+      "resource": "Teacher_14"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_20",
+      "role": "Candidat",
+      "resource": "Student_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_21",
+      "role": "President",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_21",
+      "role": "Rapporteur",
+      "resource": "Teacher_18"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_21",
+      "role": "Examinateur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_21",
+      "role": "Candidat",
+      "resource": "Student_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_22",
+      "role": "President",
+      "resource": "Teacher_19"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_22",
+      "role": "Rapporteur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_22",
+      "role": "Examinateur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_22",
+      "role": "Candidat",
+      "resource": "Student_22"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_23",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_23",
+      "role": "Rapporteur",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_23",
+      "role": "Examinateur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_23",
+      "role": "Candidat",
+      "resource": "Student_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_24",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_24",
+      "role": "Rapporteur",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_24",
+      "role": "Examinateur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_24",
+      "role": "Candidat",
+      "resource": "Student_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_25",
+      "role": "President",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_25",
+      "role": "Rapporteur",
+      "resource": "Teacher_09"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_25",
+      "role": "Examinateur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_25",
+      "role": "Candidat",
+      "resource": "Student_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_26",
+      "role": "President",
+      "resource": "Teacher_03"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_26",
+      "role": "Rapporteur",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_26",
+      "role": "Examinateur",
+      "resource": "Teacher_14"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_26",
+      "role": "Candidat",
+      "resource": "Student_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_27",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_27",
+      "role": "Rapporteur",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_27",
+      "role": "Examinateur",
+      "resource": "Teacher_14"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_27",
+      "role": "Candidat",
+      "resource": "Student_27"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_28",
+      "role": "President",
+      "resource": "Teacher_19"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_28",
+      "role": "Rapporteur",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_28",
+      "role": "Examinateur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_28",
+      "role": "Candidat",
+      "resource": "Student_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_29",
+      "role": "President",
+      "resource": "Teacher_03"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_29",
+      "role": "Rapporteur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_29",
+      "role": "Examinateur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_29",
+      "role": "Candidat",
+      "resource": "Student_29"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_30",
+      "role": "President",
+      "resource": "Teacher_18"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_30",
+      "role": "Rapporteur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_30",
+      "role": "Examinateur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_30",
+      "role": "Candidat",
+      "resource": "Student_30"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_31",
+      "role": "President",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_31",
+      "role": "Rapporteur",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_31",
+      "role": "Examinateur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_31",
+      "role": "Candidat",
+      "resource": "Student_31"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_32",
+      "role": "President",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_32",
+      "role": "Rapporteur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_32",
+      "role": "Examinateur",
+      "resource": "Teacher_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_32",
+      "role": "Candidat",
+      "resource": "Student_32"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_33",
+      "role": "President",
+      "resource": "Teacher_03"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_33",
+      "role": "Rapporteur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_33",
+      "role": "Examinateur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_33",
+      "role": "Candidat",
+      "resource": "Student_33"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_34",
+      "role": "President",
+      "resource": "Teacher_19"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_34",
+      "role": "Rapporteur",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_34",
+      "role": "Examinateur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_34",
+      "role": "Candidat",
+      "resource": "Student_34"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_35",
+      "role": "President",
+      "resource": "Teacher_03"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_35",
+      "role": "Rapporteur",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_35",
+      "role": "Examinateur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_35",
+      "role": "Candidat",
+      "resource": "Student_35"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_36",
+      "role": "President",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_36",
+      "role": "Rapporteur",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_36",
+      "role": "Examinateur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_36",
+      "role": "Candidat",
+      "resource": "Student_36"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_37",
+      "role": "President",
+      "resource": "Teacher_16"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_37",
+      "role": "Rapporteur",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_37",
+      "role": "Examinateur",
+      "resource": "Teacher_09"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_37",
+      "role": "Candidat",
+      "resource": "Student_37"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_38",
+      "role": "President",
+      "resource": "Teacher_03"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_38",
+      "role": "Rapporteur",
+      "resource": "Teacher_05"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_38",
+      "role": "Examinateur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_38",
+      "role": "Candidat",
+      "resource": "Student_38"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_39",
+      "role": "President",
+      "resource": "Teacher_16"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_39",
+      "role": "Rapporteur",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_39",
+      "role": "Examinateur",
+      "resource": "Teacher_09"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_39",
+      "role": "Candidat",
+      "resource": "Student_39"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_40",
+      "role": "President",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_40",
+      "role": "Rapporteur",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_40",
+      "role": "Examinateur",
+      "resource": "Teacher_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_40",
+      "role": "Candidat",
+      "resource": "Student_40"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_41",
+      "role": "President",
+      "resource": "Teacher_16"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_41",
+      "role": "Rapporteur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_41",
+      "role": "Examinateur",
+      "resource": "Teacher_09"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_41",
+      "role": "Candidat",
+      "resource": "Student_41"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_42",
+      "role": "President",
+      "resource": "Teacher_19"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_42",
+      "role": "Rapporteur",
+      "resource": "Teacher_07"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_42",
+      "role": "Examinateur",
+      "resource": "Teacher_12"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_42",
+      "role": "Candidat",
+      "resource": "Student_42"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_43",
+      "role": "President",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_43",
+      "role": "Rapporteur",
+      "resource": "Teacher_27"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_43",
+      "role": "Examinateur",
+      "resource": "Teacher_08"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_43",
+      "role": "Candidat",
+      "resource": "Student_43"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_44",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_44",
+      "role": "Rapporteur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_44",
+      "role": "Examinateur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_44",
+      "role": "Candidat",
+      "resource": "Student_44"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_45",
+      "role": "President",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_45",
+      "role": "Rapporteur",
+      "resource": "Teacher_09"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_45",
+      "role": "Examinateur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_45",
+      "role": "Candidat",
+      "resource": "Student_45"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_46",
+      "role": "President",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_46",
+      "role": "Rapporteur",
+      "resource": "Teacher_27"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_46",
+      "role": "Examinateur",
+      "resource": "Teacher_08"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_46",
+      "role": "Candidat",
+      "resource": "Student_46"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_47",
+      "role": "President",
+      "resource": "Teacher_16"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_47",
+      "role": "Rapporteur",
+      "resource": "Teacher_07"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_47",
+      "role": "Examinateur",
+      "resource": "Teacher_09"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_47",
+      "role": "Candidat",
+      "resource": "Student_47"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_48",
+      "role": "President",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_48",
+      "role": "Rapporteur",
+      "resource": "Teacher_18"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_48",
+      "role": "Examinateur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_48",
+      "role": "Candidat",
+      "resource": "Student_48"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_49",
+      "role": "President",
+      "resource": "Teacher_21"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_49",
+      "role": "Rapporteur",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_49",
+      "role": "Examinateur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_49",
+      "role": "Candidat",
+      "resource": "Student_49"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_50",
+      "role": "President",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_50",
+      "role": "Rapporteur",
+      "resource": "Teacher_07"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_50",
+      "role": "Examinateur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_50",
+      "role": "Candidat",
+      "resource": "Student_50"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_51",
+      "role": "President",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_51",
+      "role": "Rapporteur",
+      "resource": "Teacher_09"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_51",
+      "role": "Examinateur",
+      "resource": "Teacher_27"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_51",
+      "role": "Candidat",
+      "resource": "Student_51"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_52",
+      "role": "President",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_52",
+      "role": "Rapporteur",
+      "resource": "Teacher_28"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_52",
+      "role": "Examinateur",
+      "resource": "Teacher_27"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_52",
+      "role": "Candidat",
+      "resource": "Student_52"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_53",
+      "role": "President",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_53",
+      "role": "Rapporteur",
+      "resource": "Teacher_18"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_53",
+      "role": "Examinateur",
+      "resource": "Teacher_06"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_53",
+      "role": "Candidat",
+      "resource": "Student_53"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_54",
+      "role": "President",
+      "resource": "Teacher_25"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_54",
+      "role": "Rapporteur",
+      "resource": "Teacher_11"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_54",
+      "role": "Examinateur",
+      "resource": "Teacher_08"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_54",
+      "role": "Candidat",
+      "resource": "Student_54"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_55",
+      "role": "President",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_55",
+      "role": "Rapporteur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_55",
+      "role": "Examinateur",
+      "resource": "Teacher_27"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_55",
+      "role": "Candidat",
+      "resource": "Student_55"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_56",
+      "role": "President",
+      "resource": "Teacher_02"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_56",
+      "role": "Rapporteur",
+      "resource": "Teacher_16"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_56",
+      "role": "Examinateur",
+      "resource": "Teacher_01"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_IN_56",
+      "role": "Candidat",
+      "resource": "Student_56"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_1",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_1",
+      "role": "Rapporteur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_1",
+      "role": "Examinateur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_1",
+      "role": "Candidat",
+      "resource": "Student_57"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_2",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_2",
+      "role": "Rapporteur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_2",
+      "role": "Examinateur",
+      "resource": "Teacher_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_2",
+      "role": "Candidat",
+      "resource": "Student_58"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_3",
+      "role": "President",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_3",
+      "role": "Rapporteur",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_3",
+      "role": "Examinateur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_3",
+      "role": "Candidat",
+      "resource": "Student_59"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_4",
+      "role": "President",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_4",
+      "role": "Rapporteur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_4",
+      "role": "Examinateur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_4",
+      "role": "Candidat",
+      "resource": "Student_60"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_5",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_5",
+      "role": "Rapporteur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_5",
+      "role": "Examinateur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_5",
+      "role": "Candidat",
+      "resource": "Student_61"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_6",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_6",
+      "role": "Rapporteur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_6",
+      "role": "Examinateur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_6",
+      "role": "Candidat",
+      "resource": "Student_62"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_7",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_7",
+      "role": "Rapporteur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_7",
+      "role": "Examinateur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_7",
+      "role": "Candidat",
+      "resource": "Student_63"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_8",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_8",
+      "role": "Rapporteur",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_8",
+      "role": "Examinateur",
+      "resource": "Teacher_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_8",
+      "role": "Candidat",
+      "resource": "Student_64"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_9",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_9",
+      "role": "Rapporteur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_9",
+      "role": "Examinateur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_9",
+      "role": "Candidat",
+      "resource": "Student_65"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_10",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_10",
+      "role": "Rapporteur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_10",
+      "role": "Examinateur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_10",
+      "role": "Candidat",
+      "resource": "Student_66"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_11",
+      "role": "President",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_11",
+      "role": "Rapporteur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_11",
+      "role": "Examinateur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_11",
+      "role": "Candidat",
+      "resource": "Student_67"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_12",
+      "role": "President",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_12",
+      "role": "Rapporteur",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_12",
+      "role": "Examinateur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_12",
+      "role": "Candidat",
+      "resource": "Student_68"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_13",
+      "role": "President",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_13",
+      "role": "Rapporteur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_13",
+      "role": "Examinateur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_13",
+      "role": "Candidat",
+      "resource": "Student_69"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_14",
+      "role": "President",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_14",
+      "role": "Rapporteur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_14",
+      "role": "Examinateur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_14",
+      "role": "Candidat",
+      "resource": "Student_70"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_15",
+      "role": "President",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_15",
+      "role": "Rapporteur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_15",
+      "role": "Examinateur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_15",
+      "role": "Candidat",
+      "resource": "Student_71"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_16",
+      "role": "President",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_16",
+      "role": "Rapporteur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_16",
+      "role": "Examinateur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_16",
+      "role": "Candidat",
+      "resource": "Student_72"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_17",
+      "role": "President",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_17",
+      "role": "Rapporteur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_17",
+      "role": "Examinateur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_17",
+      "role": "Candidat",
+      "resource": "Student_73"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_18",
+      "role": "President",
+      "resource": "Teacher_13"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_18",
+      "role": "Rapporteur",
+      "resource": "Teacher_04"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_18",
+      "role": "Examinateur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_18",
+      "role": "Candidat",
+      "resource": "Student_74"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_19",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_19",
+      "role": "Rapporteur",
+      "resource": "Teacher_24"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_19",
+      "role": "Examinateur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_19",
+      "role": "Candidat",
+      "resource": "Student_75"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_20",
+      "role": "President",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_20",
+      "role": "Rapporteur",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_20",
+      "role": "Examinateur",
+      "resource": "Teacher_10"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_20",
+      "role": "Candidat",
+      "resource": "Student_76"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_21",
+      "role": "President",
+      "resource": "Teacher_23"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_21",
+      "role": "Rapporteur",
+      "resource": "Teacher_20"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_21",
+      "role": "Examinateur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_21",
+      "role": "Candidat",
+      "resource": "Student_77"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_22",
+      "role": "President",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_22",
+      "role": "Rapporteur",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_22",
+      "role": "Examinateur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_22",
+      "role": "Candidat",
+      "resource": "Student_78"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_23",
+      "role": "President",
+      "resource": "Teacher_15"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_23",
+      "role": "Rapporteur",
+      "resource": "Teacher_26"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_23",
+      "role": "Examinateur",
+      "resource": "Teacher_17"
+    },
+    {
+      "type": "fixed_assignment",
+      "activityInstance": "Soutenance_MA_23",
+      "role": "Candidat",
+      "resource": "Student_79"
+    },
+    {
+      "type": "resource_required_day",
+      "resource": "Teacher_16",
+      "date": "Samedi"
+    },
+    {
+      "type": "resource_required_day",
+      "resource": "Teacher_19",
+      "date": "Dimanche"
+    },
+    {
+      "type": "resource_required_day",
+      "resource": "Teacher_03",
+      "date": "Dimanche"
+    },
+    {
+      "type": "resource_single_day",
+      "resource": "Teacher_14"
+    },
+    {
+      "type": "resource_single_day",
+      "resource": "Teacher_27"
+    },
+    {
+      "type": "resource_single_day",
+      "resource": "Teacher_08"
+    },
+    {
+      "type": "resource_single_day",
+      "resource": "Teacher_18"
+    }
+  ],
+  "preferences": [
+    {
+      "type": "prefer_resource_single_day",
+      "resource": "Teacher_09",
+      "weight": 20
+    },
+    {
+      "type": "room_stability_for_role",
+      "activity": "Soutenance_IN",
+      "role": "President",
+      "roomResourceType": "Room_IN",
+      "scope": "day",
+      "weight": 6
+    },
+    {
+      "type": "room_stability_for_role",
+      "activity": "Soutenance_MA",
+      "role": "President",
+      "roomResourceType": "Room_MA",
+      "scope": "day",
+      "weight": 6
+    },
+    {
+      "type": "compact_schedule_for_role",
+      "activity": "Soutenance_IN",
+      "role": "President",
+      "scope": "day",
+      "weight": 8
+    },
+    {
+      "type": "compact_schedule_for_role",
+      "activity": "Soutenance_MA",
+      "role": "President",
+      "scope": "day",
+      "weight": 8
+    }
+  ]
+}

@@ -1,6 +1,0 @@
-Instance,A,R,K,T,Solveur,T_flat,T_solve,T_total,Statut
-10_master2_soutenances_jury_fixe_affectation_salle_test_10.mzn,0,0,0,0,Gecode,1.90948,2.626,2.8338643300012336,SAT
-10_master2_soutenances_jury_fixe_affectation_salle_test_10.mzn,0,0,0,0,Chuffed,1.92925,0.511,3.065220782002143,SAT
-10_master2_soutenances_jury_fixe_affectation_salle_test_10.mzn,0,0,0,0,HiGHS,6.17858,4.9332,12.48005284100509,SAT
-10_master2_soutenances_jury_fixe_affectation_salle_test_10.mzn,0,0,0,0,OR Tools CP-SAT,2.10966,9.223,9.454829032998532,SAT
-10_master2_soutenances_jury_fixe_affectation_salle_test_10.mzn,0,0,0,0,COIN-BC,5.81725,2.8634,9.895758147999004,SAT

@@ -37,13 +37,13 @@ Conditions minimales:
 
 1. Mettre à jour les versions dans:
    - `package.json`
-   - `backend/packages/server/package.json`
-   - `frontend/package.json`
-2. Mettre à jour `CHANGELOG.md`.
+   - `src/backend/packages/server/package.json`
+   - `src/frontend/package.json`
+2. Mettre à jour `docs/CHANGELOG.md`.
 3. Commit de release:
 
 ```bash
-git add package.json backend/packages/server/package.json frontend/package.json CHANGELOG.md
+git add package.json src/backend/packages/server/package.json src/frontend/package.json docs/CHANGELOG.md
 git commit -m "chore(release): prepare vX.Y.Z"
 ```
 

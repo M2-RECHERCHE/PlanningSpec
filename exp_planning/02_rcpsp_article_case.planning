@@ -1,0 +1,215 @@
+{
+  "time": {
+    "days": [
+      "D1",
+      "D2",
+      "D3",
+      "D4",
+      "D5"
+    ],
+    "slotsPerDay": 6
+  },
+  "activities": {
+    "Start": {
+      "count": 1,
+      "duration": 1
+    },
+    "A": {
+      "count": 1,
+      "duration": 3
+    },
+    "B": {
+      "count": 1,
+      "duration": 2
+    },
+    "C": {
+      "count": 1,
+      "duration": 2
+    },
+    "D": {
+      "count": 1,
+      "duration": 2
+    },
+    "E": {
+      "count": 1,
+      "duration": 1
+    },
+    "Finish": {
+      "count": 1,
+      "duration": 1
+    }
+  },
+  "resources": {
+    "Worker": [
+      "W1",
+      "W2",
+      "W3"
+    ],
+    "Crane": [
+      "C1"
+    ]
+  },
+  "roles": {},
+  "constraints": [
+    {
+      "type": "cardinality_per_activity",
+      "activity": "A",
+      "target": "Worker",
+      "min": 2,
+      "max": 2
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "B",
+      "target": "Worker",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "C",
+      "target": "Worker",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "D",
+      "target": "Worker",
+      "min": 2,
+      "max": 2
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "E",
+      "target": "Worker",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "A",
+      "target": "Crane",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "cardinality_per_activity",
+      "activity": "D",
+      "target": "Crane",
+      "min": 1,
+      "max": 1
+    },
+    {
+      "type": "instance_precedence",
+      "beforeActivityInstance": "Start_1",
+      "afterActivityInstance": "A_1"
+    },
+    {
+      "type": "instance_precedence",
+      "beforeActivityInstance": "Start_1",
+      "afterActivityInstance": "B_1"
+    },
+    {
+      "type": "instance_precedence",
+      "beforeActivityInstance": "A_1",
+      "afterActivityInstance": "C_1"
+    },
+    {
+      "type": "instance_precedence",
+      "beforeActivityInstance": "A_1",
+      "afterActivityInstance": "D_1"
+    },
+    {
+      "type": "instance_precedence",
+      "beforeActivityInstance": "B_1",
+      "afterActivityInstance": "D_1"
+    },
+    {
+      "type": "instance_precedence",
+      "beforeActivityInstance": "C_1",
+      "afterActivityInstance": "E_1"
+    },
+    {
+      "type": "instance_precedence",
+      "beforeActivityInstance": "D_1",
+      "afterActivityInstance": "E_1"
+    },
+    {
+      "type": "instance_precedence",
+      "beforeActivityInstance": "E_1",
+      "afterActivityInstance": "Finish_1"
+    },
+    {
+      "type": "time_window",
+      "activityInstance": "A_1",
+      "minSlot": 2,
+      "maxSlot": 20
+    },
+    {
+      "type": "time_window",
+      "activityInstance": "D_1",
+      "minSlot": 4,
+      "maxSlot": 26
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Crane",
+      "activity": "A",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Crane",
+      "activity": "D",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Worker",
+      "activity": "A",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Worker",
+      "activity": "B",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Worker",
+      "activity": "C",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Worker",
+      "activity": "D",
+      "scope": "slot",
+      "max": 1
+    },
+    {
+      "type": "resource_exclusivity",
+      "resourceType": "Worker",
+      "activity": "E",
+      "scope": "slot",
+      "max": 1
+    }
+  ],
+  "preferences": [
+    {
+      "type": "max_per_scope",
+      "resourceType": "Worker",
+      "activity": "D",
+      "scope": "day",
+      "max": 1,
+      "weight": 3
+    }
+  ]
+}
