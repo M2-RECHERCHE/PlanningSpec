@@ -803,6 +803,7 @@ pnpm test
 
 ## Documentation Complementaire
 
+- [docs/espace_recherche_solveur.md](docs/espace_recherche_solveur.md): evolution de l'espace de recherche du solveur et moyens de le reduire.
 - [docs/README_DOCKER.md](docs/README_DOCKER.md): deploiement Docker complet, profils, variables, sauvegarde, securite.
 - [docs/RELEASE_TAGGING.md](docs/RELEASE_TAGGING.md): procedure de release/tagging.
 - [src/backend/planning-solver-springboot/README.md](src/backend/planning-solver-springboot/README.md): backend OptaPlanner.
